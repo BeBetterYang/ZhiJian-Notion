@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { TreeStore } from "../core/treeStore";
 import { useTree } from "../core/treeStore/useTree";
-import { renderMindMapRichText, treeToMindElixir } from "./mindElixirAdapter";
+import { renderMindMapNode, treeToMindElixir } from "./mindElixirAdapter";
 import { applyMindElixirOperation } from "./mindElixirCommands";
 import { MindMapMediaBlock } from "./MindMapMediaBlock";
 
@@ -79,7 +79,8 @@ export function MindMapEditor({
       keypress: true,
       allowUndo: false,
       newTopicName: "新节点",
-      markdown: (topic, obj) => renderMindMapRichText(topic, obj as Parameters<typeof renderMindMapRichText>[1]),
+      markdown: (topic, obj) =>
+        renderMindMapNode(topic, obj as Parameters<typeof renderMindMapNode>[1]),
     });
     mind.init(treeToMindElixir(initialTree.current));
     queueMicrotask(collectMediaTargets);
@@ -145,6 +146,35 @@ export function MindMapEditor({
     };
     document.addEventListener("selectionchange", onSelectionChange);
     return () => document.removeEventListener("selectionchange", onSelectionChange);
+  }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+    const toggleTodo = (event: PointerEvent) => {
+      const checkbox = (event.target as Element | null)?.closest<HTMLElement>(
+        ".mindmap-todo-checkbox",
+      );
+      const nodeId = checkbox?.dataset.nodeId;
+      if (!nodeId || event.button !== 0) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const node = storeRef.current.getNode(nodeId);
+      if (node?.type === "todo") {
+        storeRef.current.updateProps(nodeId, { checked: !(node.props?.checked ?? false) });
+        lastSelectedNodeId.current = nodeId;
+        onSelectNodeRef.current(nodeId);
+        onSelectionActiveChangeRef.current(true);
+      }
+    };
+    container.addEventListener("pointerdown", toggleTodo, true);
+    return () => {
+      container.removeEventListener("pointerdown", toggleTodo, true);
+    };
   }, []);
 
   useEffect(() => {
@@ -217,6 +247,7 @@ function createMindProjectionSignature(tree: ReturnType<TreeStore["getSnapshot"]
       type: node.type,
       content: node.type === "table" || node.type === "image" ? undefined : node.content,
       collapsed: node.props?.collapsed,
+      checked: node.type === "todo" ? node.props?.checked : undefined,
       tableShape:
         node.type === "table" ? node.props?.table?.rows.map((row) => row.length) : undefined,
     })),

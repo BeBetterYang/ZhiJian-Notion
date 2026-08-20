@@ -40,6 +40,7 @@ export function NodeEditor({ node, store, onCreateSibling }: NodeEditorProps) {
         <option value="text">正文</option>
         <option value="heading">标题</option>
         <option value="todo">待办</option>
+        <option value="quote">引用</option>
         <option value="table">表格</option>
         <option value="image">图片</option>
       </select>

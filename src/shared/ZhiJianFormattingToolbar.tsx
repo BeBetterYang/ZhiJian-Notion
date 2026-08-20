@@ -15,7 +15,11 @@ export function ZhiJianFormattingToolbar() {
   const blockTypes = useMemo(
     () =>
       blockTypeSelectItems(editor.dictionary).filter((item) => {
-        if (item.type === "paragraph" || item.type === "checkListItem") {
+        if (
+          item.type === "paragraph" ||
+          item.type === "checkListItem" ||
+          item.type === "quote"
+        ) {
           return true;
         }
         return (
@@ -98,6 +102,7 @@ function InsertImageButton() {
               props: {
                 url,
                 name: file.name,
+                previewWidth: 480,
                 showPreview: true,
               },
             });

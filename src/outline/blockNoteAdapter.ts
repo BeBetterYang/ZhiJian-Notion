@@ -77,6 +77,9 @@ function toBlockNoteType(type: ZhiJianNodeType) {
   if (type === "todo") {
     return "checkListItem";
   }
+  if (type === "quote") {
+    return "quote";
+  }
   if (type === "table") {
     return "table";
   }
@@ -92,6 +95,9 @@ function fromBlockNoteType(type: string): ZhiJianNodeType {
   }
   if (type === "checkListItem") {
     return "todo";
+  }
+  if (type === "quote") {
+    return "quote";
   }
   if (type === "table") {
     return "table";
@@ -284,7 +290,7 @@ function imageDataFromBlock(block: Block): ZhiJianImageData {
     assetId,
     name: stringProp(props, "name"),
     caption: stringProp(props, "caption"),
-    previewWidth: numberProp(props, "previewWidth"),
+    previewWidth: numberProp(props, "previewWidth") ?? 480,
     showPreview: typeof props.showPreview === "boolean" ? props.showPreview : true,
   };
 }

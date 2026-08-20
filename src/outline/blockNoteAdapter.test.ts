@@ -136,6 +136,23 @@ describe("blockNoteAdapter styles", () => {
       previewWidth: 420,
     });
   });
+
+  it("round-trips a quote as a dedicated node type", () => {
+    const quoteBlock = {
+      id: "quote",
+      type: "quote",
+      props: {},
+      content: [{ type: "text", text: "引用当前节点", styles: {} }],
+      children: [],
+    } as unknown as Block;
+
+    const tree = blockNoteToTree([quoteBlock])!;
+    expect(tree.nodes.quote.type).toBe("quote");
+
+    const [projected] = treeToBlockNote(tree);
+    expect(projected.type).toBe("quote");
+    expect(projected.content).toEqual("引用当前节点");
+  });
 });
 
 function block(id: string, text: string, styles: Record<string, unknown>): Block {

@@ -6,25 +6,23 @@ import {
   normalizeRichText,
   richTextToPlainText,
   type ZhiJianNode,
-  type ZhiJianNodeType,
   type ZhiJianTree,
 } from "../core/tree";
-
-interface MindMetadata {
-  type?: ZhiJianNodeType;
-  props?: ZhiJianNode["props"];
-  plainText?: string;
-  richTextHtml?: string;
-}
+import {
+  renderMindMapNode,
+  type MindMapNodeMetadata,
+} from "./MindMapNodeRenderer";
 
 export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
-  const visit = (id: string): NodeObj<MindMetadata> => {
+  const visit = (id: string): NodeObj<MindMapNodeMetadata> => {
     const node = tree.nodes[id];
     const style = getNodeStyle(node.props?.style);
     const marks = firstMarks(node.content);
     const plainText =
       node.type === "table"
-        ? tableSummary(node)
+        ? "表格"
+        : node.type === "image"
+          ? node.props?.image?.name ?? "图片"
         : richTextToPlainText(node.content) || node.type;
     const isMedia = node.type === "table" || node.type === "image";
     return {
@@ -41,12 +39,11 @@ export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
         textDecoration: marksToTextDecoration(marks) ?? style.textDecorationLine ?? style.textDecoration,
       } as NodeObj["style"] & { fontStyle?: string },
       dangerouslySetInnerHTML: isMedia ? mediaSlotHtml(node) : undefined,
-      tags: node.type === "todo" ? [node.props?.checked ? "done" : "todo"] : undefined,
       metadata: {
         type: node.type,
-        props: node.props,
         plainText,
         richTextHtml: isMedia ? undefined : richTextToHtml(node.content),
+        checked: node.type === "todo" ? node.props?.checked ?? false : undefined,
       },
       children: node.children.map(visit),
     };
@@ -58,41 +55,11 @@ export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
   };
 }
 
-function tableSummary(node: ZhiJianNode) {
-  const table = node.props?.table;
-  if (!table?.rows.length) {
-    return "表格";
-  }
-  const columns = Math.max(0, ...table.rows.map((row) => row.length));
-  return `表格 ${table.rows.length}×${columns}`;
-}
-
 function mediaSlotHtml(node: ZhiJianNode) {
-  const width =
-    node.type === "table"
-      ? Math.max(
-          180,
-          node.props?.table?.columnWidths?.reduce<number>(
-            (sum, value) => sum + (value ?? 100),
-            0,
-          ) ??
-            Math.max(1, node.props?.table?.rows[0]?.length ?? 1) * 100,
-        )
-      : node.props?.image?.previewWidth ?? 180;
-  const height =
-    node.type === "table"
-      ? Math.max(68, (node.props?.table?.rows.length ?? 2) * 34)
-      : Math.round(width * 0.625);
-  return `<div class="mindmap-blocknote-slot" data-zhijian-media-node="${escapeHtml(node.id)}" style="width:${width}px;min-height:${height}px"></div>`;
+  return `<div class="mindmap-blocknote-slot mindmap-blocknote-slot-${node.type}" data-zhijian-media-node="${escapeHtml(node.id)}"></div>`;
 }
 
-export function renderMindMapRichText(topic: string, obj: NodeObj) {
-  const metadata = (obj as NodeObj<MindMetadata>).metadata;
-  if (metadata?.plainText === topic && metadata.richTextHtml) {
-    return metadata.richTextHtml;
-  }
-  return escapeHtml(topic);
-}
+export { renderMindMapNode };
 
 function richTextToHtml(content: ZhiJianNode["content"]) {
   const richText = normalizeRichText(content);

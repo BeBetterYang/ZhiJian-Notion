@@ -1,6 +1,12 @@
 import type { RichTextContent } from "./richText";
 
-export type ZhiJianNodeType = "text" | "heading" | "todo" | "table" | "image";
+export type ZhiJianNodeType =
+  | "text"
+  | "heading"
+  | "todo"
+  | "quote"
+  | "table"
+  | "image";
 
 export interface ZhiJianTableCell {
   content: RichTextContent;

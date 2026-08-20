@@ -57,13 +57,16 @@ export function MindMapMediaBlock({
         container.querySelector<HTMLElement>(".ProseMirror")?.focus({ preventScroll: true });
       }, 0);
     };
+    const stopMindMapWheel = (event: Event) => event.stopPropagation();
     container.addEventListener("pointerdown", stopMindMapPointerHandling);
     container.addEventListener("click", stopMindMapPointerHandling);
     container.addEventListener("dblclick", stopMindMapPointerHandling);
+    container.addEventListener("wheel", stopMindMapWheel);
     return () => {
       container.removeEventListener("pointerdown", stopMindMapPointerHandling);
       container.removeEventListener("click", stopMindMapPointerHandling);
       container.removeEventListener("dblclick", stopMindMapPointerHandling);
+      container.removeEventListener("wheel", stopMindMapWheel);
     };
   }, [node.id, onSelect]);
 
@@ -82,7 +85,7 @@ export function MindMapMediaBlock({
   return (
     <div
       ref={containerRef}
-      className={`mindmap-blocknote-node ${selected ? "is-selected" : ""}`}
+      className={`mindmap-blocknote-node mindmap-blocknote-node-${node.type} ${selected ? "is-selected" : ""}`}
     >
       <BlockNoteView
         editor={editor}
