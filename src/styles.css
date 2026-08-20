@@ -196,11 +196,6 @@ textarea {
   overflow: hidden;
 }
 
-.mindmap-node-editor-layer {
-  position: absolute;
-  z-index: 30;
-}
-
 .node-content-editor {
   width: 100%;
   min-width: 120px;
