@@ -1,17 +1,19 @@
 import type {
+  RichTextContent,
   TreeListener,
   ZhiJianNode,
   ZhiJianNodeType,
   ZhiJianTree,
-} from "../tree/types";
+} from "../tree";
 import type { NodeVisualStyle } from "../tree/style";
+import { normalizeRichText, plainTextContent } from "../tree";
 import { cloneTree, nowMeta, touchNode } from "../tree/utils";
 
 export interface CreateNodeInput {
   parentId: string;
   index?: number;
-  content?: string;
-  description?: string;
+  content?: string | RichTextContent;
+  description?: string | RichTextContent;
   type?: ZhiJianNodeType;
   id?: string;
 }
@@ -52,19 +54,20 @@ export class TreeStore {
     return result;
   }
 
-  updateContent(id: string, content: string) {
+  updateContent(id: string, content: string | RichTextContent) {
     this.commit((draft) => {
       const node = this.requireDraftNode(draft, id);
-      node.content = node.type === "table" ? "" : content;
+      node.content = node.type === "table" ? plainTextContent("") : normalizeRichText(content);
       draft.nodes[id] = touchNode(node);
     });
   }
 
-  updateDescription(id: string, description?: string) {
+  updateDescription(id: string, description?: string | RichTextContent) {
     this.commit((draft) => {
       const node = this.requireDraftNode(draft, id);
-      if (description?.trim()) {
-        node.description = description;
+      const richText = description ? normalizeRichText(description) : undefined;
+      if (richText?.text.trim()) {
+        node.description = richText;
       } else {
         delete node.description;
       }
@@ -77,7 +80,7 @@ export class TreeStore {
       const node = this.requireDraftNode(draft, id);
       node.type = type;
       if (type === "table") {
-        node.content = "";
+        node.content = plainTextContent("");
       }
       draft.nodes[id] = touchNode(node);
     });
@@ -122,8 +125,8 @@ export class TreeStore {
         id,
         parentId: parent.id,
         children: [],
-        content: type === "table" ? "" : (input.content ?? ""),
-        description: input.description,
+        content: type === "table" ? plainTextContent("") : normalizeRichText(input.content ?? ""),
+        description: input.description ? normalizeRichText(input.description) : undefined,
         type,
         meta: nowMeta(),
       };

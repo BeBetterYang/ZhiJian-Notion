@@ -1,6 +1,14 @@
 import type { MindElixirData, NodeObj } from "mind-elixir";
 import MindElixir from "mind-elixir";
-import { getNodeStyle, type ZhiJianNode, type ZhiJianNodeType, type ZhiJianTree } from "../core/tree";
+import {
+  firstMarks,
+  getNodeStyle,
+  plainTextContent,
+  richTextToPlainText,
+  type ZhiJianNode,
+  type ZhiJianNodeType,
+  type ZhiJianTree,
+} from "../core/tree";
 
 interface MindMetadata {
   type?: ZhiJianNodeType;
@@ -11,18 +19,19 @@ export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
   const visit = (id: string): NodeObj<MindMetadata> => {
     const node = tree.nodes[id];
     const style = getNodeStyle(node.props?.style);
+    const marks = firstMarks(node.content);
     return {
       id: node.id,
-      topic: node.content || node.type,
-      note: node.description,
+      topic: richTextToPlainText(node.content) || node.type,
+      note: node.description ? richTextToPlainText(node.description) : undefined,
       expanded: !node.props?.collapsed,
       style: {
         fontSize: style.fontSize,
-        color: style.color,
-        background: style.backgroundColor,
-        fontWeight: style.fontWeight,
-        fontStyle: style.fontStyle,
-        textDecoration: style.textDecorationLine ?? style.textDecoration,
+        color: marks?.textColor ?? style.color,
+        background: marks?.backgroundColor ?? style.backgroundColor,
+        fontWeight: marks?.bold ? "700" : style.fontWeight,
+        fontStyle: marks?.italic ? "italic" : style.fontStyle,
+        textDecoration: marksToTextDecoration(marks) ?? style.textDecorationLine ?? style.textDecoration,
       } as NodeObj["style"] & { fontStyle?: string },
       image: style.imageUrl
         ? {
@@ -57,8 +66,8 @@ export function mindElixirToTree(data: MindElixirData): ZhiJianTree {
       id: obj.id,
       parentId,
       children,
-      content: type === "table" ? "" : obj.topic,
-      description: obj.note,
+      content: type === "table" ? plainTextContent("") : plainTextContent(obj.topic),
+      description: obj.note ? plainTextContent(obj.note) : undefined,
       type,
       props: {
         ...obj.metadata?.props,
@@ -77,4 +86,15 @@ export function mindElixirToTree(data: MindElixirData): ZhiJianTree {
     rootId: data.nodeData.id,
     nodes,
   };
+}
+
+function marksToTextDecoration(marks: ReturnType<typeof firstMarks>) {
+  const values = [];
+  if (marks?.underline) {
+    values.push("underline");
+  }
+  if (marks?.strike) {
+    values.push("line-through");
+  }
+  return values.length ? values.join(" ") : undefined;
 }

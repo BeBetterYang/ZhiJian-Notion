@@ -1,7 +1,12 @@
 import type { Block, PartialBlock } from "@blocknote/core";
 import {
   getNodeStyle,
+  normalizeRichText,
+  richTextToPlainText,
   type NodeVisualStyle,
+  type RichTextContent,
+  type RichTextMarks,
+  type RichTextSpan,
   type ZhiJianNode,
   type ZhiJianNodeType,
   type ZhiJianTree,
@@ -44,10 +49,7 @@ export function blockNoteToTree(blocks: Block[], previousTree?: ZhiJianTree): Zh
       props: {
         ...previous?.props,
         checked: typeof blockProps.checked === "boolean" ? blockProps.checked : previous?.props?.checked,
-        style: {
-          ...getNodeStyle(previous?.props?.style),
-          ...extractStyleFromBlock(block),
-        },
+        style: getNodeStyle(previous?.props?.style),
       },
       meta: previous?.meta ?? {
         createdAt: Date.now(),
@@ -102,13 +104,17 @@ function toBlockNoteProps(node: ZhiJianNode) {
     return { checked: node.props?.checked ?? false };
   }
   if (node.type === "image") {
-    return { url: style.imageUrl ?? node.content, name: node.description ?? "图片" };
+    return {
+      url: style.imageUrl ?? richTextToPlainText(node.content),
+      name: node.description ? richTextToPlainText(node.description) : "图片",
+    };
   }
   return {};
 }
 
 function toBlockNoteContent(node: ZhiJianNode): PartialBlock["content"] {
   const style = getNodeStyle(node.props?.style);
+  const content = normalizeRichText(node.content);
   if (node.type === "table") {
     return {
       type: "tableContent",
@@ -121,149 +127,83 @@ function toBlockNoteContent(node: ZhiJianNode): PartialBlock["content"] {
   if (node.type === "image") {
     return undefined;
   }
+  if (content.spans?.length) {
+    return content.spans.map(spanToBlockNoteInline) as PartialBlock["content"];
+  }
+  const marks = content.marks;
   const styledText = {
     type: "text",
-    text: node.content,
+    text: content.text,
     styles: {
-      bold: style.fontWeight === "700",
-      italic: style.fontStyle === "italic",
-      underline: hasTextDecoration(style, "underline"),
-      strike: hasTextDecoration(style, "line-through"),
-      textColor: style.color,
-      backgroundColor: style.backgroundColor,
+      bold: marks?.bold ?? style.fontWeight === "700",
+      italic: marks?.italic ?? style.fontStyle === "italic",
+      underline: marks?.underline ?? hasTextDecoration(style, "underline"),
+      strike: marks?.strike ?? hasTextDecoration(style, "line-through"),
+      textColor: marks?.textColor ?? style.color,
+      backgroundColor: marks?.backgroundColor ?? style.backgroundColor,
     },
   };
-  if (style.linkUrl) {
+  if (marks?.linkUrl ?? style.linkUrl) {
     return [
       {
         type: "link",
-        href: style.linkUrl,
+        href: marks?.linkUrl ?? style.linkUrl,
         content: [styledText],
       },
     ] as PartialBlock["content"];
   }
-  if (style.color || style.backgroundColor || style.fontWeight || style.fontStyle || style.textDecoration) {
+  if (marks || style.color || style.backgroundColor || style.fontWeight || style.fontStyle || style.textDecoration) {
     return [styledText] as PartialBlock["content"];
   }
-  return node.content;
+  return content.text;
 }
 
-function contentFromBlock(type: ZhiJianNodeType, block: Block) {
+function contentFromBlock(type: ZhiJianNodeType, block: Block): RichTextContent {
   if (type === "table") {
-    return "";
+    return { text: "" };
   }
   if (type === "image") {
     const props = block.props as Record<string, unknown>;
-    return typeof props.url === "string" ? props.url : "";
+    return { text: typeof props.url === "string" ? props.url : "" };
   }
-  return contentToText(block.content);
+  return blockNoteContentToRichText(block.content);
 }
 
-function contentToText(content: Block["content"]) {
+function blockNoteContentToRichText(content: Block["content"]): RichTextContent {
   if (typeof content === "string") {
-    return content;
+    return { text: content };
   }
   if (!Array.isArray(content)) {
-    return "";
+    return { text: "" };
   }
-  return content
-    .map((item) => {
+  const inlineContent = content as Array<Record<string, unknown> | string>;
+  const spans: RichTextSpan[] = inlineContent.flatMap((item) => {
       if (typeof item === "string") {
-        return item;
+        return [{ text: item }];
       }
       if ("text" in item && typeof item.text === "string") {
-        return item.text;
+        return [{ text: item.text, marks: blockNoteStylesToMarks(item.styles as Record<string, unknown> | undefined) }];
       }
       if ("type" in item && item.type === "link" && "content" in item && Array.isArray(item.content)) {
         return item.content
-          .map((child) => ("text" in child && typeof child.text === "string" ? child.text : ""))
-          .join("");
+          .map((child: Record<string, unknown>) => ({
+            text: typeof child.text === "string" ? child.text : "",
+            marks: {
+              ...blockNoteStylesToMarks(child.styles as Record<string, unknown> | undefined),
+              linkUrl: typeof item.href === "string" ? item.href : undefined,
+            },
+          }))
+          .filter((span) => span.text.length > 0);
       }
-      return "";
+      return [];
     })
-    .join("");
-}
-
-function extractStyleFromBlock(block: Block): NodeVisualStyle {
-  const blockProps = block.props as Record<string, unknown>;
-  const style: NodeVisualStyle = {};
-
-  const contentStyles = firstInlineStyle(block.content);
-  if (contentStyles.__found) {
-    style.fontWeight = undefined;
-    style.fontStyle = undefined;
-    style.textDecoration = undefined;
-    style.textDecorationLine = undefined;
-    style.color = undefined;
-    style.backgroundColor = undefined;
-    style.linkUrl = undefined;
-  }
-
-  if (contentStyles.bold) {
-    style.fontWeight = "700";
-  }
-  if (contentStyles.italic) {
-    style.fontStyle = "italic";
-  }
-
-  const decorations = new Set<string>();
-  if (contentStyles.underline) {
-    decorations.add("underline");
-  }
-  if (contentStyles.strike) {
-    decorations.add("line-through");
-  }
-  if (contentStyles.underline !== undefined || contentStyles.strike !== undefined) {
-    style.textDecoration = Array.from(decorations).join(" ") || undefined;
-    style.textDecorationLine = style.textDecoration;
-  }
-
-  if (typeof contentStyles.textColor === "string" && contentStyles.textColor !== "default") {
-    style.color = contentStyles.textColor;
-  }
-  if (
-    typeof contentStyles.backgroundColor === "string" &&
-    contentStyles.backgroundColor !== "default"
-  ) {
-    style.backgroundColor = contentStyles.backgroundColor;
-  }
-  if (contentStyles.linkUrl) {
-    style.linkUrl = contentStyles.linkUrl;
-  }
-
-  if (typeof blockProps.textColor === "string" && blockProps.textColor !== "default") {
-    style.color = blockProps.textColor;
-  }
-  if (typeof blockProps.backgroundColor === "string" && blockProps.backgroundColor !== "default") {
-    style.backgroundColor = blockProps.backgroundColor;
-  }
-
-  return style;
-}
-
-function firstInlineStyle(content: Block["content"]) {
-  const result: Record<string, unknown> & { linkUrl?: string; __found?: boolean } = {};
-  if (!Array.isArray(content)) {
-    return result;
-  }
-  for (const item of content) {
-    if (typeof item === "string") {
-      continue;
-    }
-    if ("type" in item && item.type === "link") {
-      result.linkUrl = item.href;
-      result.__found = true;
-      const first = Array.isArray(item.content) ? item.content[0] : undefined;
-      if (first && "styles" in first) {
-        return { ...first.styles, linkUrl: item.href, __found: true };
-      }
-      return result;
-    }
-    if ("styles" in item) {
-      return { ...(item.styles as Record<string, unknown>), __found: true };
-    }
-  }
-  return result;
+  const text = spans.map((span) => span.text).join("");
+  return {
+    text,
+    spans: spans.some((span) => span.marks && Object.keys(span.marks).length > 0)
+      ? spans
+      : undefined,
+  };
 }
 
 function hasTextDecoration(style: NodeVisualStyle, value: "underline" | "line-through") {
@@ -271,4 +211,48 @@ function hasTextDecoration(style: NodeVisualStyle, value: "underline" | "line-th
     style.textDecoration?.split(" ").includes(value) ||
       style.textDecorationLine?.split(" ").includes(value),
   );
+}
+
+function blockNoteStylesToMarks(styles: Record<string, unknown> | undefined): RichTextMarks | undefined {
+  if (!styles) {
+    return undefined;
+  }
+  const marks: RichTextMarks = {
+    bold: styles.bold === true || undefined,
+    italic: styles.italic === true || undefined,
+    underline: styles.underline === true || undefined,
+    strike: styles.strike === true || undefined,
+    textColor:
+      typeof styles.textColor === "string" && styles.textColor !== "default"
+        ? styles.textColor
+        : undefined,
+    backgroundColor:
+      typeof styles.backgroundColor === "string" && styles.backgroundColor !== "default"
+        ? styles.backgroundColor
+        : undefined,
+  };
+  return Object.values(marks).some(Boolean) ? marks : undefined;
+}
+
+function spanToBlockNoteInline(span: RichTextSpan) {
+  const styledText = {
+    type: "text",
+    text: span.text,
+    styles: {
+      bold: span.marks?.bold,
+      italic: span.marks?.italic,
+      underline: span.marks?.underline,
+      strike: span.marks?.strike,
+      textColor: span.marks?.textColor,
+      backgroundColor: span.marks?.backgroundColor,
+    },
+  };
+  if (span.marks?.linkUrl) {
+    return {
+      type: "link",
+      href: span.marks.linkUrl,
+      content: [styledText],
+    };
+  }
+  return styledText;
 }

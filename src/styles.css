@@ -190,9 +190,28 @@ textarea {
 }
 
 .mindmap-canvas {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+.mindmap-node-editor-layer {
+  position: absolute;
+  z-index: 30;
+}
+
+.node-content-editor {
+  width: 100%;
+  min-width: 120px;
+  height: 34px;
+  border: 1px solid #2563eb;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1d2430;
+  padding: 6px 8px;
+  box-shadow: 0 8px 18px rgba(29, 36, 48, 0.14);
+  outline: none;
 }
 
 .mindmap-pane-body {

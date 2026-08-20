@@ -1,10 +1,11 @@
 import "mind-elixir/style.css";
 import MindElixir, { type Operation } from "mind-elixir";
 import { zh_CN } from "mind-elixir/i18n";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { TreeStore } from "../core/treeStore";
 import { useTree } from "../core/treeStore/useTree";
 import { mindElixirToTree, treeToMindElixir } from "./mindElixirAdapter";
+import { NodeContentEditor } from "../shared/NodeContentEditor";
 
 interface MindMapEditorProps {
   store: TreeStore;
@@ -25,6 +26,8 @@ export function MindMapEditor({
   const storeRef = useRef(store);
   const onSelectNodeRef = useRef(onSelectNode);
   const onSelectionActiveChangeRef = useRef(onSelectionActiveChange);
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const [editorRect, setEditorRect] = useState<{ left: number; top: number; width: number } | null>(null);
 
   useEffect(() => {
     storeRef.current = store;
@@ -76,6 +79,35 @@ export function MindMapEditor({
   }, []);
 
   useEffect(() => {
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+    const onDoubleClick = (event: MouseEvent) => {
+      const topic = (event.target as HTMLElement).closest("me-tpc, .topic") as HTMLElement | null;
+      const id = topic?.dataset.nodeid ?? topic?.dataset.id ?? topic?.getAttribute("data-nodeid");
+      const fallbackId = mindRef.current?.currentNode?.dataset.nodeid;
+      const nodeId = id ?? fallbackId;
+      if (!nodeId || !tree.nodes[nodeId]) {
+        return;
+      }
+      const rect = (topic ?? mindRef.current?.findEle(nodeId))?.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      if (!rect) {
+        return;
+      }
+      setEditingNodeId(nodeId);
+      setEditorRect({
+        left: rect.left - containerRect.left,
+        top: rect.top - containerRect.top,
+        width: Math.max(rect.width, 120),
+      });
+    };
+    container.addEventListener("dblclick", onDoubleClick);
+    return () => container.removeEventListener("dblclick", onDoubleClick);
+  }, [tree.nodes]);
+
+  useEffect(() => {
     const onSelectionChange = () => {
       const container = containerRef.current;
       const selection = document.getSelection();
@@ -105,5 +137,21 @@ export function MindMapEditor({
     }, 0);
   }, [tree]);
 
-  return <div className="mindmap-canvas" ref={containerRef} />;
+  const editingNode = editingNodeId ? tree.nodes[editingNodeId] : null;
+
+  return (
+    <div className="mindmap-canvas" ref={containerRef}>
+      {editingNode && editorRect ? (
+        <div className="mindmap-node-editor-layer" style={editorRect}>
+          <NodeContentEditor
+            node={editingNode}
+            store={store}
+            mode="mindmap"
+            onCommit={() => setEditingNodeId(null)}
+            onCancel={() => setEditingNodeId(null)}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
 }

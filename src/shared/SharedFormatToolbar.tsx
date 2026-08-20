@@ -1,6 +1,6 @@
 import type { BlockNoteEditor } from "@blocknote/core";
 import type { ZhiJianNode } from "../core/tree";
-import { getNodeStyle } from "../core/tree";
+import { getNodeStyle, richTextToPlainText } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
 
 interface SharedFormatToolbarProps {
@@ -64,7 +64,10 @@ export function SharedFormatToolbar({
     const normalized = url.trim();
     if (normalized) {
       const selectedText = editor?.getSelectedText();
-      editor?.createLink(normalized, selectedText || selectedNode?.content || normalized);
+      editor?.createLink(
+        normalized,
+        selectedText || (selectedNode ? richTextToPlainText(selectedNode.content) : "") || normalized,
+      );
       patchNodeStyle({ linkUrl: normalized });
     } else {
       patchNodeStyle({ linkUrl: undefined });
@@ -72,7 +75,10 @@ export function SharedFormatToolbar({
   };
 
   const setImage = () => {
-    const url = window.prompt("输入图片地址", style.imageUrl ?? selectedNode?.content ?? "");
+    const url = window.prompt(
+      "输入图片地址",
+      style.imageUrl ?? (selectedNode ? richTextToPlainText(selectedNode.content) : ""),
+    );
     if (url === null || !nodeId) {
       return;
     }

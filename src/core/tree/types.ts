@@ -1,11 +1,13 @@
+import type { RichTextContent } from "./richText";
+
 export type ZhiJianNodeType = "text" | "heading" | "todo" | "table" | "image";
 
 export interface ZhiJianNode {
   id: string;
   parentId: string | null;
   children: string[];
-  content: string;
-  description?: string;
+  content: RichTextContent;
+  description?: RichTextContent;
   type: ZhiJianNodeType;
   props?: {
     checked?: boolean;

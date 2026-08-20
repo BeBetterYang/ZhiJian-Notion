@@ -16,12 +16,15 @@ describe("blockNoteAdapter styles", () => {
       }),
     ]);
 
-    const style = tree?.nodes.root.props?.style as Record<string, unknown>;
-    expect(style.fontWeight).toBe("700");
-    expect(style.fontStyle).toBe("italic");
-    expect(style.textDecoration).toBe("underline line-through");
-    expect(style.color).toBe("#dc2626");
-    expect(style.backgroundColor).toBe("#fee2e2");
+    const marks = tree?.nodes.root.content.spans?.[0]?.marks;
+    expect(marks).toMatchObject({
+      bold: true,
+      italic: true,
+      underline: true,
+      strike: true,
+      textColor: "#dc2626",
+      backgroundColor: "#fee2e2",
+    });
   });
 
   it("projects ZhiJianTree node style back to BlockNote styles", () => {
@@ -32,7 +35,7 @@ describe("blockNoteAdapter styles", () => {
           id: "root",
           parentId: null,
           children: [],
-          content: "产品规划",
+          content: { text: "产品规划" },
           type: "text",
           props: {
             style: {

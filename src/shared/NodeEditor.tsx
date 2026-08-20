@@ -1,5 +1,5 @@
 import type { KeyboardEvent } from "react";
-import type { ZhiJianNode } from "../core/tree";
+import { richTextToPlainText, type ZhiJianNode } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
 
 interface NodeEditorProps {
@@ -59,7 +59,7 @@ export function NodeEditor({ node, store, onCreateSibling }: NodeEditorProps) {
 
       <input
         id={`content-${node.id}`}
-        value={node.type === "table" ? "" : node.content}
+        value={node.type === "table" ? "" : richTextToPlainText(node.content)}
         disabled={node.type === "table"}
         placeholder={node.type === "table" ? "Table 节点不保存正文" : "正文"}
         onChange={(event) => store.updateContent(node.id, event.target.value)}
@@ -68,7 +68,7 @@ export function NodeEditor({ node, store, onCreateSibling }: NodeEditorProps) {
 
       <textarea
         id={`description-${node.id}`}
-        value={node.description ?? ""}
+        value={node.description ? richTextToPlainText(node.description) : ""}
         placeholder="描述"
         onChange={(event) => store.updateDescription(node.id, event.target.value)}
         onKeyDown={onDescriptionKeyDown}
