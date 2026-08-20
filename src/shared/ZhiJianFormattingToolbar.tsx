@@ -14,11 +14,13 @@ import { saveImageAsset } from "./imageAssetStore";
 interface ZhiJianFormattingToolbarProps {
   showStructuralControls?: boolean;
   hasExternalBody?: boolean;
+  onInsertQuote?: (nodeId: string) => void;
 }
 
 export function ZhiJianFormattingToolbar({
   showStructuralControls = true,
   hasExternalBody = false,
+  onInsertQuote,
 }: ZhiJianFormattingToolbarProps = {}) {
   const editor = useBlockNoteEditor();
   const blockTypes = useMemo(
@@ -46,7 +48,12 @@ export function ZhiJianFormattingToolbar({
   return (
     <FormattingToolbar>
       <BlockTypeSelect items={blockTypes} />
-      {showStructuralControls ? <InsertQuoteButton /> : null}
+      {showStructuralControls ? (
+        <InsertQuoteButton
+          hasExternalBody={hasExternalBody}
+          onInsertQuote={onInsertQuote}
+        />
+      ) : null}
       {showStructuralControls ? <InsertTableButton /> : null}
       {showStructuralControls ? (
         <InsertImageButton hasExternalBody={hasExternalBody} />
@@ -56,7 +63,13 @@ export function ZhiJianFormattingToolbar({
   );
 }
 
-function InsertQuoteButton() {
+function InsertQuoteButton({
+  hasExternalBody,
+  onInsertQuote,
+}: {
+  hasExternalBody: boolean;
+  onInsertQuote?: (nodeId: string) => void;
+}) {
   const editor = useBlockNoteEditor();
   const Components = useComponentsContext()!;
 
@@ -67,7 +80,11 @@ function InsertQuoteButton() {
       icon={<RiDoubleQuotesL />}
       onClick={() => {
         const block = editor.getTextCursorPosition().block;
-        const referenceId = quoteInsertionReference(editor, block.id);
+        const referenceId = quoteInsertionReference(
+          editor,
+          block.id,
+          hasExternalBody,
+        );
         const [quote] = editor.insertBlocks(
           [{ type: "quote", content: "" }],
           referenceId,
@@ -75,6 +92,7 @@ function InsertQuoteButton() {
         );
         if (quote) {
           editor.setTextCursorPosition(quote, "start");
+          onInsertQuote?.(quote.id);
         }
       }}
     />
@@ -189,40 +207,44 @@ function imageInsertionReference(
     return body?.id ?? selectedBlockId;
   }
 
-  if (selectedBlock.type !== "image") {
+  if (!isAttachmentBlock(selectedBlock.type)) {
     return selectedBlockId;
   }
 
-  let firstImageIndex = selectedIndex;
-  while (firstImageIndex > 0 && editor.document[firstImageIndex - 1]?.type === "image") {
-    firstImageIndex -= 1;
-  }
-  let lastImageIndex = selectedIndex;
+  let firstAttachmentIndex = selectedIndex;
   while (
-    lastImageIndex + 1 < editor.document.length &&
-    editor.document[lastImageIndex + 1]?.type === "image"
+    firstAttachmentIndex > 0 &&
+    isAttachmentBlock(editor.document[firstAttachmentIndex - 1]?.type)
   ) {
-    lastImageIndex += 1;
+    firstAttachmentIndex -= 1;
   }
-  const lastImageId = editor.document[lastImageIndex].id;
+  let lastAttachmentIndex = selectedIndex;
+  while (
+    lastAttachmentIndex + 1 < editor.document.length &&
+    isAttachmentBlock(editor.document[lastAttachmentIndex + 1]?.type)
+  ) {
+    lastAttachmentIndex += 1;
+  }
+  const lastAttachmentId = editor.document[lastAttachmentIndex].id;
   if (hasExternalBody) {
-    return lastImageId;
+    return lastAttachmentId;
   }
 
-  const precedingBlock = editor.document[firstImageIndex - 1];
+  const precedingBlock = editor.document[firstAttachmentIndex - 1];
   if (!precedingBlock || precedingBlock.type === "table") {
     editor.insertBlocks(
       [{ type: "paragraph", content: "" }],
-      editor.document[firstImageIndex],
+      editor.document[firstAttachmentIndex],
       "before",
     );
   }
-  return lastImageId;
+  return lastAttachmentId;
 }
 
 function quoteInsertionReference(
   editor: BlockNoteEditor,
   selectedBlockId: string,
+  hasExternalBody: boolean,
 ) {
   const selectedIndex = editor.document.findIndex((block) => block.id === selectedBlockId);
   const selectedBlock = editor.document[selectedIndex];
@@ -239,23 +261,34 @@ function quoteInsertionReference(
     return body?.id ?? selectedBlockId;
   }
 
-  if (selectedBlock.type !== "image") {
+  if (!isAttachmentBlock(selectedBlock.type)) {
     return selectedBlockId;
   }
 
-  let firstImageIndex = selectedIndex;
-  while (firstImageIndex > 0 && editor.document[firstImageIndex - 1]?.type === "image") {
-    firstImageIndex -= 1;
+  if (hasExternalBody) {
+    return selectedBlockId;
   }
-  const precedingBlock = editor.document[firstImageIndex - 1];
+
+  let firstAttachmentIndex = selectedIndex;
+  while (
+    firstAttachmentIndex > 0 &&
+    isAttachmentBlock(editor.document[firstAttachmentIndex - 1]?.type)
+  ) {
+    firstAttachmentIndex -= 1;
+  }
+  const precedingBlock = editor.document[firstAttachmentIndex - 1];
   if (precedingBlock && precedingBlock.type !== "table") {
     return precedingBlock.id;
   }
 
   const [body] = editor.insertBlocks(
     [{ type: "paragraph", content: "" }],
-    editor.document[firstImageIndex],
+    editor.document[firstAttachmentIndex],
     "before",
   );
   return body?.id ?? selectedBlockId;
+}
+
+function isAttachmentBlock(type: string | undefined) {
+  return type === "image" || type === "quote";
 }

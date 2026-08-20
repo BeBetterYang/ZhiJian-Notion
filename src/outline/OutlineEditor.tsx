@@ -22,6 +22,7 @@ interface OutlineEditorProps {
   mindMapTextSelection: MindMapTextSelection | null;
   mindMapToolbarTarget: HTMLElement | null;
   showMindMapToolbar: boolean;
+  onMindMapInsertQuote: (nodeId: string) => void;
 }
 
 export function OutlineEditor({
@@ -31,6 +32,7 @@ export function OutlineEditor({
   mindMapTextSelection,
   mindMapToolbarTarget,
   showMindMapToolbar,
+  onMindMapInsertQuote,
 }: OutlineEditorProps) {
   const tree = useTree(store);
   const applyingExternalChange = useRef(false);
@@ -105,7 +107,10 @@ export function OutlineEditor({
       <FormattingToolbarController formattingToolbar={() => <ZhiJianFormattingToolbar />} />
       <ZhiJianSlashMenu />
       {showMindMapToolbar && mindMapToolbarTarget
-        ? createPortal(<ZhiJianFormattingToolbar />, mindMapToolbarTarget)
+        ? createPortal(
+            <ZhiJianFormattingToolbar onInsertQuote={onMindMapInsertQuote} />,
+            mindMapToolbarTarget,
+          )
         : null}
     </BlockNoteView>
   );

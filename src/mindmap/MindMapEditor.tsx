@@ -17,6 +17,8 @@ interface MindMapEditorProps {
   onTextSelectionChange: (selection: MindMapTextSelection | null) => void;
   selectedNodeId: string | null;
   toolbarTarget: HTMLElement | null;
+  focusRequest: { nodeId: string; requestId: number } | null;
+  onFocusRequestHandled: (requestId: number) => void;
 }
 
 export interface MindMapTextSelection {
@@ -32,6 +34,8 @@ export function MindMapEditor({
   onTextSelectionChange,
   selectedNodeId,
   toolbarTarget,
+  focusRequest,
+  onFocusRequestHandled,
 }: MindMapEditorProps) {
   const tree = useTree(store);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -321,6 +325,8 @@ export function MindMapEditor({
             selectedNodeId={selectedNodeId}
             toolbarTarget={toolbarTarget}
             onSelect={handlePortalSelect}
+            focusRequest={focusRequest}
+            onFocusRequestHandled={onFocusRequestHandled}
           />,
           element,
           `group-${primaryId}`,

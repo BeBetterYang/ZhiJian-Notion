@@ -16,6 +16,10 @@ export default function App() {
   const [mindMapToolbarTarget, setMindMapToolbarTarget] = useState<HTMLDivElement | null>(null);
   const [mindMapTextSelection, setMindMapTextSelection] =
     useState<MindMapTextSelection | null>(null);
+  const [mindMapFocusRequest, setMindMapFocusRequest] = useState<{
+    nodeId: string;
+    requestId: number;
+  } | null>(null);
   const selectedNode = selectedNodeId ? store.getNode(selectedNodeId) : null;
   const isMindMapMediaSelected =
     selectedNode?.type === "table" || selectedNode?.type === "image";
@@ -121,6 +125,14 @@ export default function App() {
               !isMindMapMediaSelected &&
               !isMindMapGroupSelected
             }
+            onMindMapInsertQuote={(nodeId) => {
+              setSelectedNodeId(nodeId);
+              setSelectionActive(true);
+              setMindMapFocusRequest((current) => ({
+                nodeId,
+                requestId: (current?.requestId ?? 0) + 1,
+              }));
+            }}
           />
         </section>
         <section
@@ -140,6 +152,12 @@ export default function App() {
                 onTextSelectionChange={setMindMapTextSelection}
                 selectedNodeId={selectedNodeId}
                 toolbarTarget={mindMapToolbarTarget}
+                focusRequest={mindMapFocusRequest}
+                onFocusRequestHandled={(requestId) => {
+                  setMindMapFocusRequest((current) =>
+                    current?.requestId === requestId ? null : current,
+                  );
+                }}
               />
             ) : null}
             <div

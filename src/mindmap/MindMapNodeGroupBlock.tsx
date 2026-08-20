@@ -17,6 +17,8 @@ interface MindMapNodeGroupBlockProps {
   selectedNodeId: string | null;
   toolbarTarget: HTMLElement | null;
   onSelect: (nodeId: string) => void;
+  focusRequest: { nodeId: string; requestId: number } | null;
+  onFocusRequestHandled: (requestId: number) => void;
 }
 
 export function MindMapNodeGroupBlock({
@@ -27,6 +29,8 @@ export function MindMapNodeGroupBlock({
   selectedNodeId,
   toolbarTarget,
   onSelect,
+  focusRequest,
+  onFocusRequestHandled,
 }: MindMapNodeGroupBlockProps) {
   const textNodes = useMemo(
     () => [primary.type === "image" ? null : primary, quote].filter(Boolean) as ZhiJianNode[],
@@ -42,6 +46,8 @@ export function MindMapNodeGroupBlock({
           selectedNodeId={selectedNodeId}
           toolbarTarget={toolbarTarget}
           onSelect={onSelect}
+          focusRequest={focusRequest}
+          onFocusRequestHandled={onFocusRequestHandled}
         />
       ) : null}
       {images.length > 0 ? (
@@ -72,6 +78,8 @@ interface MindMapTextGroupEditorProps {
   selectedNodeId: string | null;
   toolbarTarget: HTMLElement | null;
   onSelect: (nodeId: string) => void;
+  focusRequest: { nodeId: string; requestId: number } | null;
+  onFocusRequestHandled: (requestId: number) => void;
 }
 
 function MindMapTextGroupEditor({
@@ -80,12 +88,17 @@ function MindMapTextGroupEditor({
   selectedNodeId,
   toolbarTarget,
   onSelect,
+  focusRequest,
+  onFocusRequestHandled,
 }: MindMapTextGroupEditorProps) {
   const applyingExternalChange = useRef(false);
   const projectionVersion = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
-  const nodeIds = nodes.map((node) => node.id);
-  const projectedBlocks = nodes.flatMap((node) => treeToBlockNote(singleNodeTree(node)));
+  const nodeIds = useMemo(() => nodes.map((node) => node.id), [nodes]);
+  const projectedBlocks = useMemo(
+    () => nodes.flatMap((node) => treeToBlockNote(singleNodeTree(node))),
+    [nodes],
+  );
   const projectionSignature = JSON.stringify(projectedBlocks);
   const selected = Boolean(selectedNodeId && nodeIds.includes(selectedNodeId));
   const editor = useCreateBlockNote(
@@ -97,8 +110,26 @@ function MindMapTextGroupEditor({
   );
 
   useEffect(() => {
-    editor.isEditable = selected;
-  }, [editor, selected]);
+    editor.isEditable = true;
+  }, [editor]);
+
+  useEffect(() => {
+    if (!focusRequest || !nodeIds.includes(focusRequest.nodeId)) {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        editor.setTextCursorPosition(focusRequest.nodeId, "start");
+        containerRef.current
+          ?.querySelector<HTMLElement>(".ProseMirror")
+          ?.focus({ preventScroll: true });
+        onFocusRequestHandled(focusRequest.requestId);
+      } catch {
+        // The requested block may have been removed before the group mounted.
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [editor, focusRequest, nodeIds, onFocusRequestHandled]);
 
   useEffect(() => {
     return editor.onSelectionChange(() => {
@@ -128,30 +159,41 @@ function MindMapTextGroupEditor({
     if (!container) {
       return;
     }
-    const activateEditor = (event: Event) => {
+    const selectEditorBlock = (event: Event) => {
       const blockId = (event.target as Element | null)
         ?.closest<HTMLElement>("[data-id]")
         ?.dataset.id;
       const nodeId = blockId && nodeIds.includes(blockId) ? blockId : nodes[0].id;
-      onSelect(nodeId);
-      window.setTimeout(() => {
-        try {
-          editor.setTextCursorPosition(nodeId, "end");
-          container.querySelector<HTMLElement>(".ProseMirror")?.focus({ preventScroll: true });
-        } catch {
-          // The group may have been reprojected before focus is restored.
-        }
-      }, 50);
+      window.queueMicrotask(() => onSelect(nodeId));
+      event.stopPropagation();
+    };
+    const placeTextCursor = (event: PointerEvent) => {
+      if (event.button !== 0) {
+        return;
+      }
+      const target = event.target as Element | null;
+      if (!target?.closest(".ProseMirror")) {
+        return;
+      }
+      const position = editor._tiptapEditor.view.posAtCoords({
+        left: event.clientX,
+        top: event.clientY,
+      });
+      if (position) {
+        editor._tiptapEditor.commands.setTextSelection(position.pos);
+        editor.focus();
+      }
+      event.stopPropagation();
     };
     const stopMindMapPointerHandling = (event: Event) => event.stopPropagation();
-    container.addEventListener("pointerdown", activateEditor, true);
-    container.addEventListener("pointerdown", stopMindMapPointerHandling);
-    container.addEventListener("click", stopMindMapPointerHandling);
+    container.addEventListener("pointerdown", placeTextCursor);
+    container.addEventListener("mousedown", stopMindMapPointerHandling);
+    container.addEventListener("click", selectEditorBlock);
     container.addEventListener("dblclick", stopMindMapPointerHandling);
     return () => {
-      container.removeEventListener("pointerdown", activateEditor, true);
-      container.removeEventListener("pointerdown", stopMindMapPointerHandling);
-      container.removeEventListener("click", stopMindMapPointerHandling);
+      container.removeEventListener("pointerdown", placeTextCursor);
+      container.removeEventListener("mousedown", stopMindMapPointerHandling);
+      container.removeEventListener("click", selectEditorBlock);
       container.removeEventListener("dblclick", stopMindMapPointerHandling);
     };
   }, [editor, nodeIds, nodes, onSelect]);

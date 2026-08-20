@@ -207,6 +207,11 @@ textarea {
   height: auto;
 }
 
+.map-container me-tpc:has(> .mindmap-blocknote-slot-table) {
+  width: max-content;
+  max-width: none;
+}
+
 .mindmap-blocknote-slot-image {
   width: max-content;
   height: auto;
@@ -257,6 +262,17 @@ textarea {
   width: max-content !important;
   overflow: visible !important;
   padding: 0 !important;
+}
+
+.mindmap-blocknote-node-table,
+.mindmap-blocknote-node-table .bn-container,
+.mindmap-blocknote-node-table .bn-editor,
+.mindmap-blocknote-node-table .bn-block-group,
+.mindmap-blocknote-node-table .bn-block-outer,
+.mindmap-blocknote-node-table .bn-block,
+.mindmap-blocknote-node-table .bn-block-content {
+  width: max-content !important;
+  max-width: none !important;
 }
 
 .mindmap-blocknote-node .bn-trailing-block {
@@ -359,6 +375,14 @@ textarea {
   max-width: none;
 }
 
+.mindmap-node-group-slot,
+.mindmap-node-group,
+.mindmap-text-group-editor,
+.mindmap-text-group-editor * {
+  pointer-events: auto;
+  user-select: text;
+}
+
 .mindmap-text-group-editor,
 .mindmap-text-group-editor .bn-container,
 .mindmap-text-group-editor .bn-editor,
@@ -382,6 +406,10 @@ textarea {
   padding: 0.12em 0;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+.mindmap-text-group-editor .bn-block-content::after {
+  content: none !important;
 }
 
 .mindmap-text-group-editor .bn-trailing-block {
