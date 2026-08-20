@@ -1,7 +1,11 @@
 import type { NodeObj } from "mind-elixir";
 import { describe, expect, it } from "vitest";
 import { createInitialTree } from "../core/tree";
-import { renderMindMapNode, treeToMindElixir } from "./mindElixirAdapter";
+import {
+  createMindMapStructureSignature,
+  renderMindMapNode,
+  treeToMindElixir,
+} from "./mindElixirAdapter";
 
 describe("mindElixirAdapter", () => {
   it("renders rich text without disabling MindElixir native editing", () => {
@@ -158,5 +162,39 @@ describe("mindElixirAdapter", () => {
     expect(children[2].dangerouslySetInnerHTML).toContain(
       'data-zhijian-group-images="image-after"',
     );
+  });
+
+  it("keeps the visible structure stable when attachments join an existing node", () => {
+    const tree = createInitialTree();
+    const initialSignature = createMindMapStructureSignature(tree);
+    tree.nodes.quote = {
+      id: "quote",
+      parentId: "root",
+      children: [],
+      content: { text: "引用" },
+      type: "quote",
+    };
+    tree.nodes.image = {
+      id: "image",
+      parentId: "root",
+      children: [],
+      content: { text: "" },
+      type: "image",
+      props: { image: { url: "asset:image" } },
+    };
+    tree.nodes.root.children = ["web", "quote", "image", "app"];
+
+    expect(createMindMapStructureSignature(tree)).toBe(initialSignature);
+
+    tree.nodes.table = {
+      id: "table",
+      parentId: "root",
+      children: [],
+      content: { text: "" },
+      type: "table",
+    };
+    tree.nodes.root.children.splice(3, 0, "table");
+
+    expect(createMindMapStructureSignature(tree)).not.toBe(initialSignature);
   });
 });

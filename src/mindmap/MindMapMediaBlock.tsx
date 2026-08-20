@@ -64,12 +64,14 @@ export function MindMapMediaBlock({
     container.addEventListener("mousedown", stopMindMapPointerHandling);
     container.addEventListener("click", stopMindMapPointerHandling);
     container.addEventListener("dblclick", stopMindMapPointerHandling);
+    container.addEventListener("keydown", stopMindMapPointerHandling);
     container.addEventListener("wheel", stopMindMapWheel);
     return () => {
       container.removeEventListener("pointerdown", stopMindMapPointerHandling);
       container.removeEventListener("mousedown", stopMindMapPointerHandling);
       container.removeEventListener("click", stopMindMapPointerHandling);
       container.removeEventListener("dblclick", stopMindMapPointerHandling);
+      container.removeEventListener("keydown", stopMindMapPointerHandling);
       container.removeEventListener("wheel", stopMindMapWheel);
     };
   }, [node.id, onSelect]);

@@ -186,15 +186,48 @@ function MindMapTextGroupEditor({
       event.stopPropagation();
     };
     const stopMindMapPointerHandling = (event: Event) => event.stopPropagation();
+    const preserveGroupBlocks = (event: KeyboardEvent) => {
+      if (event.key !== "Backspace" && event.key !== "Delete") {
+        return;
+      }
+      const selection = editor._tiptapEditor.state.selection;
+      if (!selection.empty) {
+        const selectedBlocks = (editor.getSelection()?.blocks ?? []).filter((block) =>
+          nodeIds.includes(block.id),
+        );
+        if (selectedBlocks.length > 1) {
+          event.preventDefault();
+          event.stopPropagation();
+          editor.transact(() => {
+            selectedBlocks.forEach((block) => editor.updateBlock(block.id, { content: [] }));
+          });
+        }
+        return;
+      }
+      const block = editor.getTextCursorPosition().block;
+      if (!nodeIds.includes(block.id)) {
+        return;
+      }
+      const atStart = selection.$from.parentOffset === 0;
+      const atEnd = selection.$from.parentOffset === selection.$from.parent.content.size;
+      if ((event.key === "Backspace" && atStart) || (event.key === "Delete" && atEnd)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
     container.addEventListener("pointerdown", placeTextCursor);
     container.addEventListener("mousedown", stopMindMapPointerHandling);
     container.addEventListener("click", selectEditorBlock);
     container.addEventListener("dblclick", stopMindMapPointerHandling);
+    container.addEventListener("keydown", preserveGroupBlocks, true);
+    container.addEventListener("keydown", stopMindMapPointerHandling);
     return () => {
       container.removeEventListener("pointerdown", placeTextCursor);
       container.removeEventListener("mousedown", stopMindMapPointerHandling);
       container.removeEventListener("click", selectEditorBlock);
       container.removeEventListener("dblclick", stopMindMapPointerHandling);
+      container.removeEventListener("keydown", preserveGroupBlocks, true);
+      container.removeEventListener("keydown", stopMindMapPointerHandling);
     };
   }, [editor, nodeIds, nodes, onSelect]);
 

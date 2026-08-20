@@ -5,7 +5,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { TreeStore } from "../core/treeStore";
 import { useTree } from "../core/treeStore/useTree";
-import { renderMindMapNode, treeToMindElixir } from "./mindElixirAdapter";
+import {
+  createMindMapStructureSignature,
+  renderMindMapNode,
+  treeToMindElixir,
+} from "./mindElixirAdapter";
 import { applyMindElixirOperation } from "./mindElixirCommands";
 import { MindMapMediaBlock } from "./MindMapMediaBlock";
 import { MindMapNodeGroupBlock } from "./MindMapNodeGroupBlock";
@@ -43,7 +47,7 @@ export function MindMapEditor({
   const suppressOperation = useRef(false);
   const lastSelectedNodeId = useRef<string | null>(null);
   const initialTree = useRef(tree);
-  const mindStructureSignature = useRef(createMindStructureSignature(tree));
+  const mindStructureSignature = useRef(createMindMapStructureSignature(tree));
   const storeRef = useRef(store);
   const onSelectNodeRef = useRef(onSelectNode);
   const onSelectionActiveChangeRef = useRef(onSelectionActiveChange);
@@ -126,7 +130,7 @@ export function MindMapEditor({
         onSelectionActiveChangeRef.current(true);
       }
       applyMindElixirOperation(operation, storeRef.current);
-      mindStructureSignature.current = createMindStructureSignature(
+      mindStructureSignature.current = createMindMapStructureSignature(
         storeRef.current.getSnapshot(),
       );
       if (
@@ -153,6 +157,9 @@ export function MindMapEditor({
     mind.bus.addListener("unselectNodes", () => {
       onSelectionActiveChangeRef.current(false);
       onTextSelectionChangeRef.current(null);
+    });
+    mind.bus.addListener("changeDirection", () => {
+      window.requestAnimationFrame(collectMediaTargets);
     });
     mindRef.current = mind;
 
@@ -226,14 +233,37 @@ export function MindMapEditor({
   }, []);
 
   useEffect(() => {
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+    const commitEmptyNativeEdit = (event: FocusEvent) => {
+      const editorElement = event.target as HTMLElement | null;
+      if (editorElement?.id !== "input-box" || editorElement.innerText.trim()) {
+        return;
+      }
+      const nodeId = lastSelectedNodeId.current;
+      const node = nodeId ? storeRef.current.getNode(nodeId) : null;
+      if (node && node.type !== "table" && node.type !== "image") {
+        storeRef.current.updateContent(node.id, "");
+      }
+    };
+    container.addEventListener("blur", commitEmptyNativeEdit, true);
+    return () => container.removeEventListener("blur", commitEmptyNativeEdit, true);
+  }, []);
+
+  useEffect(() => {
     const mind = mindRef.current;
     if (!mind) {
       return;
     }
-    const nextSignature = createMindStructureSignature(tree);
+    const nextSignature = createMindMapStructureSignature(tree);
     const nextData = treeToMindElixir(tree);
     if (mindStructureSignature.current === nextSignature) {
-      updateMindMapNodesInPlace(mind, nextData.nodeData);
+      const mountTargetsChanged = updateMindMapNodesInPlace(mind, nextData.nodeData);
+      if (mountTargetsChanged) {
+        queueMicrotask(collectMediaTargets);
+      }
       return;
     }
     mindStructureSignature.current = nextSignature;
@@ -336,23 +366,13 @@ export function MindMapEditor({
   );
 }
 
-function createMindStructureSignature(tree: ReturnType<TreeStore["getSnapshot"]>) {
-  return JSON.stringify(
-    Object.values(tree.nodes).map((node) => ({
-      id: node.id,
-      parentId: node.parentId,
-      children: node.children,
-      type: node.type,
-      collapsed: node.props?.collapsed,
-    })),
-  );
-}
-
 function updateMindMapNodesInPlace(mind: MindElixir, root: import("mind-elixir").NodeObj) {
+  let mountTargetsChanged = false;
   const visit = (nextNode: typeof root) => {
     try {
       const topicElement = mind.findEle(nextNode.id);
       const currentNode = topicElement.nodeObj;
+      const currentHtml = currentNode.dangerouslySetInnerHTML;
       currentNode.topic = nextNode.topic;
       currentNode.note = nextNode.note;
       currentNode.style = nextNode.style;
@@ -361,7 +381,19 @@ function updateMindMapNodesInPlace(mind: MindElixir, root: import("mind-elixir")
       Object.entries(nextNode.style ?? {}).forEach(([property, value]) => {
         (topicElement.style as unknown as Record<string, string>)[property] = String(value ?? "");
       });
-      if (!nextNode.dangerouslySetInnerHTML) {
+      if (currentHtml !== nextNode.dangerouslySetInnerHTML) {
+        mountTargetsChanged = true;
+        if (nextNode.dangerouslySetInnerHTML) {
+          topicElement.innerHTML = nextNode.dangerouslySetInnerHTML;
+        } else {
+          topicElement.innerHTML = "";
+          const textElement = document.createElement("span");
+          textElement.className = "text";
+          textElement.innerHTML = renderMindMapNode(nextNode.topic, nextNode);
+          topicElement.appendChild(textElement);
+          topicElement.text = textElement;
+        }
+      } else if (!nextNode.dangerouslySetInnerHTML) {
         const textElement = topicElement.querySelector<HTMLElement>(".text");
         if (textElement) {
           textElement.innerHTML = renderMindMapNode(nextNode.topic, nextNode);
@@ -374,6 +406,7 @@ function updateMindMapNodesInPlace(mind: MindElixir, root: import("mind-elixir")
   };
   visit(root);
   mind.linkDiv();
+  return mountTargetsChanged;
 }
 
 function textOffset(root: HTMLElement, node: Node, offset: number) {

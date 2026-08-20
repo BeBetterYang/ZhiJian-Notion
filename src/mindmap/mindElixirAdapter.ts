@@ -74,6 +74,16 @@ export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
   };
 }
 
+export function createMindMapStructureSignature(tree: ZhiJianTree) {
+  const root = treeToMindElixir(tree).nodeData;
+  const visit = (node: typeof root): unknown => ({
+    id: node.id,
+    expanded: node.expanded,
+    children: node.children?.map(visit) ?? [],
+  });
+  return JSON.stringify(visit(root));
+}
+
 interface MindMapNodeGroup {
   primaryId: string;
   quoteId?: string;
