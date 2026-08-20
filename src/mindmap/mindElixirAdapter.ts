@@ -3,6 +3,7 @@ import MindElixir from "mind-elixir";
 import {
   firstMarks,
   getNodeStyle,
+  normalizeRichText,
   plainTextContent,
   richTextToPlainText,
   type ZhiJianNode,
@@ -41,6 +42,7 @@ export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
             fit: "contain",
           }
         : undefined,
+      dangerouslySetInnerHTML: richTextToHtml(node.content),
       tags: node.type === "todo" ? [node.props?.checked ? "done" : "todo"] : undefined,
       metadata: {
         type: node.type,
@@ -54,6 +56,48 @@ export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
     nodeData: visit(tree.rootId),
     direction: MindElixir.SIDE,
   };
+}
+
+function richTextToHtml(content: ZhiJianNode["content"]) {
+  const richText = normalizeRichText(content);
+  const spans = richText.spans?.length
+    ? richText.spans
+    : [{ text: richText.text, marks: richText.marks }];
+  return spans
+    .map((span) => {
+      const style = [
+        span.marks?.bold ? "font-weight:700" : "",
+        span.marks?.italic ? "font-style:italic" : "",
+        span.marks?.underline || span.marks?.strike
+          ? `text-decoration:${[
+              span.marks.underline ? "underline" : "",
+              span.marks.strike ? "line-through" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}`
+          : "",
+        span.marks?.textColor ? `color:${escapeHtml(span.marks.textColor)}` : "",
+        span.marks?.backgroundColor
+          ? `background:${escapeHtml(span.marks.backgroundColor)}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(";");
+      const text = escapeHtml(span.text);
+      const inner = span.marks?.linkUrl
+        ? `<a href="${escapeHtml(span.marks.linkUrl)}" target="_blank" rel="noreferrer">${text}</a>`
+        : text;
+      return `<span style="${style}">${inner}</span>`;
+    })
+    .join("");
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 export function mindElixirToTree(data: MindElixirData): ZhiJianTree {
