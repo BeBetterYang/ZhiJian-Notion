@@ -39,17 +39,10 @@ function updateNodeText(obj: NodeObj, store: TreeStore) {
   if (!current) {
     return;
   }
-  const nextContent = {
+  store.updateContent(obj.id, {
     text: obj.topic,
-    marks: firstMarks(
-      current.type === "quote" ? (current.description ?? current.content) : current.content,
-    ),
-  };
-  if (current.type === "quote") {
-    store.updateDescription(obj.id, nextContent);
-  } else {
-    store.updateContent(obj.id, nextContent);
-  }
+    marks: firstMarks(current.content),
+  });
 }
 
 function createNodeFromMind(obj: NodeObj, store: TreeStore) {

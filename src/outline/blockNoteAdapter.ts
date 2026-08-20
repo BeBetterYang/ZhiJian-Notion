@@ -2,7 +2,6 @@ import type { Block, PartialBlock } from "@blocknote/core";
 import {
   getNodeStyle,
   normalizeRichText,
-  plainTextContent,
   richTextToPlainText,
   type NodeVisualStyle,
   type RichTextContent,
@@ -45,13 +44,12 @@ export function blockNoteToTree(blocks: Block[], previousTree?: ZhiJianTree): Zh
     const children = childBlocks.map((child) => child.id);
     const blockProps = block.props as Record<string, unknown>;
     const blockContent = contentFromBlock(type, block);
-    const hasStoredQuoteBody = type === "quote" && previous?.type === "quote" && previous.description;
     nodes[block.id] = {
       id: block.id,
       parentId,
       children,
-      content: type === "quote" ? (hasStoredQuoteBody ? previous.content : plainTextContent("")) : blockContent,
-      description: type === "quote" ? blockContent : previous?.description,
+      content: blockContent,
+      description: previous?.description,
       type,
       props: {
         ...previous?.props,
@@ -139,9 +137,7 @@ function toBlockNoteProps(node: ZhiJianNode) {
 
 function toBlockNoteContent(node: ZhiJianNode): PartialBlock["content"] {
   const style = getNodeStyle(node.props?.style);
-  const content = normalizeRichText(
-    node.type === "quote" ? (node.description ?? node.content) : node.content,
-  );
+  const content = normalizeRichText(node.content);
   if (node.type === "table") {
     const table = node.props?.table ?? createDefaultTableData();
     return {

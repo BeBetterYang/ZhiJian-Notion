@@ -8,6 +8,7 @@ import { useTree } from "../core/treeStore/useTree";
 import { renderMindMapNode, treeToMindElixir } from "./mindElixirAdapter";
 import { applyMindElixirOperation } from "./mindElixirCommands";
 import { MindMapMediaBlock } from "./MindMapMediaBlock";
+import { MindMapNodeGroupBlock } from "./MindMapNodeGroupBlock";
 
 interface MindMapEditorProps {
   store: TreeStore;
@@ -46,6 +47,14 @@ export function MindMapEditor({
   const [mediaTargets, setMediaTargets] = useState<Array<{ id: string; element: HTMLElement }>>(
     [],
   );
+  const [groupTargets, setGroupTargets] = useState<
+    Array<{
+      primaryId: string;
+      quoteId?: string;
+      imageIds: string[];
+      element: HTMLElement;
+    }>
+  >([]);
 
   const collectMediaTargets = useCallback(() => {
     const elements = Array.from(
@@ -55,6 +64,25 @@ export function MindMapEditor({
       elements.flatMap((element) => {
         const id = element.dataset.zhijianMediaNode;
         return id ? [{ id, element }] : [];
+      }),
+    );
+    const groupElements = Array.from(
+      containerRef.current?.querySelectorAll<HTMLElement>("[data-zhijian-group-primary]") ?? [],
+    );
+    setGroupTargets(
+      groupElements.flatMap((element) => {
+        const primaryId = element.dataset.zhijianGroupPrimary;
+        if (!primaryId) {
+          return [];
+        }
+        return [
+          {
+            primaryId,
+            quoteId: element.dataset.zhijianGroupQuote || undefined,
+            imageIds: (element.dataset.zhijianGroupImages ?? "").split(",").filter(Boolean),
+            element,
+          },
+        ];
       }),
     );
   }, []);
@@ -234,7 +262,11 @@ export function MindMapEditor({
 
   useEffect(() => {
     const mind = mindRef.current;
-    if (!mind || mediaTargets.length === 0) {
+    const observedTargets = [
+      ...mediaTargets.map(({ element }) => element),
+      ...groupTargets.map(({ element }) => element),
+    ];
+    if (!mind || observedTargets.length === 0) {
       return;
     }
     let frame = 0;
@@ -242,12 +274,18 @@ export function MindMapEditor({
       window.cancelAnimationFrame(frame);
       frame = window.requestAnimationFrame(() => mind.linkDiv());
     });
-    mediaTargets.forEach(({ element }) => observer.observe(element));
+    observedTargets.forEach((element) => observer.observe(element));
     return () => {
       observer.disconnect();
       window.cancelAnimationFrame(frame);
     };
-  }, [mediaTargets]);
+  }, [groupTargets, mediaTargets]);
+
+  const handlePortalSelect = (nodeId: string) => {
+    lastSelectedNodeId.current = nodeId;
+    onSelectNodeRef.current(nodeId);
+    onSelectionActiveChangeRef.current(true);
+  };
 
   return (
     <>
@@ -262,16 +300,31 @@ export function MindMapEditor({
                 store={store}
                 selected={selectedNodeId === id}
                 toolbarTarget={toolbarTarget}
-                onSelect={(nodeId) => {
-                  lastSelectedNodeId.current = nodeId;
-                  onSelectNodeRef.current(nodeId);
-                  onSelectionActiveChangeRef.current(true);
-                }}
+                onSelect={handlePortalSelect}
               />,
               element,
               id,
             )
           : null;
+      })}
+      {groupTargets.map(({ primaryId, quoteId, imageIds, element }) => {
+        const primary = tree.nodes[primaryId];
+        if (!primary) {
+          return null;
+        }
+        return createPortal(
+          <MindMapNodeGroupBlock
+            primary={primary}
+            quote={quoteId && quoteId !== primaryId ? tree.nodes[quoteId] : undefined}
+            images={imageIds.flatMap((id) => (tree.nodes[id] ? [tree.nodes[id]] : []))}
+            store={store}
+            selectedNodeId={selectedNodeId}
+            toolbarTarget={toolbarTarget}
+            onSelect={handlePortalSelect}
+          />,
+          element,
+          `group-${primaryId}`,
+        );
       })}
     </>
   );

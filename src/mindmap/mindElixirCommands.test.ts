@@ -20,11 +20,10 @@ describe("applyMindElixirOperation", () => {
     expect(richTextToPlainText(store.getNode("web")!.content)).toBe("Web 编辑器");
   });
 
-  it("updates quote text through the shared description field", () => {
+  it("updates a sibling quote through its own content", () => {
     const tree = createInitialTree();
     tree.nodes.web.type = "quote";
-    tree.nodes.web.content = { text: "" };
-    tree.nodes.web.description = { text: "旧引用" };
+    tree.nodes.web.content = { text: "旧引用" };
     const store = new TreeStore(tree);
 
     applyMindElixirOperation(
@@ -36,8 +35,7 @@ describe("applyMindElixirOperation", () => {
       store,
     );
 
-    expect(store.getNode("web")?.content.text).toBe("");
-    expect(store.getNode("web")?.description?.text).toBe("新引用");
+    expect(store.getNode("web")?.content.text).toBe("新引用");
   });
 
   it("creates child nodes from MindElixir addChild operation", () => {

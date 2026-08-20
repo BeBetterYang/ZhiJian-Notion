@@ -102,7 +102,7 @@ export function OutlineEditor({
         }
       }}
     >
-      <FormattingToolbarController formattingToolbar={ZhiJianFormattingToolbar} />
+      <FormattingToolbarController formattingToolbar={() => <ZhiJianFormattingToolbar />} />
       <ZhiJianSlashMenu />
       {showMindMapToolbar && mindMapToolbarTarget
         ? createPortal(<ZhiJianFormattingToolbar />, mindMapToolbarTarget)

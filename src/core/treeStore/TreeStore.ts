@@ -15,7 +15,14 @@ export interface CreateNodeInput {
   content?: string | RichTextContent;
   description?: string | RichTextContent;
   type?: ZhiJianNodeType;
+  props?: ZhiJianNode["props"];
   id?: string;
+}
+
+export interface UpdateNodeInput {
+  id: string;
+  content?: string | RichTextContent;
+  props?: NonNullable<ZhiJianNode["props"]>;
 }
 
 export class TreeStore {
@@ -104,6 +111,21 @@ export class TreeStore {
     });
   }
 
+  updateNodes(updates: UpdateNodeInput[]) {
+    this.commit((draft) => {
+      updates.forEach((update) => {
+        const node = this.requireDraftNode(draft, update.id);
+        if (update.content !== undefined) {
+          node.content = normalizeRichText(update.content);
+        }
+        if (update.props) {
+          node.props = { ...node.props, ...update.props };
+        }
+        draft.nodes[node.id] = touchNode(node);
+      });
+    });
+  }
+
   updateStyle(id: string, style: NodeVisualStyle) {
     this.commit((draft) => {
       const node = this.requireDraftNode(draft, id);
@@ -126,31 +148,36 @@ export class TreeStore {
   }
 
   createNode(input: CreateNodeInput) {
-    const id = input.id ?? createId();
+    return this.createNodes([input])[0];
+  }
+
+  createNodes(inputs: CreateNodeInput[]) {
+    const entries = inputs.map((input) => ({ input, id: input.id ?? createId() }));
     this.commit((draft) => {
-      const parent = this.requireDraftNode(draft, input.parentId);
-      const type = input.type ?? "text";
-      const index = clampIndex(input.index ?? parent.children.length, parent.children);
-      const newNode: ZhiJianNode = {
-        id,
-        parentId: parent.id,
-        children: [],
-        content: type === "table" ? plainTextContent("") : normalizeRichText(input.content ?? ""),
-        description: input.description ? normalizeRichText(input.description) : undefined,
-        type,
-        props:
-          type === "table"
-            ? { table: createDefaultTable() }
-            : type === "heading"
-              ? { headingLevel: 1 }
-              : undefined,
-        meta: nowMeta(),
-      };
-      draft.nodes[id] = newNode;
-      parent.children.splice(index, 0, id);
-      draft.nodes[parent.id] = touchNode(parent);
+      entries.forEach(({ input, id }) => {
+        const parent = this.requireDraftNode(draft, input.parentId);
+        const type = input.type ?? "text";
+        const index = clampIndex(input.index ?? parent.children.length, parent.children);
+        const newNode: ZhiJianNode = {
+          id,
+          parentId: parent.id,
+          children: [],
+          content: type === "table" ? plainTextContent("") : normalizeRichText(input.content ?? ""),
+          description: input.description ? normalizeRichText(input.description) : undefined,
+          type,
+          props: {
+            ...(type === "table" ? { table: createDefaultTable() } : undefined),
+            ...(type === "heading" ? { headingLevel: 1 as const } : undefined),
+            ...input.props,
+          },
+          meta: nowMeta(),
+        };
+        draft.nodes[id] = newNode;
+        parent.children.splice(index, 0, id);
+        draft.nodes[parent.id] = touchNode(parent);
+      });
     });
-    return id;
+    return entries.map(({ id }) => id);
   }
 
   deleteNode(id: string) {

@@ -271,6 +271,7 @@ textarea {
 .mindmap-blocknote-node-table table {
   width: max-content;
   min-width: 100%;
+  max-width: none;
   font-size: inherit;
 }
 
@@ -348,31 +349,88 @@ textarea {
   text-decoration: line-through;
 }
 
-.mindmap-quote {
+.mindmap-node-group-slot,
+.mindmap-node-group {
   display: block;
-  max-width: 17em;
-  padding: 0.15em 0 0.15em 0.7em;
-  border-left: 3px solid #aeb8bf;
+  width: max-content;
+}
+
+.mindmap-node-group {
+  max-width: none;
+}
+
+.mindmap-text-group-editor,
+.mindmap-text-group-editor .bn-container,
+.mindmap-text-group-editor .bn-editor,
+.mindmap-text-group-editor .bn-block-group,
+.mindmap-text-group-editor .bn-block-outer,
+.mindmap-text-group-editor .bn-block,
+.mindmap-text-group-editor .bn-block-content {
+  width: max-content;
+  min-width: 0;
+  max-width: 28em;
+}
+
+.mindmap-text-group-editor .bn-editor {
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  font-size: inherit;
+}
+
+.mindmap-text-group-editor .bn-block-content {
+  padding: 0.12em 0;
   white-space: normal;
   overflow-wrap: anywhere;
-  line-height: 1.45;
 }
 
-.mindmap-quote-node,
-.mindmap-quote-body {
-  display: block;
+.mindmap-text-group-editor .bn-trailing-block {
+  display: none;
 }
 
-.mindmap-quote-body {
-  min-height: 1.45em;
-  max-width: 17em;
-  white-space: normal;
-  overflow-wrap: anywhere;
+.mindmap-text-group-editor [data-content-type="quote"] blockquote {
+  margin-top: 0.2em;
+  padding-left: 0.7em;
+  border-left-width: 3px;
 }
 
-.outline-panel [data-content-type="quote"] {
-  margin-top: 1.45em;
+.mindmap-image-gallery {
+  display: grid;
+  width: max-content;
+  gap: 0.45em;
+  margin-top: 0.45em;
 }
+
+.mindmap-image-gallery .mindmap-blocknote-node,
+.mindmap-image-gallery .bn-container,
+.mindmap-image-gallery .bn-editor,
+.mindmap-image-gallery .bn-block-group,
+.mindmap-image-gallery .bn-block-outer,
+.mindmap-image-gallery .bn-block,
+.mindmap-image-gallery .bn-block-content,
+.mindmap-image-gallery [data-file-block],
+.mindmap-image-gallery .bn-file-block-content-wrapper,
+.mindmap-image-gallery .bn-visual-media-wrapper {
+  width: 8em !important;
+  height: 8em;
+  min-height: 0;
+  max-width: none;
+  padding: 0;
+}
+
+.mindmap-image-gallery .mindmap-blocknote-node {
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.mindmap-image-gallery img {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none;
+  max-height: none;
+  object-fit: cover;
+}
+
 
 .mindmap-toolbar-host:empty {
   display: none;

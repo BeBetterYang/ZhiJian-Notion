@@ -23,6 +23,21 @@ describe("TreeStore", () => {
     expect(richTextToPlainText(store.getNode("web")!.description!)).toBe("第一阶段");
   });
 
+  it("updates grouped node contents in one history command", () => {
+    const store = new TreeStore(createInitialTree());
+
+    store.updateNodes([
+      { id: "web", content: "正文" },
+      { id: "app", content: "引用" },
+    ]);
+
+    expect(store.getNode("web")?.content.text).toBe("正文");
+    expect(store.getNode("app")?.content.text).toBe("引用");
+    store.undo();
+    expect(store.getNode("web")?.content.text).toBe("Web端");
+    expect(store.getNode("app")?.content.text).toBe("App端");
+  });
+
   it("keeps child order when nodes are moved", () => {
     const store = new TreeStore(createInitialTree());
     const api = store.createNode({ parentId: "root", content: "API" });
@@ -30,6 +45,26 @@ describe("TreeStore", () => {
     store.moveNode(api, "root", 1);
 
     expect(store.getNode("root")?.children).toEqual(["web", api, "app"]);
+  });
+
+  it("creates a body and its images as one ordered history command", () => {
+    const store = new TreeStore(createInitialTree());
+
+    store.createNodes([
+      { id: "empty-body", parentId: "root", index: 2, content: "" },
+      { id: "image-1", parentId: "root", index: 3, type: "image" },
+      { id: "image-2", parentId: "root", index: 4, type: "image" },
+    ]);
+
+    expect(store.getNode("root")?.children).toEqual([
+      "web",
+      "app",
+      "empty-body",
+      "image-1",
+      "image-2",
+    ]);
+    store.undo();
+    expect(store.getNode("root")?.children).toEqual(["web", "app"]);
   });
 
   it("indents and outdents nodes by changing parent relationships", () => {

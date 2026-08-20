@@ -148,8 +148,7 @@ describe("blockNoteAdapter styles", () => {
 
     const tree = blockNoteToTree([quoteBlock])!;
     expect(tree.nodes.quote.type).toBe("quote");
-    expect(tree.nodes.quote.content).toEqual({ text: "" });
-    expect(tree.nodes.quote.description?.text).toBe("引用当前节点");
+    expect(tree.nodes.quote.content.text).toBe("引用当前节点");
 
     const [projected] = treeToBlockNote(tree);
     expect(projected.type).toBe("quote");

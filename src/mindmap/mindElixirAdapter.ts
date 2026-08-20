@@ -14,19 +14,27 @@ import {
 } from "./MindMapNodeRenderer";
 
 export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
-  const visit = (id: string): NodeObj<MindMapNodeMetadata> => {
-    const node = tree.nodes[id];
+  const visit = (group: MindMapNodeGroup): NodeObj<MindMapNodeMetadata> => {
+    const node = tree.nodes[group.primaryId];
     const style = getNodeStyle(node.props?.style);
     const marks = firstMarks(node.content);
-    const displayedContent =
-      node.type === "quote" ? (node.description ?? node.content) : node.content;
     const plainText =
       node.type === "table"
         ? "表格"
         : node.type === "image"
           ? node.props?.image?.name ?? "图片"
-        : richTextToPlainText(displayedContent) || " ";
-    const isMedia = node.type === "table" || node.type === "image";
+          : richTextToPlainText(node.content) || " ";
+    const isTable = node.type === "table";
+    const usesGroupEditor =
+      node.type === "image" || Boolean(group.quoteId) || group.imageIds.length > 0;
+    const attachmentIds = [
+      ...(group.quoteId && group.quoteId !== node.id ? [group.quoteId] : []),
+      ...group.imageIds.filter((id) => id !== node.id),
+    ];
+    const childGroups = groupSiblingNodes(
+      tree,
+      [node.id, ...attachmentIds].flatMap((id) => tree.nodes[id]?.children ?? []),
+    );
     return {
       id: node.id,
       topic: plainText,
@@ -40,29 +48,65 @@ export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
         fontStyle: marks?.italic ? "italic" : style.fontStyle,
         textDecoration: marksToTextDecoration(marks) ?? style.textDecorationLine ?? style.textDecoration,
       } as NodeObj["style"] & { fontStyle?: string },
-      dangerouslySetInnerHTML: isMedia ? mediaSlotHtml(node) : undefined,
+      dangerouslySetInnerHTML: isTable
+        ? mediaSlotHtml(node)
+        : usesGroupEditor
+          ? groupSlotHtml(group)
+          : undefined,
       metadata: {
         type: node.type,
         plainText,
-        richTextHtml: isMedia ? undefined : richTextToHtml(displayedContent),
-        quoteBodyHtml:
-          node.type === "quote" && node.description && richTextToPlainText(node.content)
-            ? richTextToHtml(node.content)
-            : undefined,
+        richTextHtml: isTable || usesGroupEditor ? undefined : richTextToHtml(node.content),
         checked: node.type === "todo" ? node.props?.checked ?? false : undefined,
       },
-      children: node.children.map(visit),
+      children: childGroups.map(visit),
     };
   };
 
+  const root = tree.nodes[tree.rootId];
   return {
-    nodeData: visit(tree.rootId),
+    nodeData: visit({
+      primaryId: tree.rootId,
+      quoteId: root.type === "quote" ? root.id : undefined,
+      imageIds: root.type === "image" ? [root.id] : [],
+    }),
     direction: MindElixir.SIDE,
   };
 }
 
+interface MindMapNodeGroup {
+  primaryId: string;
+  quoteId?: string;
+  imageIds: string[];
+}
+
+function groupSiblingNodes(tree: ZhiJianTree, ids: string[]) {
+  return ids.reduce<MindMapNodeGroup[]>((groups, id) => {
+    const node = tree.nodes[id];
+    const previous = groups.at(-1);
+    if (node.type === "quote" && previous && tree.nodes[previous.primaryId].type !== "table") {
+      previous.quoteId ??= id;
+      return groups;
+    }
+    if (node.type === "image" && previous && tree.nodes[previous.primaryId].type !== "table") {
+      previous.imageIds.push(id);
+      return groups;
+    }
+    groups.push({
+      primaryId: id,
+      quoteId: node.type === "quote" ? id : undefined,
+      imageIds: node.type === "image" ? [id] : [],
+    });
+    return groups;
+  }, []);
+}
+
 function mediaSlotHtml(node: ZhiJianNode) {
   return `<div class="mindmap-blocknote-slot mindmap-blocknote-slot-${node.type}" data-zhijian-media-node="${escapeHtml(node.id)}"></div>`;
+}
+
+function groupSlotHtml(group: MindMapNodeGroup) {
+  return `<div class="mindmap-node-group-slot" data-zhijian-group-primary="${escapeHtml(group.primaryId)}" data-zhijian-group-quote="${escapeHtml(group.quoteId ?? "")}" data-zhijian-group-images="${escapeHtml(group.imageIds.join(","))}"></div>`;
 }
 
 export { renderMindMapNode };
