@@ -38,7 +38,7 @@ export function MindMapEditor({
   const suppressOperation = useRef(false);
   const lastSelectedNodeId = useRef<string | null>(null);
   const initialTree = useRef(tree);
-  const mindProjectionSignature = useRef(createMindProjectionSignature(tree));
+  const mindStructureSignature = useRef(createMindStructureSignature(tree));
   const storeRef = useRef(store);
   const onSelectNodeRef = useRef(onSelectNode);
   const onSelectionActiveChangeRef = useRef(onSelectionActiveChange);
@@ -78,7 +78,7 @@ export function MindMapEditor({
       toolBar: true,
       keypress: true,
       allowUndo: false,
-      newTopicName: "新节点",
+      newTopicName: " ",
       markdown: (topic, obj) =>
         renderMindMapNode(topic, obj as Parameters<typeof renderMindMapNode>[1]),
     });
@@ -94,6 +94,22 @@ export function MindMapEditor({
         onSelectionActiveChangeRef.current(true);
       }
       applyMindElixirOperation(operation, storeRef.current);
+      mindStructureSignature.current = createMindStructureSignature(
+        storeRef.current.getSnapshot(),
+      );
+      if (
+        operation.name === "addChild" ||
+        operation.name === "insertSibling" ||
+        operation.name === "insertBefore"
+      ) {
+        queueMicrotask(() => {
+          try {
+            mind.beginEdit(mind.findEle(operation.obj.id));
+          } catch {
+            // The node may have been removed before the edit lifecycle starts.
+          }
+        });
+      }
     });
     mind.bus.addListener("selectNodes", (nodes) => {
       if (nodes[0]) {
@@ -182,25 +198,31 @@ export function MindMapEditor({
     if (!mind) {
       return;
     }
-    const nextSignature = createMindProjectionSignature(tree);
-    if (mindProjectionSignature.current === nextSignature) {
+    const nextSignature = createMindStructureSignature(tree);
+    const nextData = treeToMindElixir(tree);
+    if (mindStructureSignature.current === nextSignature) {
+      updateMindMapNodesInPlace(mind, nextData.nodeData);
       return;
     }
-    mindProjectionSignature.current = nextSignature;
+    mindStructureSignature.current = nextSignature;
     suppressOperation.current = true;
-    mind.refresh(treeToMindElixir(tree));
+    mind.refresh(nextData);
     mind.clearHistory?.();
-    const nodeIdToRestore = lastSelectedNodeId.current;
+    const nodeIdToRestore = selectedNodeId ?? lastSelectedNodeId.current;
     const refreshTimer = window.setTimeout(() => {
       if (mindRef.current !== mind || !mind.nodes?.isConnected) {
         return;
       }
       suppressOperation.current = false;
-      mind.scaleFit();
       collectMediaTargets();
       if (nodeIdToRestore) {
         try {
-          mind.selectNode(mind.findEle(nodeIdToRestore));
+          const element = mind.findEle(nodeIdToRestore);
+          mind.selectNode(element);
+          const node = tree.nodes[nodeIdToRestore];
+          if (node?.type === "text" && node.content.text.length === 0) {
+            mind.beginEdit(element);
+          }
         } catch {
           lastSelectedNodeId.current = null;
         }
@@ -208,7 +230,24 @@ export function MindMapEditor({
     }, 0);
 
     return () => window.clearTimeout(refreshTimer);
-  }, [collectMediaTargets, tree]);
+  }, [collectMediaTargets, selectedNodeId, tree]);
+
+  useEffect(() => {
+    const mind = mindRef.current;
+    if (!mind || mediaTargets.length === 0) {
+      return;
+    }
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => mind.linkDiv());
+    });
+    mediaTargets.forEach(({ element }) => observer.observe(element));
+    return () => {
+      observer.disconnect();
+      window.cancelAnimationFrame(frame);
+    };
+  }, [mediaTargets]);
 
   return (
     <>
@@ -238,20 +277,44 @@ export function MindMapEditor({
   );
 }
 
-function createMindProjectionSignature(tree: ReturnType<TreeStore["getSnapshot"]>) {
+function createMindStructureSignature(tree: ReturnType<TreeStore["getSnapshot"]>) {
   return JSON.stringify(
     Object.values(tree.nodes).map((node) => ({
       id: node.id,
       parentId: node.parentId,
       children: node.children,
       type: node.type,
-      content: node.type === "table" || node.type === "image" ? undefined : node.content,
       collapsed: node.props?.collapsed,
-      checked: node.type === "todo" ? node.props?.checked : undefined,
-      tableShape:
-        node.type === "table" ? node.props?.table?.rows.map((row) => row.length) : undefined,
     })),
   );
+}
+
+function updateMindMapNodesInPlace(mind: MindElixir, root: import("mind-elixir").NodeObj) {
+  const visit = (nextNode: typeof root) => {
+    try {
+      const topicElement = mind.findEle(nextNode.id);
+      const currentNode = topicElement.nodeObj;
+      currentNode.topic = nextNode.topic;
+      currentNode.note = nextNode.note;
+      currentNode.style = nextNode.style;
+      currentNode.metadata = nextNode.metadata;
+      currentNode.dangerouslySetInnerHTML = nextNode.dangerouslySetInnerHTML;
+      Object.entries(nextNode.style ?? {}).forEach(([property, value]) => {
+        (topicElement.style as unknown as Record<string, string>)[property] = String(value ?? "");
+      });
+      if (!nextNode.dangerouslySetInnerHTML) {
+        const textElement = topicElement.querySelector<HTMLElement>(".text");
+        if (textElement) {
+          textElement.innerHTML = renderMindMapNode(nextNode.topic, nextNode);
+        }
+      }
+    } catch {
+      // Collapsed descendants do not have mounted topic elements.
+    }
+    nextNode.children?.forEach(visit);
+  };
+  visit(root);
+  mind.linkDiv();
 }
 
 function textOffset(root: HTMLElement, node: Node, offset: number) {

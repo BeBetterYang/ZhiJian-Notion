@@ -18,12 +18,14 @@ export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
     const node = tree.nodes[id];
     const style = getNodeStyle(node.props?.style);
     const marks = firstMarks(node.content);
+    const displayedContent =
+      node.type === "quote" ? (node.description ?? node.content) : node.content;
     const plainText =
       node.type === "table"
         ? "表格"
         : node.type === "image"
           ? node.props?.image?.name ?? "图片"
-        : richTextToPlainText(node.content) || node.type;
+        : richTextToPlainText(displayedContent) || " ";
     const isMedia = node.type === "table" || node.type === "image";
     return {
       id: node.id,
@@ -42,7 +44,11 @@ export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
       metadata: {
         type: node.type,
         plainText,
-        richTextHtml: isMedia ? undefined : richTextToHtml(node.content),
+        richTextHtml: isMedia ? undefined : richTextToHtml(displayedContent),
+        quoteBodyHtml:
+          node.type === "quote" && node.description && richTextToPlainText(node.content)
+            ? richTextToHtml(node.content)
+            : undefined,
         checked: node.type === "todo" ? node.props?.checked ?? false : undefined,
       },
       children: node.children.map(visit),

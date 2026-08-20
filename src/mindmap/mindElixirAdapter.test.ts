@@ -64,7 +64,8 @@ describe("mindElixirAdapter", () => {
     tree.nodes.web.type = "todo";
     tree.nodes.web.props = { checked: true };
     tree.nodes.app.type = "quote";
-    tree.nodes.app.content = { text: "先验证，再发布" };
+    tree.nodes.app.content = { text: "" };
+    tree.nodes.app.description = { text: "先验证，再发布" };
 
     const data = treeToMindElixir(tree);
     const todoNode = data.nodeData.children?.[0] as NodeObj;
@@ -79,5 +80,16 @@ describe("mindElixirAdapter", () => {
     expect(renderMindMapNode(quoteNode.topic, quoteNode)).toContain(
       'class="mindmap-quote"',
     );
+    expect(renderMindMapNode(quoteNode.topic, quoteNode)).toContain(
+      'class="mindmap-quote-body">&nbsp;',
+    );
+  });
+
+  it("uses a blank topic for an empty text node", () => {
+    const tree = createInitialTree();
+    tree.nodes.web.content = { text: "" };
+
+    const data = treeToMindElixir(tree);
+    expect(data.nodeData.children?.[0].topic).toBe(" ");
   });
 });

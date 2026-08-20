@@ -196,30 +196,30 @@ textarea {
 }
 
 .mindmap-blocknote-slot {
-  display: block;
-  overflow: hidden;
+  display: inline-block;
+  overflow: visible;
   font-size: inherit;
+  vertical-align: middle;
 }
 
 .mindmap-blocknote-slot-table {
-  width: 22em;
-  height: 11em;
+  width: max-content;
+  height: auto;
 }
 
 .mindmap-blocknote-slot-image {
-  width: 16em;
-  height: 11em;
+  width: max-content;
+  height: auto;
 }
 
 .mindmap-blocknote-node {
-  width: 100%;
-  height: 100%;
-  overflow: auto;
+  width: max-content;
+  height: auto;
+  overflow: visible;
   pointer-events: auto;
   user-select: text;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  background: #ffffff;
+  border: 0;
+  background: transparent;
 }
 
 .mindmap-blocknote-node * {
@@ -227,19 +227,45 @@ textarea {
 }
 
 .mindmap-blocknote-node.is-selected {
-  border-color: #2563eb;
+  border-color: transparent;
 }
 
 .mindmap-blocknote-node .bn-container,
 .mindmap-blocknote-node .bn-editor {
+  width: max-content;
+  height: auto;
   min-height: 0;
   padding: 0;
   font-size: inherit;
+  background: transparent;
 }
 
 .mindmap-blocknote-node .bn-block-outer,
-.mindmap-blocknote-node .bn-block {
+.mindmap-blocknote-node .bn-block,
+.mindmap-blocknote-node .bn-block-group,
+.mindmap-blocknote-node .bn-block-content {
+  width: max-content;
+  min-height: 0;
   margin: 0;
+}
+
+.mindmap-blocknote-node .bn-block-content {
+  padding: 0;
+}
+
+.mindmap-blocknote-node-table .tableWrapper {
+  width: max-content !important;
+  overflow: visible !important;
+  padding: 0 !important;
+}
+
+.mindmap-blocknote-node .bn-trailing-block {
+  display: none;
+}
+
+.mindmap-blocknote-node-image .ProseMirror-selectednode > .bn-block-content > *::after,
+.mindmap-blocknote-node-image .bn-block-content.ProseMirror-selectednode > *::after {
+  display: none;
 }
 
 .mindmap-blocknote-node-table table {
@@ -256,12 +282,20 @@ textarea {
 }
 
 .mindmap-blocknote-node-image .bn-visual-media-wrapper {
-  max-width: 100%;
+  width: fit-content !important;
+  max-width: 24em;
+}
+
+.mindmap-blocknote-node-image [data-file-block],
+.mindmap-blocknote-node-image .bn-file-block-content-wrapper {
+  width: fit-content !important;
 }
 
 .mindmap-blocknote-node-image img {
-  max-width: 100%;
-  max-height: 10.5em;
+  display: block;
+  width: auto;
+  max-width: 24em;
+  max-height: 16em;
   object-fit: contain;
 }
 
@@ -275,25 +309,33 @@ textarea {
 .mindmap-todo {
   display: inline-flex;
   max-width: 17em;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.45em;
   white-space: normal;
 }
 
 .mindmap-todo-checkbox {
-  width: 1.05em;
-  height: 1.05em;
+  width: 0.8em;
+  height: 0.8em;
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  margin-top: 0.12em;
-  border: 1px solid currentColor;
-  border-radius: 3px;
-  font-size: 0.9em;
+  margin: 0;
+  border: 1px solid #9ca3af;
+  border-radius: 2px;
+  background: #ffffff;
+  color: #ffffff;
+  font-size: 1em;
+  font-weight: 700;
   line-height: 1;
   pointer-events: auto;
   cursor: pointer;
+}
+
+.mindmap-todo.is-checked .mindmap-todo-checkbox {
+  border-color: #2383e2;
+  background: #2383e2;
 }
 
 .mindmap-todo-content {
@@ -314,6 +356,22 @@ textarea {
   white-space: normal;
   overflow-wrap: anywhere;
   line-height: 1.45;
+}
+
+.mindmap-quote-node,
+.mindmap-quote-body {
+  display: block;
+}
+
+.mindmap-quote-body {
+  min-height: 1.45em;
+  max-width: 17em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.outline-panel [data-content-type="quote"] {
+  margin-top: 1.45em;
 }
 
 .mindmap-toolbar-host:empty {

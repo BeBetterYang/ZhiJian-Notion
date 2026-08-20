@@ -2,6 +2,7 @@ import type { Block, PartialBlock } from "@blocknote/core";
 import {
   getNodeStyle,
   normalizeRichText,
+  plainTextContent,
   richTextToPlainText,
   type NodeVisualStyle,
   type RichTextContent,
@@ -37,17 +38,20 @@ export function blockNoteToTree(blocks: Block[], previousTree?: ZhiJianTree): Zh
   }
   const nodes: ZhiJianTree["nodes"] = {};
 
-  const visit = (block: Block, parentId: string | null) => {
+  const visit = (block: Block, parentId: string | null, extraChildren: Block[] = []) => {
     const type = fromBlockNoteType(block.type);
     const previous = previousTree?.nodes[block.id];
-    const children = block.children.map((child) => child.id);
+    const childBlocks = [...block.children, ...extraChildren];
+    const children = childBlocks.map((child) => child.id);
     const blockProps = block.props as Record<string, unknown>;
+    const blockContent = contentFromBlock(type, block);
+    const hasStoredQuoteBody = type === "quote" && previous?.type === "quote" && previous.description;
     nodes[block.id] = {
       id: block.id,
       parentId,
       children,
-      content: contentFromBlock(type, block),
-      description: previous?.description,
+      content: type === "quote" ? (hasStoredQuoteBody ? previous.content : plainTextContent("")) : blockContent,
+      description: type === "quote" ? blockContent : previous?.description,
       type,
       props: {
         ...previous?.props,
@@ -63,10 +67,10 @@ export function blockNoteToTree(blocks: Block[], previousTree?: ZhiJianTree): Zh
         updatedAt: Date.now(),
       },
     };
-    block.children.forEach((child) => visit(child, block.id));
+    childBlocks.forEach((child) => visit(child, block.id));
   };
 
-  visit(first, null);
+  visit(first, null, blocks.slice(1));
   return { rootId: first.id, nodes };
 }
 
@@ -135,7 +139,9 @@ function toBlockNoteProps(node: ZhiJianNode) {
 
 function toBlockNoteContent(node: ZhiJianNode): PartialBlock["content"] {
   const style = getNodeStyle(node.props?.style);
-  const content = normalizeRichText(node.content);
+  const content = normalizeRichText(
+    node.type === "quote" ? (node.description ?? node.content) : node.content,
+  );
   if (node.type === "table") {
     const table = node.props?.table ?? createDefaultTableData();
     return {

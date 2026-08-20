@@ -148,10 +148,38 @@ describe("blockNoteAdapter styles", () => {
 
     const tree = blockNoteToTree([quoteBlock])!;
     expect(tree.nodes.quote.type).toBe("quote");
+    expect(tree.nodes.quote.content).toEqual({ text: "" });
+    expect(tree.nodes.quote.description?.text).toBe("引用当前节点");
 
     const [projected] = treeToBlockNote(tree);
     expect(projected.type).toBe("quote");
     expect(projected.content).toEqual("引用当前节点");
+  });
+
+  it("normalizes additional top-level blocks into root children", () => {
+    const tree = blockNoteToTree([
+      block("root", "产品规划", {}),
+      block("text", "新增正文", {}),
+      {
+        id: "table",
+        type: "table",
+        props: {},
+        content: {
+          type: "tableContent",
+          rows: [
+            {
+              cells: [[{ type: "text", text: "内容", styles: {} }]],
+            },
+          ],
+        },
+        children: [],
+      } as unknown as Block,
+    ])!;
+
+    expect(tree.nodes.root.children).toEqual(["text", "table"]);
+    expect(tree.nodes.text.parentId).toBe("root");
+    expect(tree.nodes.table.parentId).toBe("root");
+    expect(tree.nodes.table.props?.table?.rows[0][0].content.text).toBe("内容");
   });
 });
 

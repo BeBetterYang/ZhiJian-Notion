@@ -20,6 +20,26 @@ describe("applyMindElixirOperation", () => {
     expect(richTextToPlainText(store.getNode("web")!.content)).toBe("Web 编辑器");
   });
 
+  it("updates quote text through the shared description field", () => {
+    const tree = createInitialTree();
+    tree.nodes.web.type = "quote";
+    tree.nodes.web.content = { text: "" };
+    tree.nodes.web.description = { text: "旧引用" };
+    const store = new TreeStore(tree);
+
+    applyMindElixirOperation(
+      {
+        name: "finishEdit",
+        obj: node("web", "新引用"),
+        origin: "旧引用",
+      },
+      store,
+    );
+
+    expect(store.getNode("web")?.content.text).toBe("");
+    expect(store.getNode("web")?.description?.text).toBe("新引用");
+  });
+
   it("creates child nodes from MindElixir addChild operation", () => {
     const store = new TreeStore(createInitialTree());
     const parent = node("web", "Web端");

@@ -25,7 +25,7 @@ export function MindMapMediaBlock({
   onSelect,
 }: MindMapMediaBlockProps) {
   const applyingExternalChange = useRef(false);
-  const skipNextProjection = useRef(false);
+  const externalProjectionVersion = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const editor = useCreateBlockNote(
     {
@@ -71,15 +71,19 @@ export function MindMapMediaBlock({
   }, [node.id, onSelect]);
 
   useEffect(() => {
-    if (skipNextProjection.current) {
-      skipNextProjection.current = false;
+    const projected = treeToBlockNote(singleNodeTree(node));
+    const current = blockNoteToTree(editor.document, singleNodeTree(node));
+    if (current && mediaProjectionSignature(current) === JSON.stringify(projected)) {
       return;
     }
     applyingExternalChange.current = true;
-    editor.replaceBlocks(editor.document, treeToBlockNote(singleNodeTree(node)));
-    queueMicrotask(() => {
-      applyingExternalChange.current = false;
-    });
+    const projectionVersion = ++externalProjectionVersion.current;
+    editor.replaceBlocks(editor.document, projected);
+    window.setTimeout(() => {
+      if (externalProjectionVersion.current === projectionVersion) {
+        applyingExternalChange.current = false;
+      }
+    }, 0);
   }, [editor, node]);
 
   return (
@@ -102,11 +106,14 @@ export function MindMapMediaBlock({
           if (!updated) {
             return;
           }
-          skipNextProjection.current = true;
-          store.updateProps(node.id, {
-            table: updated.props?.table,
-            image: updated.props?.image,
-          });
+          const nextMedia = node.type === "table" ? updated.props?.table : updated.props?.image;
+          const currentMedia = node.type === "table" ? node.props?.table : node.props?.image;
+          if (JSON.stringify(nextMedia) !== JSON.stringify(currentMedia)) {
+            store.updateProps(
+              node.id,
+              node.type === "table" ? { table: updated.props?.table } : { image: updated.props?.image },
+            );
+          }
         }}
       >
         {selected && toolbarTarget
@@ -124,4 +131,8 @@ function singleNodeTree(node: ZhiJianNode): ZhiJianTree {
       [node.id]: { ...node, children: [] },
     },
   };
+}
+
+function mediaProjectionSignature(tree: ZhiJianTree) {
+  return JSON.stringify(treeToBlockNote(tree));
 }

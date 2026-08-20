@@ -34,7 +34,7 @@ export function OutlineEditor({
 }: OutlineEditorProps) {
   const tree = useTree(store);
   const applyingExternalChange = useRef(false);
-  const skipNextTreeProjection = useRef(false);
+  const externalProjectionVersion = useRef(0);
   const editor = useCreateBlockNote(
     {
       initialContent: treeToBlockNote(tree),
@@ -60,15 +60,18 @@ export function OutlineEditor({
   }, [editor, onSelectNode]);
 
   useEffect(() => {
-    if (skipNextTreeProjection.current) {
-      skipNextTreeProjection.current = false;
+    const currentTree = blockNoteToTree(editor.document, tree);
+    if (currentTree && blockProjectionSignature(currentTree) === blockProjectionSignature(tree)) {
       return;
     }
     applyingExternalChange.current = true;
+    const projectionVersion = ++externalProjectionVersion.current;
     editor.replaceBlocks(editor.document, treeToBlockNote(tree));
-    queueMicrotask(() => {
-      applyingExternalChange.current = false;
-    });
+    window.setTimeout(() => {
+      if (externalProjectionVersion.current === projectionVersion) {
+        applyingExternalChange.current = false;
+      }
+    }, 0);
   }, [editor, tree]);
 
   useEffect(() => {
@@ -89,9 +92,12 @@ export function OutlineEditor({
         if (applyingExternalChange.current) {
           return;
         }
-        const nextTree = blockNoteToTree(editor.document, tree);
-        if (nextTree) {
-          skipNextTreeProjection.current = true;
+        const currentTree = store.getSnapshot();
+        const nextTree = blockNoteToTree(editor.document, currentTree);
+        if (
+          nextTree &&
+          blockProjectionSignature(nextTree) !== blockProjectionSignature(currentTree)
+        ) {
           store.replaceTreeFromView(nextTree);
         }
       }}
@@ -124,6 +130,10 @@ export function OutlineEditor({
       {editorView}
     </section>
   );
+}
+
+function blockProjectionSignature(tree: ReturnType<TreeStore["getSnapshot"]>) {
+  return JSON.stringify(treeToBlockNote(tree));
 }
 
 function selectBlockContent(

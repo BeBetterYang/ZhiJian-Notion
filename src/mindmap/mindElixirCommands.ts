@@ -39,10 +39,17 @@ function updateNodeText(obj: NodeObj, store: TreeStore) {
   if (!current) {
     return;
   }
-  store.updateContent(obj.id, {
+  const nextContent = {
     text: obj.topic,
-    marks: firstMarks(current.content),
-  });
+    marks: firstMarks(
+      current.type === "quote" ? (current.description ?? current.content) : current.content,
+    ),
+  };
+  if (current.type === "quote") {
+    store.updateDescription(obj.id, nextContent);
+  } else {
+    store.updateContent(obj.id, nextContent);
+  }
 }
 
 function createNodeFromMind(obj: NodeObj, store: TreeStore) {
@@ -58,7 +65,7 @@ function createNodeFromMind(obj: NodeObj, store: TreeStore) {
     id: obj.id,
     parentId,
     index: getIndexInParent(obj),
-    content: plainTextContent(obj.topic),
+    content: plainTextContent(obj.topic.trim()),
     type: "text",
   });
 }
