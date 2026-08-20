@@ -46,6 +46,7 @@ export function MindMapEditor({
   const mindRef = useRef<MindElixir | null>(null);
   const suppressOperation = useRef(false);
   const lastSelectedNodeId = useRef<string | null>(null);
+  const pendingNativeEndFocus = useRef<string | null>(null);
   const initialTree = useRef(tree);
   const mindStructureSignature = useRef(createMindMapStructureSignature(tree));
   const storeRef = useRef(store);
@@ -296,6 +297,38 @@ export function MindMapEditor({
 
   useEffect(() => {
     const mind = mindRef.current;
+    const nodeId = pendingNativeEndFocus.current;
+    if (!mind || !nodeId) {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        const element = mind.findEle(nodeId);
+        mind.selectNode(element);
+        mind.beginEdit(element);
+        window.queueMicrotask(() => {
+          const input = containerRef.current?.querySelector<HTMLElement>("#input-box");
+          if (!input) {
+            return;
+          }
+          const range = document.createRange();
+          range.selectNodeContents(input);
+          range.collapse(false);
+          const selection = window.getSelection();
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+          input.focus({ preventScroll: true });
+          pendingNativeEndFocus.current = null;
+        });
+      } catch {
+        // The projected node may still be remounting after its quote was removed.
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [tree]);
+
+  useEffect(() => {
+    const mind = mindRef.current;
     const observedTargets = [
       ...mediaTargets.map(({ element }) => element),
       ...groupTargets.map(({ element }) => element),
@@ -320,6 +353,18 @@ export function MindMapEditor({
     onSelectNodeRef.current(nodeId);
     onSelectionActiveChangeRef.current(true);
   };
+
+  const handleDeleteEmptyQuote = useCallback(
+    (primaryId: string, quoteId: string, groupRemains: boolean) => {
+      if (!groupRemains) {
+        pendingNativeEndFocus.current = primaryId;
+      }
+      lastSelectedNodeId.current = primaryId;
+      onSelectNodeRef.current(primaryId);
+      storeRef.current.deleteNode(quoteId);
+    },
+    [],
+  );
 
   return (
     <>
@@ -357,6 +402,7 @@ export function MindMapEditor({
             onSelect={handlePortalSelect}
             focusRequest={focusRequest}
             onFocusRequestHandled={onFocusRequestHandled}
+            onDeleteEmptyQuote={handleDeleteEmptyQuote}
           />,
           element,
           `group-${primaryId}`,

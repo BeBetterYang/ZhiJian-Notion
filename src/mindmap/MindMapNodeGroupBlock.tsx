@@ -19,6 +19,7 @@ interface MindMapNodeGroupBlockProps {
   onSelect: (nodeId: string) => void;
   focusRequest: { nodeId: string; requestId: number } | null;
   onFocusRequestHandled: (requestId: number) => void;
+  onDeleteEmptyQuote: (primaryId: string, quoteId: string, groupRemains: boolean) => void;
 }
 
 export function MindMapNodeGroupBlock({
@@ -31,6 +32,7 @@ export function MindMapNodeGroupBlock({
   onSelect,
   focusRequest,
   onFocusRequestHandled,
+  onDeleteEmptyQuote,
 }: MindMapNodeGroupBlockProps) {
   const textNodes = useMemo(
     () => [primary.type === "image" ? null : primary, quote].filter(Boolean) as ZhiJianNode[],
@@ -48,6 +50,8 @@ export function MindMapNodeGroupBlock({
           onSelect={onSelect}
           focusRequest={focusRequest}
           onFocusRequestHandled={onFocusRequestHandled}
+          groupRemainsAfterQuoteDelete={images.length > 0}
+          onDeleteEmptyQuote={onDeleteEmptyQuote}
         />
       ) : null}
       {images.length > 0 ? (
@@ -80,6 +84,8 @@ interface MindMapTextGroupEditorProps {
   onSelect: (nodeId: string) => void;
   focusRequest: { nodeId: string; requestId: number } | null;
   onFocusRequestHandled: (requestId: number) => void;
+  groupRemainsAfterQuoteDelete: boolean;
+  onDeleteEmptyQuote: (primaryId: string, quoteId: string, groupRemains: boolean) => void;
 }
 
 function MindMapTextGroupEditor({
@@ -90,9 +96,12 @@ function MindMapTextGroupEditor({
   onSelect,
   focusRequest,
   onFocusRequestHandled,
+  groupRemainsAfterQuoteDelete,
+  onDeleteEmptyQuote,
 }: MindMapTextGroupEditorProps) {
   const applyingExternalChange = useRef(false);
   const projectionVersion = useRef(0);
+  const focusPrimaryAfterQuoteDelete = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const nodeIds = useMemo(() => nodes.map((node) => node.id), [nodes]);
   const projectedBlocks = useMemo(
@@ -110,8 +119,27 @@ function MindMapTextGroupEditor({
   );
 
   useEffect(() => {
-    editor.isEditable = true;
-  }, [editor]);
+    editor.isEditable = selected;
+  }, [editor, selected]);
+
+  useEffect(() => {
+    if (!focusPrimaryAfterQuoteDelete.current || nodes.some((node) => node.type === "quote")) {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        editor.isEditable = true;
+        editor.setTextCursorPosition(nodes[0].id, "end");
+        containerRef.current
+          ?.querySelector<HTMLElement>(".ProseMirror")
+          ?.focus({ preventScroll: true });
+        focusPrimaryAfterQuoteDelete.current = false;
+      } catch {
+        // The primary block may still be remounting after the quote was removed.
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [editor, nodes]);
 
   useEffect(() => {
     if (!focusRequest || !nodeIds.includes(focusRequest.nodeId)) {
@@ -159,15 +187,17 @@ function MindMapTextGroupEditor({
     if (!container) {
       return;
     }
-    const selectEditorBlock = (event: Event) => {
+    const nodeIdAtEvent = (event: Event) => {
       const blockId = (event.target as Element | null)
         ?.closest<HTMLElement>("[data-id]")
         ?.dataset.id;
-      const nodeId = blockId && nodeIds.includes(blockId) ? blockId : nodes[0].id;
-      window.queueMicrotask(() => onSelect(nodeId));
+      return blockId && nodeIds.includes(blockId) ? blockId : nodes[0].id;
+    };
+    const selectEditorBlock = (event: Event) => {
+      window.queueMicrotask(() => onSelect(nodeIdAtEvent(event)));
       event.stopPropagation();
     };
-    const placeTextCursor = (event: PointerEvent) => {
+    const placeTextCursor = (event: PointerEvent, forceEdit = false) => {
       if (event.button !== 0) {
         return;
       }
@@ -175,15 +205,32 @@ function MindMapTextGroupEditor({
       if (!target?.closest(".ProseMirror")) {
         return;
       }
+      const nodeId = nodeIdAtEvent(event);
+      if (!selected && !forceEdit) {
+        event.preventDefault();
+        onSelect(nodeId);
+        event.stopPropagation();
+        return;
+      }
+      if (forceEdit) {
+        editor.isEditable = true;
+        onSelect(nodeId);
+      }
       const position = editor._tiptapEditor.view.posAtCoords({
         left: event.clientX,
         top: event.clientY,
       });
       if (position) {
         editor._tiptapEditor.commands.setTextSelection(position.pos);
-        editor.focus();
+      } else {
+        editor.setTextCursorPosition(nodeId, "end");
       }
+      editor.focus();
       event.stopPropagation();
+    };
+    const editOnDoubleClick = (event: MouseEvent) => {
+      placeTextCursor(event as PointerEvent, true);
+      event.preventDefault();
     };
     const stopMindMapPointerHandling = (event: Event) => event.stopPropagation();
     const preserveGroupBlocks = (event: KeyboardEvent) => {
@@ -210,6 +257,20 @@ function MindMapTextGroupEditor({
       }
       const atStart = selection.$from.parentOffset === 0;
       const atEnd = selection.$from.parentOffset === selection.$from.parent.content.size;
+      const currentNode = nodes.find((node) => node.id === block.id);
+      if (
+        event.key === "Backspace" &&
+        atStart &&
+        atEnd &&
+        currentNode?.type === "quote"
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        focusPrimaryAfterQuoteDelete.current = groupRemainsAfterQuoteDelete;
+        onSelect(nodes[0].id);
+        onDeleteEmptyQuote(nodes[0].id, currentNode.id, groupRemainsAfterQuoteDelete);
+        return;
+      }
       if ((event.key === "Backspace" && atStart) || (event.key === "Delete" && atEnd)) {
         event.preventDefault();
         event.stopPropagation();
@@ -218,18 +279,26 @@ function MindMapTextGroupEditor({
     container.addEventListener("pointerdown", placeTextCursor);
     container.addEventListener("mousedown", stopMindMapPointerHandling);
     container.addEventListener("click", selectEditorBlock);
-    container.addEventListener("dblclick", stopMindMapPointerHandling);
+    container.addEventListener("dblclick", editOnDoubleClick);
     container.addEventListener("keydown", preserveGroupBlocks, true);
     container.addEventListener("keydown", stopMindMapPointerHandling);
     return () => {
       container.removeEventListener("pointerdown", placeTextCursor);
       container.removeEventListener("mousedown", stopMindMapPointerHandling);
       container.removeEventListener("click", selectEditorBlock);
-      container.removeEventListener("dblclick", stopMindMapPointerHandling);
+      container.removeEventListener("dblclick", editOnDoubleClick);
       container.removeEventListener("keydown", preserveGroupBlocks, true);
       container.removeEventListener("keydown", stopMindMapPointerHandling);
     };
-  }, [editor, nodeIds, nodes, onSelect]);
+  }, [
+    editor,
+    groupRemainsAfterQuoteDelete,
+    nodeIds,
+    nodes,
+    onDeleteEmptyQuote,
+    onSelect,
+    selected,
+  ]);
 
   return (
     <div ref={containerRef} className="mindmap-text-group-editor">

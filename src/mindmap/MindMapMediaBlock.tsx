@@ -52,29 +52,43 @@ export function MindMapMediaBlock({
     if (!container) {
       return;
     }
-    const stopMindMapPointerHandling = (event: Event) => {
+    const selectMediaBlock = (event: Event) => {
       onSelect(node.id);
       event.stopPropagation();
-      window.setTimeout(() => {
-        container.querySelector<HTMLElement>(".ProseMirror")?.focus({ preventScroll: true });
-      }, 0);
     };
+    const beginMediaEdit = (event: Event, forceEdit = false) => {
+      if (!selected && !forceEdit) {
+        event.preventDefault();
+        selectMediaBlock(event);
+        return;
+      }
+      if (forceEdit) {
+        editor.isEditable = true;
+        onSelect(node.id);
+      }
+      event.stopPropagation();
+      window.queueMicrotask(() => {
+        container.querySelector<HTMLElement>(".ProseMirror")?.focus({ preventScroll: true });
+      });
+    };
+    const editOnDoubleClick = (event: Event) => beginMediaEdit(event, true);
+    const stopMindMapKeyboardHandling = (event: Event) => event.stopPropagation();
     const stopMindMapWheel = (event: Event) => event.stopPropagation();
-    container.addEventListener("pointerdown", stopMindMapPointerHandling);
-    container.addEventListener("mousedown", stopMindMapPointerHandling);
-    container.addEventListener("click", stopMindMapPointerHandling);
-    container.addEventListener("dblclick", stopMindMapPointerHandling);
-    container.addEventListener("keydown", stopMindMapPointerHandling);
+    container.addEventListener("pointerdown", beginMediaEdit);
+    container.addEventListener("mousedown", selectMediaBlock);
+    container.addEventListener("click", selectMediaBlock);
+    container.addEventListener("dblclick", editOnDoubleClick);
+    container.addEventListener("keydown", stopMindMapKeyboardHandling);
     container.addEventListener("wheel", stopMindMapWheel);
     return () => {
-      container.removeEventListener("pointerdown", stopMindMapPointerHandling);
-      container.removeEventListener("mousedown", stopMindMapPointerHandling);
-      container.removeEventListener("click", stopMindMapPointerHandling);
-      container.removeEventListener("dblclick", stopMindMapPointerHandling);
-      container.removeEventListener("keydown", stopMindMapPointerHandling);
+      container.removeEventListener("pointerdown", beginMediaEdit);
+      container.removeEventListener("mousedown", selectMediaBlock);
+      container.removeEventListener("click", selectMediaBlock);
+      container.removeEventListener("dblclick", editOnDoubleClick);
+      container.removeEventListener("keydown", stopMindMapKeyboardHandling);
       container.removeEventListener("wheel", stopMindMapWheel);
     };
-  }, [node.id, onSelect]);
+  }, [editor, node.id, onSelect, selected]);
 
   useEffect(() => {
     const projected = treeToBlockNote(singleNodeTree(node));
