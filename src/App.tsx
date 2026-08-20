@@ -1,10 +1,9 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { createInitialTree } from "./core/tree";
 import { TreeStore } from "./core/treeStore";
 import { useTree } from "./core/treeStore/useTree";
 import { MindMapEditor } from "./mindmap/MindMapEditor";
 import { OutlineEditor } from "./outline/OutlineEditor";
-import { SharedFormatToolbar } from "./shared/SharedFormatToolbar";
 import "./styles.css";
 
 export default function App() {
@@ -13,7 +12,18 @@ export default function App() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectionActive, setSelectionActive] = useState(false);
   const [activeView, setActiveView] = useState<"outline" | "mindmap">("outline");
+  const [mindMapToolbarTarget, setMindMapToolbarTarget] = useState<HTMLDivElement | null>(null);
   const selectedNode = selectedNodeId ? store.getNode(selectedNodeId) : null;
+
+  const handleOutlineSelect = useCallback(
+    (nodeId: string) => {
+      if (activeView === "outline") {
+        setSelectedNodeId(nodeId);
+        setSelectionActive(true);
+      }
+    },
+    [activeView],
+  );
 
   const createSibling = (nodeId: string) => {
     const node = store.getNode(nodeId);
@@ -44,7 +54,10 @@ export default function App() {
               role="tab"
               aria-selected={activeView === "outline"}
               className={activeView === "outline" ? "active" : ""}
-              onClick={() => setActiveView("outline")}
+              onClick={() => {
+                setActiveView("outline");
+                setSelectionActive(false);
+              }}
             >
               大纲
             </button>
@@ -53,7 +66,10 @@ export default function App() {
               role="tab"
               aria-selected={activeView === "mindmap"}
               className={activeView === "mindmap" ? "active" : ""}
-              onClick={() => setActiveView("mindmap")}
+              onClick={() => {
+                setActiveView("mindmap");
+                setSelectionActive(false);
+              }}
             >
               思维导图
             </button>
@@ -77,40 +93,44 @@ export default function App() {
         </div>
       </header>
       <div className="workspace">
-        {activeView === "outline" ? (
-          <section className="pane">
-            <div className="pane-title">大纲</div>
-            <OutlineEditor
-              store={store}
-              onSelectNode={(nodeId) => {
-                setSelectedNodeId(nodeId);
-                setSelectionActive(true);
-              }}
-              onEditorReady={() => undefined}
-            />
-          </section>
-        ) : (
-          <section className="pane">
-            <div className="pane-title">思维导图</div>
-            <div className="mindmap-pane-body">
+        <section
+          className={`pane editor-view ${activeView === "outline" ? "is-active" : "is-inactive"}`}
+          aria-hidden={activeView !== "outline"}
+        >
+          <div className="pane-title">大纲</div>
+          <OutlineEditor
+            store={store}
+            onSelectNode={handleOutlineSelect}
+            mindMapNodeId={activeView === "mindmap" ? selectedNodeId : null}
+            mindMapToolbarTarget={mindMapToolbarTarget}
+            showMindMapToolbar={activeView === "mindmap" && selectionActive && Boolean(selectedNode)}
+          />
+        </section>
+        <section
+          className={`pane editor-view ${activeView === "mindmap" ? "is-active" : "is-inactive"}`}
+          aria-hidden={activeView !== "mindmap"}
+        >
+          <div className="pane-title">思维导图</div>
+          <div className="mindmap-pane-body">
+            {activeView === "mindmap" ? (
               <MindMapEditor
                 store={store}
                 onSelectNode={setSelectedNodeId}
                 onSelectionActiveChange={setSelectionActive}
               />
-              {selectionActive && selectedNode ? (
-                <div className="mindmap-floating-toolbar">
-                  <SharedFormatToolbar
-                    editor={null}
-                    selectedNode={selectedNode}
-                    store={store}
-                    floating
-                  />
-                </div>
-              ) : null}
-            </div>
-          </section>
-        )}
+            ) : null}
+            <div
+              ref={setMindMapToolbarTarget}
+              className="mindmap-toolbar-host bn-root bn-mantine light"
+              data-color-scheme="light"
+              data-mantine-color-scheme="light"
+              aria-hidden={!selectionActive || !selectedNode}
+              onPointerDownCapture={() => {
+                window.setTimeout(() => setSelectionActive(true), 0);
+              }}
+            />
+          </div>
+        </section>
       </div>
     </main>
   );

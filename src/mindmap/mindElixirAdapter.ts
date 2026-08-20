@@ -13,6 +13,8 @@ import {
 interface MindMetadata {
   type?: ZhiJianNodeType;
   props?: ZhiJianNode["props"];
+  plainText?: string;
+  richTextHtml?: string;
 }
 
 export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
@@ -20,9 +22,10 @@ export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
     const node = tree.nodes[id];
     const style = getNodeStyle(node.props?.style);
     const marks = firstMarks(node.content);
+    const plainText = richTextToPlainText(node.content) || node.type;
     return {
       id: node.id,
-      topic: richTextToPlainText(node.content) || node.type,
+      topic: plainText,
       note: node.description ? richTextToPlainText(node.description) : undefined,
       expanded: !node.props?.collapsed,
       style: {
@@ -41,11 +44,12 @@ export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
             fit: "contain",
           }
         : undefined,
-      dangerouslySetInnerHTML: richTextToHtml(node.content),
       tags: node.type === "todo" ? [node.props?.checked ? "done" : "todo"] : undefined,
       metadata: {
         type: node.type,
         props: node.props,
+        plainText,
+        richTextHtml: richTextToHtml(node.content),
       },
       children: node.children.map(visit),
     };
@@ -55,6 +59,14 @@ export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
     nodeData: visit(tree.rootId),
     direction: MindElixir.SIDE,
   };
+}
+
+export function renderMindMapRichText(topic: string, obj: NodeObj) {
+  const metadata = (obj as NodeObj<MindMetadata>).metadata;
+  if (metadata?.plainText === topic && metadata.richTextHtml) {
+    return metadata.richTextHtml;
+  }
+  return escapeHtml(topic);
 }
 
 function richTextToHtml(content: ZhiJianNode["content"]) {

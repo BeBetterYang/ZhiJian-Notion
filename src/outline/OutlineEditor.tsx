@@ -2,9 +2,10 @@ import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 import { zh } from "@blocknote/core/locales";
 import type { BlockNoteEditor } from "@blocknote/core";
-import { useCreateBlockNote } from "@blocknote/react";
+import { FormattingToolbar, useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import type { TreeStore } from "../core/treeStore";
 import { useTree } from "../core/treeStore/useTree";
 import { blockNoteToTree, treeToBlockNote } from "./blockNoteAdapter";
@@ -12,10 +13,18 @@ import { blockNoteToTree, treeToBlockNote } from "./blockNoteAdapter";
 interface OutlineEditorProps {
   store: TreeStore;
   onSelectNode: (nodeId: string) => void;
-  onEditorReady: (editor: BlockNoteEditor) => void;
+  mindMapNodeId: string | null;
+  mindMapToolbarTarget: HTMLElement | null;
+  showMindMapToolbar: boolean;
 }
 
-export function OutlineEditor({ store, onSelectNode, onEditorReady }: OutlineEditorProps) {
+export function OutlineEditor({
+  store,
+  onSelectNode,
+  mindMapNodeId,
+  mindMapToolbarTarget,
+  showMindMapToolbar,
+}: OutlineEditorProps) {
   const tree = useTree(store);
   const applyingExternalChange = useRef(false);
   const editor = useCreateBlockNote(
@@ -34,14 +43,13 @@ export function OutlineEditor({ store, onSelectNode, onEditorReady }: OutlineEdi
   );
 
   useEffect(() => {
-    onEditorReady(editor);
     return editor.onSelectionChange(() => {
       const selectedBlock = editor.getSelection()?.blocks[0] ?? editor.getTextCursorPosition().block;
       if (selectedBlock?.id) {
         onSelectNode(selectedBlock.id);
       }
     });
-  }, [editor, onEditorReady, onSelectNode]);
+  }, [editor, onSelectNode]);
 
   useEffect(() => {
     applyingExternalChange.current = true;
@@ -50,6 +58,14 @@ export function OutlineEditor({ store, onSelectNode, onEditorReady }: OutlineEdi
       applyingExternalChange.current = false;
     });
   }, [editor, tree]);
+
+  useEffect(() => {
+    if (!mindMapNodeId || !editor.getBlock(mindMapNodeId)) {
+      return;
+    }
+
+    selectBlockContent(editor, mindMapNodeId);
+  }, [editor, mindMapNodeId, tree]);
 
   return (
     <section
@@ -80,9 +96,28 @@ export function OutlineEditor({ store, onSelectNode, onEditorReady }: OutlineEdi
             store.replaceTreeFromView(nextTree);
           }
         }}
-      />
+      >
+        {showMindMapToolbar && mindMapToolbarTarget
+          ? createPortal(<FormattingToolbar />, mindMapToolbarTarget)
+          : null}
+      </BlockNoteView>
     </section>
   );
+}
+
+function selectBlockContent(editor: BlockNoteEditor, blockId: string) {
+  try {
+    editor.setTextCursorPosition(blockId, "start");
+    const from = editor.prosemirrorState.selection.from;
+    editor.setTextCursorPosition(blockId, "end");
+    const to = editor.prosemirrorState.selection.from;
+
+    if (from !== to) {
+      editor._tiptapEditor.commands.setTextSelection({ from, to });
+    }
+  } catch {
+    // File and table blocks do not expose inline text selections.
+  }
 }
 
 function fileToDataUrl(file: File) {

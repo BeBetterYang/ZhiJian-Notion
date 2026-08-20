@@ -4,7 +4,7 @@ import { zh_CN } from "mind-elixir/i18n";
 import { useEffect, useRef } from "react";
 import type { TreeStore } from "../core/treeStore";
 import { useTree } from "../core/treeStore/useTree";
-import { treeToMindElixir } from "./mindElixirAdapter";
+import { renderMindMapRichText, treeToMindElixir } from "./mindElixirAdapter";
 import { applyMindElixirOperation } from "./mindElixirCommands";
 
 interface MindMapEditorProps {
@@ -22,6 +22,7 @@ export function MindMapEditor({
   const containerRef = useRef<HTMLDivElement>(null);
   const mindRef = useRef<MindElixir | null>(null);
   const suppressOperation = useRef(false);
+  const lastSelectedNodeId = useRef<string | null>(null);
   const initialTree = useRef(tree);
   const storeRef = useRef(store);
   const onSelectNodeRef = useRef(onSelectNode);
@@ -42,10 +43,11 @@ export function MindMapEditor({
       direction: MindElixir.SIDE,
       editable: true,
       contextMenu: { locale: zh_CN },
-      toolBar: false,
+      toolBar: true,
       keypress: true,
       allowUndo: false,
       newTopicName: "新节点",
+      markdown: (topic, obj) => renderMindMapRichText(topic, obj as Parameters<typeof renderMindMapRichText>[1]),
     });
     mind.init(treeToMindElixir(initialTree.current));
     mind.bus.addListener("operation", (operation: Operation) => {
@@ -53,6 +55,7 @@ export function MindMapEditor({
         return;
       }
       if ("obj" in operation && operation.obj?.id) {
+        lastSelectedNodeId.current = operation.obj.id;
         onSelectNodeRef.current(operation.obj.id);
         onSelectionActiveChangeRef.current(true);
       }
@@ -60,6 +63,7 @@ export function MindMapEditor({
     });
     mind.bus.addListener("selectNodes", (nodes) => {
       if (nodes[0]) {
+        lastSelectedNodeId.current = nodes[0].id;
         onSelectNodeRef.current(nodes[0].id);
         onSelectionActiveChangeRef.current(true);
       }
@@ -99,10 +103,23 @@ export function MindMapEditor({
     suppressOperation.current = true;
     mind.refresh(treeToMindElixir(tree));
     mind.clearHistory?.();
-    window.setTimeout(() => {
+    const nodeIdToRestore = lastSelectedNodeId.current;
+    const refreshTimer = window.setTimeout(() => {
+      if (mindRef.current !== mind || !mind.nodes?.isConnected) {
+        return;
+      }
       suppressOperation.current = false;
       mind.scaleFit();
+      if (nodeIdToRestore) {
+        try {
+          mind.selectNode(mind.findEle(nodeIdToRestore));
+        } catch {
+          lastSelectedNodeId.current = null;
+        }
+      }
     }, 0);
+
+    return () => window.clearTimeout(refreshTimer);
   }, [tree]);
 
   return <div className="mindmap-canvas" ref={containerRef} />;
