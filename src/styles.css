@@ -1,0 +1,269 @@
+:root {
+  color: #1d2430;
+  background: #f5f7f8;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  min-height: 72px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid #dfe5e8;
+  background: #ffffff;
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.topbar p {
+  margin: 4px 0 0;
+  color: #61707d;
+  font-size: 13px;
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.view-switch {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid #cbd5da;
+  border-radius: 7px;
+  background: #eef2f4;
+}
+
+.toolbar .view-switch button {
+  border: 0;
+  background: transparent;
+}
+
+.toolbar .view-switch button.active {
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(29, 36, 48, 0.12);
+}
+
+.toolbar button {
+  height: 32px;
+  border: 1px solid #cbd5da;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1d2430;
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+.toolbar button:disabled {
+  color: #9aa6ad;
+  cursor: not-allowed;
+}
+
+.shared-toolbar {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 7px 12px;
+  border-bottom: 1px solid #dfe5e8;
+  background: #fbfcfc;
+}
+
+.shared-toolbar-floating {
+  min-height: 42px;
+  padding: 6px;
+  border: 1px solid #d6dde1;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 10px 28px rgba(29, 36, 48, 0.16);
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.shared-toolbar button,
+.toolbar-select select {
+  height: 30px;
+  border: 1px solid #cbd5da;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1d2430;
+  padding: 0 9px;
+  cursor: pointer;
+}
+
+.toolbar-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #52616d;
+  font-size: 13px;
+}
+
+.toolbar-swatches {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.toolbar-swatches button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  background: #ffffff;
+}
+
+.pane,
+.inspector {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+}
+
+.pane-title {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-bottom: 1px solid #e6ecef;
+  color: #52616d;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.outline-panel {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 14px 10px 48px;
+}
+
+.outline-panel .bn-container {
+  min-height: 100%;
+}
+
+.mindmap-canvas {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mindmap-pane-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.mindmap-floating-toolbar {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  z-index: 20;
+  transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+}
+
+.mindmap-floating-toolbar .shared-toolbar {
+  justify-content: center;
+}
+
+.inspector {
+  padding-bottom: 16px;
+}
+
+.node-editor,
+.node-editor-empty {
+  padding: 12px;
+}
+
+.node-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.node-editor select,
+.node-editor input[type="text"],
+.node-editor input:not([type]),
+.node-editor textarea,
+.node-editor > input {
+  width: 100%;
+  border: 1px solid #cbd5da;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #ffffff;
+  color: #1d2430;
+}
+
+.node-editor textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #52616d;
+  font-size: 13px;
+}
+
+.node-editor-empty {
+  color: #7b8891;
+  font-size: 13px;
+}
+
+@media (max-width: 1100px) {
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
