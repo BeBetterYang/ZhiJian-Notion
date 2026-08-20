@@ -7,10 +7,13 @@ import {
   type RichTextContent,
   type RichTextMarks,
   type RichTextSpan,
+  type ZhiJianImageData,
   type ZhiJianNode,
   type ZhiJianNodeType,
+  type ZhiJianTableData,
   type ZhiJianTree,
 } from "../core/tree";
+import { getCachedImageAssetUrl, getImageAssetId } from "../shared/imageAssetStore";
 
 export function treeToBlockNote(tree: ZhiJianTree): PartialBlock[] {
   const visit = (id: string): PartialBlock => {
@@ -49,6 +52,10 @@ export function blockNoteToTree(blocks: Block[], previousTree?: ZhiJianTree): Zh
       props: {
         ...previous?.props,
         checked: typeof blockProps.checked === "boolean" ? blockProps.checked : previous?.props?.checked,
+        headingLevel:
+          type === "heading" ? normalizeHeadingLevel(blockProps.level) : previous?.props?.headingLevel,
+        table: type === "table" ? tableDataFromBlock(block) : previous?.props?.table,
+        image: type === "image" ? imageDataFromBlock(block) : previous?.props?.image,
         style: getNodeStyle(previous?.props?.style),
       },
       meta: previous?.meta ?? {
@@ -98,15 +105,23 @@ function fromBlockNoteType(type: string): ZhiJianNodeType {
 function toBlockNoteProps(node: ZhiJianNode) {
   const style = getNodeStyle(node.props?.style);
   if (node.type === "heading") {
-    return { level: 1 };
+    return { level: node.props?.headingLevel ?? 1, isToggleable: false };
   }
   if (node.type === "todo") {
     return { checked: node.props?.checked ?? false };
   }
   if (node.type === "image") {
+    const image = node.props?.image;
     return {
-      url: style.imageUrl ?? richTextToPlainText(node.content),
-      name: node.description ? richTextToPlainText(node.description) : "图片",
+      url:
+        (image?.assetId ? getCachedImageAssetUrl(image.assetId) : image?.url) ??
+        style.imageUrl ??
+        richTextToPlainText(node.content),
+      name: image?.name ?? "图片",
+      caption:
+        image?.caption ?? (node.description ? richTextToPlainText(node.description) : ""),
+      previewWidth: image?.previewWidth,
+      showPreview: image?.showPreview ?? true,
     };
   }
   return {};
@@ -116,12 +131,25 @@ function toBlockNoteContent(node: ZhiJianNode): PartialBlock["content"] {
   const style = getNodeStyle(node.props?.style);
   const content = normalizeRichText(node.content);
   if (node.type === "table") {
+    const table = node.props?.table ?? createDefaultTableData();
     return {
       type: "tableContent",
-      rows: [
-        { cells: ["", ""] },
-        { cells: ["", ""] },
-      ],
+      columnWidths: table.columnWidths,
+      headerRows: table.headerRows,
+      headerCols: table.headerCols,
+      rows: table.rows.map((row) => ({
+        cells: row.map((cell) => ({
+          type: "tableCell",
+          props: {
+            backgroundColor: cell.backgroundColor ?? "default",
+            textColor: cell.textColor ?? "default",
+            textAlignment: cell.textAlignment ?? "left",
+            colspan: cell.colspan,
+            rowspan: cell.rowspan,
+          },
+          content: richTextToBlockNoteInline(cell.content),
+        })),
+      })),
     } as PartialBlock["content"];
   }
   if (node.type === "image") {
@@ -163,8 +191,7 @@ function contentFromBlock(type: ZhiJianNodeType, block: Block): RichTextContent 
     return { text: "" };
   }
   if (type === "image") {
-    const props = block.props as Record<string, unknown>;
-    return { text: typeof props.url === "string" ? props.url : "" };
+    return { text: "" };
   }
   return blockNoteContentToRichText(block.content);
 }
@@ -204,6 +231,91 @@ function blockNoteContentToRichText(content: Block["content"]): RichTextContent 
       ? spans
       : undefined,
   };
+}
+
+function richTextToBlockNoteInline(content: RichTextContent) {
+  const richText = normalizeRichText(content);
+  if (richText.spans?.length) {
+    return richText.spans.map(spanToBlockNoteInline);
+  }
+  if (richText.marks) {
+    return [spanToBlockNoteInline({ text: richText.text, marks: richText.marks })];
+  }
+  return richText.text;
+}
+
+function tableDataFromBlock(block: Block): ZhiJianTableData {
+  const content = block.content as unknown as {
+    columnWidths?: (number | undefined)[];
+    headerRows?: number;
+    headerCols?: number;
+    rows?: Array<{ cells: Array<unknown> }>;
+  };
+  const rows = (content.rows ?? []).map((row) =>
+    row.cells.map((cell) => {
+      const tableCell = Array.isArray(cell)
+        ? { content: cell, props: undefined }
+        : (cell as { content?: unknown; props?: Record<string, unknown> });
+      const props = tableCell.props;
+      return {
+        content: blockNoteContentToRichText(tableCell.content as Block["content"]),
+        backgroundColor: stringProp(props, "backgroundColor"),
+        textColor: stringProp(props, "textColor"),
+        textAlignment: textAlignmentProp(props),
+        colspan: numberProp(props, "colspan"),
+        rowspan: numberProp(props, "rowspan"),
+      };
+    }),
+  );
+  return {
+    rows: rows.length ? rows : createDefaultTableData().rows,
+    columnWidths: content.columnWidths,
+    headerRows: content.headerRows,
+    headerCols: content.headerCols,
+  };
+}
+
+function imageDataFromBlock(block: Block): ZhiJianImageData {
+  const props = block.props as Record<string, unknown>;
+  const url = stringProp(props, "url") ?? "";
+  const assetId = getImageAssetId(url);
+  return {
+    url: assetId ? undefined : url,
+    assetId,
+    name: stringProp(props, "name"),
+    caption: stringProp(props, "caption"),
+    previewWidth: numberProp(props, "previewWidth"),
+    showPreview: typeof props.showPreview === "boolean" ? props.showPreview : true,
+  };
+}
+
+function createDefaultTableData(): ZhiJianTableData {
+  return {
+    rows: Array.from({ length: 2 }, () =>
+      Array.from({ length: 3 }, () => ({ content: { text: "" } })),
+    ),
+  };
+}
+
+function normalizeHeadingLevel(value: unknown): 1 | 2 | 3 {
+  return value === 2 || value === 3 ? value : 1;
+}
+
+function stringProp(props: Record<string, unknown> | undefined, key: string) {
+  const value = props?.[key];
+  return typeof value === "string" && value !== "default" ? value : undefined;
+}
+
+function numberProp(props: Record<string, unknown> | undefined, key: string) {
+  const value = props?.[key];
+  return typeof value === "number" ? value : undefined;
+}
+
+function textAlignmentProp(
+  props: Record<string, unknown> | undefined,
+): "left" | "center" | "right" | "justify" | undefined {
+  const value = props?.textAlignment;
+  return value === "center" || value === "right" || value === "justify" ? value : undefined;
 }
 
 function hasTextDecoration(style: NodeVisualStyle, value: "underline" | "line-through") {

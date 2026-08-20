@@ -22,7 +22,11 @@ export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
     const node = tree.nodes[id];
     const style = getNodeStyle(node.props?.style);
     const marks = firstMarks(node.content);
-    const plainText = richTextToPlainText(node.content) || node.type;
+    const plainText =
+      node.type === "table"
+        ? tableSummary(node)
+        : richTextToPlainText(node.content) || node.type;
+    const isMedia = node.type === "table" || node.type === "image";
     return {
       id: node.id,
       topic: plainText,
@@ -36,20 +40,13 @@ export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
         fontStyle: marks?.italic ? "italic" : style.fontStyle,
         textDecoration: marksToTextDecoration(marks) ?? style.textDecorationLine ?? style.textDecoration,
       } as NodeObj["style"] & { fontStyle?: string },
-      image: style.imageUrl
-        ? {
-            url: style.imageUrl,
-            width: 180,
-            height: 110,
-            fit: "contain",
-          }
-        : undefined,
+      dangerouslySetInnerHTML: isMedia ? mediaSlotHtml(node) : undefined,
       tags: node.type === "todo" ? [node.props?.checked ? "done" : "todo"] : undefined,
       metadata: {
         type: node.type,
         props: node.props,
         plainText,
-        richTextHtml: richTextToHtml(node.content),
+        richTextHtml: isMedia ? undefined : richTextToHtml(node.content),
       },
       children: node.children.map(visit),
     };
@@ -59,6 +56,34 @@ export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
     nodeData: visit(tree.rootId),
     direction: MindElixir.SIDE,
   };
+}
+
+function tableSummary(node: ZhiJianNode) {
+  const table = node.props?.table;
+  if (!table?.rows.length) {
+    return "表格";
+  }
+  const columns = Math.max(0, ...table.rows.map((row) => row.length));
+  return `表格 ${table.rows.length}×${columns}`;
+}
+
+function mediaSlotHtml(node: ZhiJianNode) {
+  const width =
+    node.type === "table"
+      ? Math.max(
+          180,
+          node.props?.table?.columnWidths?.reduce<number>(
+            (sum, value) => sum + (value ?? 100),
+            0,
+          ) ??
+            Math.max(1, node.props?.table?.rows[0]?.length ?? 1) * 100,
+        )
+      : node.props?.image?.previewWidth ?? 180;
+  const height =
+    node.type === "table"
+      ? Math.max(68, (node.props?.table?.rows.length ?? 2) * 34)
+      : Math.round(width * 0.625);
+  return `<div class="mindmap-blocknote-slot" data-zhijian-media-node="${escapeHtml(node.id)}" style="width:${width}px;min-height:${height}px"></div>`;
 }
 
 export function renderMindMapRichText(topic: string, obj: NodeObj) {

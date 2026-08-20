@@ -81,6 +81,16 @@ export class TreeStore {
       node.type = type;
       if (type === "table") {
         node.content = plainTextContent("");
+        node.props = {
+          ...node.props,
+          table: node.props?.table ?? createDefaultTable(),
+        };
+      }
+      if (type === "heading") {
+        node.props = {
+          ...node.props,
+          headingLevel: node.props?.headingLevel ?? 1,
+        };
       }
       draft.nodes[id] = touchNode(node);
     });
@@ -128,6 +138,12 @@ export class TreeStore {
         content: type === "table" ? plainTextContent("") : normalizeRichText(input.content ?? ""),
         description: input.description ? normalizeRichText(input.description) : undefined,
         type,
+        props:
+          type === "table"
+            ? { table: createDefaultTable() }
+            : type === "heading"
+              ? { headingLevel: 1 }
+              : undefined,
         meta: nowMeta(),
       };
       draft.nodes[id] = newNode;
@@ -317,6 +333,14 @@ export class TreeStore {
     }
     return false;
   }
+}
+
+function createDefaultTable() {
+  return {
+    rows: Array.from({ length: 2 }, () =>
+      Array.from({ length: 3 }, () => ({ content: plainTextContent("") })),
+    ),
+  };
 }
 
 function createId() {

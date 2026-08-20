@@ -1,4 +1,12 @@
-export type { TreeListener, ZhiJianNode, ZhiJianNodeType, ZhiJianTree } from "./types";
+export type {
+  TreeListener,
+  ZhiJianImageData,
+  ZhiJianNode,
+  ZhiJianNodeType,
+  ZhiJianTableCell,
+  ZhiJianTableData,
+  ZhiJianTree,
+} from "./types";
 export { cloneTree, createInitialTree } from "./utils";
 export type { NodeVisualStyle } from "./style";
 export { getNodeStyle } from "./style";

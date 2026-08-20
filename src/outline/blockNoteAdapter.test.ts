@@ -65,6 +65,77 @@ describe("blockNoteAdapter styles", () => {
       });
     }
   });
+
+  it("round-trips table cell text and column widths", () => {
+    const tableBlock = {
+      id: "table",
+      type: "table",
+      props: {},
+      content: {
+        type: "tableContent",
+        columnWidths: [120, 180],
+        headerRows: 1,
+        rows: [
+          {
+            cells: [
+              {
+                type: "tableCell",
+                props: {
+                  backgroundColor: "red",
+                  textColor: "blue",
+                  textAlignment: "center",
+                },
+                content: [{ type: "text", text: "名称", styles: { bold: true } }],
+              },
+              [{ type: "text", text: "进度", styles: {} }],
+            ],
+          },
+        ],
+      },
+      children: [],
+    } as unknown as Block;
+
+    const tree = blockNoteToTree([tableBlock])!;
+    expect(tree.nodes.table.props?.table?.rows[0][0].content.text).toBe("名称");
+    expect(tree.nodes.table.props?.table?.rows[0][0].content.spans?.[0].marks?.bold).toBe(
+      true,
+    );
+    expect(tree.nodes.table.props?.table?.columnWidths).toEqual([120, 180]);
+
+    const [projected] = treeToBlockNote(tree);
+    expect((projected.content as { rows: unknown[] }).rows).toHaveLength(1);
+  });
+
+  it("round-trips image metadata and preview width", () => {
+    const imageBlock = {
+      id: "image",
+      type: "image",
+      props: {
+        url: "data:image/png;base64,abc",
+        name: "规划图.png",
+        caption: "产品规划",
+        previewWidth: 420,
+        showPreview: true,
+      },
+      content: undefined,
+      children: [],
+    } as unknown as Block;
+
+    const tree = blockNoteToTree([imageBlock])!;
+    expect(tree.nodes.image.content).toEqual({ text: "" });
+    expect(tree.nodes.image.props?.image).toMatchObject({
+      url: "data:image/png;base64,abc",
+      caption: "产品规划",
+      previewWidth: 420,
+    });
+
+    const [projected] = treeToBlockNote(tree);
+    expect(projected.props).toMatchObject({
+      url: "data:image/png;base64,abc",
+      caption: "产品规划",
+      previewWidth: 420,
+    });
+  });
 });
 
 function block(id: string, text: string, styles: Record<string, unknown>): Block {

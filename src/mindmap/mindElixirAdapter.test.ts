@@ -24,4 +24,32 @@ describe("mindElixirAdapter", () => {
 
     expect(renderMindMapRichText("Web 新内容", webNode)).toBe("Web 新内容");
   });
+
+  it("creates BlockNote mount points for table and image nodes", () => {
+    const tree = createInitialTree();
+    tree.nodes.web.type = "table";
+    tree.nodes.web.props = {
+      table: {
+        rows: [[{ content: { text: "版本" } }, { content: { text: "V2" } }]],
+      },
+    };
+    tree.nodes.app.type = "image";
+    tree.nodes.app.props = {
+      image: { url: "data:image/png;base64,abc", previewWidth: 320 },
+    };
+
+    const data = treeToMindElixir(tree);
+    const tableNode = data.nodeData.children?.[0] as NodeObj;
+    const imageNode = data.nodeData.children?.[1] as NodeObj;
+
+    expect(tableNode.dangerouslySetInnerHTML).toContain(
+      'data-zhijian-media-node="web"',
+    );
+    expect(tableNode.dangerouslySetInnerHTML).toContain("width:200px");
+    expect(imageNode.dangerouslySetInnerHTML).toContain(
+      'data-zhijian-media-node="app"',
+    );
+    expect(imageNode.dangerouslySetInnerHTML).toContain("width:320px");
+    expect(imageNode.image).toBeUndefined();
+  });
 });

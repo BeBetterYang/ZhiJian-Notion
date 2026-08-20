@@ -21,6 +21,10 @@ textarea {
   font: inherit;
 }
 
+.toolbar-file-input {
+  display: none;
+}
+
 .app-shell {
   min-height: 100vh;
   display: flex;
@@ -180,6 +184,38 @@ textarea {
   z-index: 20;
   transform: translateX(-50%);
   max-width: calc(100% - 32px);
+}
+
+.mindmap-blocknote-slot {
+  min-width: 180px;
+}
+
+.mindmap-blocknote-node {
+  overflow: visible;
+  pointer-events: auto;
+  user-select: text;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: #ffffff;
+}
+
+.mindmap-blocknote-node * {
+  pointer-events: auto;
+}
+
+.mindmap-blocknote-node.is-selected {
+  border-color: #2563eb;
+}
+
+.mindmap-blocknote-node .bn-container,
+.mindmap-blocknote-node .bn-editor {
+  min-height: 0;
+  padding: 0;
+}
+
+.mindmap-blocknote-node .bn-block-outer,
+.mindmap-blocknote-node .bn-block {
+  margin: 0;
 }
 
 .mindmap-toolbar-host:empty {

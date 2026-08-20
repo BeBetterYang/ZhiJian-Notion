@@ -67,4 +67,13 @@ describe("TreeStore", () => {
     store.redo();
     expect(richTextToPlainText(store.getNode("app")!.content)).toBe("iOS App");
   });
+
+  it("initializes domain table data when changing node type", () => {
+    const store = new TreeStore(createInitialTree());
+
+    store.updateType("web", "table");
+
+    expect(store.getNode("web")?.props?.table?.rows).toHaveLength(2);
+    expect(store.getNode("web")?.props?.table?.rows[0]).toHaveLength(3);
+  });
 });

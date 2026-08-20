@@ -3,6 +3,7 @@ import { createInitialTree } from "./core/tree";
 import { TreeStore } from "./core/treeStore";
 import { useTree } from "./core/treeStore/useTree";
 import { MindMapEditor } from "./mindmap/MindMapEditor";
+import type { MindMapTextSelection } from "./mindmap/MindMapEditor";
 import { OutlineEditor } from "./outline/OutlineEditor";
 import "./styles.css";
 
@@ -13,7 +14,11 @@ export default function App() {
   const [selectionActive, setSelectionActive] = useState(false);
   const [activeView, setActiveView] = useState<"outline" | "mindmap">("outline");
   const [mindMapToolbarTarget, setMindMapToolbarTarget] = useState<HTMLDivElement | null>(null);
+  const [mindMapTextSelection, setMindMapTextSelection] =
+    useState<MindMapTextSelection | null>(null);
   const selectedNode = selectedNodeId ? store.getNode(selectedNodeId) : null;
+  const isMindMapMediaSelected =
+    selectedNode?.type === "table" || selectedNode?.type === "image";
 
   const handleOutlineSelect = useCallback(
     (nodeId: string) => {
@@ -57,6 +62,7 @@ export default function App() {
               onClick={() => {
                 setActiveView("outline");
                 setSelectionActive(false);
+                setMindMapTextSelection(null);
               }}
             >
               大纲
@@ -69,6 +75,7 @@ export default function App() {
               onClick={() => {
                 setActiveView("mindmap");
                 setSelectionActive(false);
+                setMindMapTextSelection(null);
               }}
             >
               思维导图
@@ -102,8 +109,14 @@ export default function App() {
             store={store}
             onSelectNode={handleOutlineSelect}
             mindMapNodeId={activeView === "mindmap" ? selectedNodeId : null}
+            mindMapTextSelection={mindMapTextSelection}
             mindMapToolbarTarget={mindMapToolbarTarget}
-            showMindMapToolbar={activeView === "mindmap" && selectionActive && Boolean(selectedNode)}
+            showMindMapToolbar={
+              activeView === "mindmap" &&
+              selectionActive &&
+              Boolean(selectedNode) &&
+              !isMindMapMediaSelected
+            }
           />
         </section>
         <section
@@ -115,8 +128,14 @@ export default function App() {
             {activeView === "mindmap" ? (
               <MindMapEditor
                 store={store}
-                onSelectNode={setSelectedNodeId}
+                onSelectNode={(nodeId) => {
+                  setSelectedNodeId(nodeId);
+                  setMindMapTextSelection(null);
+                }}
                 onSelectionActiveChange={setSelectionActive}
+                onTextSelectionChange={setMindMapTextSelection}
+                selectedNodeId={selectedNodeId}
+                toolbarTarget={mindMapToolbarTarget}
               />
             ) : null}
             <div
