@@ -9,26 +9,38 @@ import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 import { saveImageAsset } from "../shared/imageAssetStore";
 import { ZhiJianFormattingToolbar } from "../shared/ZhiJianFormattingToolbar";
 import { zhijianDictionary } from "../shared/zhijianDictionary";
+import { MindMapNodeRenderer } from "./MindMapNodeRenderer";
 
-interface MindMapNodeContentBlockProps {
+interface MindMapNodeContentProps {
   node: ZhiJianNode;
   store: TreeStore;
   selected: boolean;
+  editing: boolean;
   toolbarTarget: HTMLElement | null;
   onSelect: (nodeId: string) => void;
+  onEdit: (nodeId: string, focusBlockId?: string) => void;
+  onFinishEdit: () => void;
   focusRequest: { nodeId: string; focusBlockId: string; requestId: number } | null;
   onFocusRequestHandled: (requestId: number) => void;
 }
 
-export function MindMapNodeContentBlock({
+export function MindMapNodeContent(props: MindMapNodeContentProps) {
+  if (!props.editing) {
+    return <MindMapNodeRenderer node={props.node} onSelect={props.onSelect} onEdit={props.onEdit} />;
+  }
+  return <MindMapNodeEditor {...props} />;
+}
+
+function MindMapNodeEditor({
   node,
   store,
   selected,
+  onFinishEdit,
   toolbarTarget,
   onSelect,
   focusRequest,
   onFocusRequestHandled,
-}: MindMapNodeContentBlockProps) {
+}: MindMapNodeContentProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const applyingExternalChange = useRef(false);
   const focusPrimaryAfterBlockDelete = useRef(false);
@@ -124,6 +136,12 @@ export function MindMapNodeContentBlock({
     };
     const stopMindMapPointerHandling = (event: Event) => event.stopPropagation();
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        onFinishEdit();
+        return;
+      }
       if (handleTreeHistoryKeyDown(event, store)) return;
       if (event.key !== "Backspace" && event.key !== "Delete") return;
       const selection = editor._tiptapEditor.state.selection;
@@ -158,10 +176,10 @@ export function MindMapNodeContentBlock({
       container.removeEventListener("keydown", onKeyDown, true);
       container.removeEventListener("keydown", stopMindMapPointerHandling);
     };
-  }, [blockIds, editor, node, onSelect, selected, store]);
+  }, [blockIds, editor, node, onFinishEdit, onSelect, selected, store]);
 
   return (
-    <div ref={containerRef} className="mindmap-node-content-editor">
+    <div ref={containerRef} className="mindmap-node-editor">
       <BlockNoteView
         editor={editor}
         theme="light"

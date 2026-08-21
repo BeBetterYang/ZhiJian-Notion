@@ -8,8 +8,7 @@ import { useTree } from "../core/treeStore/useTree";
 import { textOffset } from "../outline/mindMapTextSelection";
 import { createMindMapStructureSignature, renderMindMapNode, treeToMindElixir } from "./mindElixirAdapter";
 import { applyMindElixirOperation } from "./mindElixirCommands";
-import { MindMapMediaBlock } from "./MindMapMediaBlock";
-import { MindMapNodeContentBlock } from "./MindMapNodeGroupBlock";
+import { MindMapNodeContent } from "./MindMapNodeGroupBlock";
 
 interface MindMapEditorProps {
   store: TreeStore;
@@ -50,20 +49,13 @@ export function MindMapEditor({
   const onActiveRef = useRef(onSelectionActiveChange);
   const onTextSelectionRef = useRef(onTextSelectionChange);
   const selectedNodeRef = useRef(selectedNodeId);
-  const mediaHosts = useRef(new Map<string, HTMLDivElement>());
   const contentHosts = useRef(new Map<string, HTMLDivElement>());
-  const [mediaTargets, setMediaTargets] = useState<Array<{ id: string; host: HTMLElement }>>([]);
   const [contentTargets, setContentTargets] = useState<Array<{ id: string; host: HTMLElement }>>([]);
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const editingNodeRef = useRef<string | null>(null);
 
   const collectTargets = useCallback(() => {
     const container = containerRef.current;
-    const media = Array.from(container?.querySelectorAll<HTMLElement>("[data-zhijian-media-node]") ?? []).flatMap((slot) => {
-      const id = slot.dataset.zhijianMediaNode;
-      if (!id) return [];
-      const host = ensureHost(mediaHosts.current, id, "mindmap-media-host");
-      if (host.parentElement !== slot) slot.appendChild(host);
-      return [{ id, host }];
-    });
     const content = Array.from(container?.querySelectorAll<HTMLElement>("[data-zhijian-node-content]") ?? []).flatMap((slot) => {
       const id = slot.dataset.zhijianNodeContent;
       if (!id) return [];
@@ -71,11 +63,19 @@ export function MindMapEditor({
       if (host.parentElement !== slot) slot.appendChild(host);
       return [{ id, host }];
     });
-    pruneHosts(mediaHosts.current, media.map((target) => target.id));
     pruneHosts(contentHosts.current, content.map((target) => target.id));
-    setMediaTargets(media);
     setContentTargets(content);
   }, []);
+
+  useEffect(() => {
+    editingNodeRef.current = editingNodeId;
+  }, [editingNodeId]);
+
+  useEffect(() => {
+    if (focusRequest?.nodeId && tree.nodes[focusRequest.nodeId]) {
+      setEditingNodeId(focusRequest.nodeId);
+    }
+  }, [focusRequest, tree.nodes]);
 
   useEffect(() => {
     storeRef.current = store;
@@ -104,6 +104,7 @@ export function MindMapEditor({
       if (suppressOperation.current) return;
       if ("obj" in operation && operation.obj?.id) {
         lastSelectedNodeId.current = operation.obj.id;
+        setEditingNodeId(null);
         onSelectRef.current(operation.obj.id);
         onActiveRef.current(true);
       }
@@ -118,6 +119,7 @@ export function MindMapEditor({
     mind.bus.addListener("selectNodes", (nodes) => {
       if (!nodes[0]) return;
       lastSelectedNodeId.current = nodes[0].id;
+      setEditingNodeId(null);
       onSelectRef.current(nodes[0].id);
       onActiveRef.current(true);
     });
@@ -159,7 +161,7 @@ export function MindMapEditor({
     const container = containerRef.current;
     if (!container) return;
     const toggleTodo = (event: PointerEvent) => {
-      const checkbox = (event.target as Element | null)?.closest<HTMLElement>(".mindmap-todo-checkbox");
+      const checkbox = (event.target as Element | null)?.closest<HTMLElement>(".mindmap-todo-checkbox, .mindmap-node-checkbox");
       const nodeId = checkbox?.dataset.nodeId;
       if (!nodeId || event.button !== 0) return;
       event.preventDefault();
@@ -173,6 +175,21 @@ export function MindMapEditor({
     };
     container.addEventListener("pointerdown", toggleTodo, true);
     return () => container.removeEventListener("pointerdown", toggleTodo, true);
+  }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (editingNodeRef.current || event.key !== "Enter") return;
+      const nodeId = lastSelectedNodeId.current ?? selectedNodeRef.current;
+      if (!nodeId || !storeRef.current.getNode(nodeId)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setEditingNodeId(nodeId);
+    };
+    container.addEventListener("keydown", onKeyDown, true);
+    return () => container.removeEventListener("keydown", onKeyDown, true);
   }, []);
 
   useEffect(() => {
@@ -201,7 +218,7 @@ export function MindMapEditor({
 
   useEffect(() => {
     const mind = mindRef.current;
-    const targets = [...mediaTargets, ...contentTargets].map(({ host }) => host);
+    const targets = contentTargets.map(({ host }) => host);
     if (!mind || !targets.length) return;
     let frame = 0;
     const observer = new ResizeObserver(() => {
@@ -210,29 +227,43 @@ export function MindMapEditor({
     });
     targets.forEach((target) => observer.observe(target));
     return () => { observer.disconnect(); window.cancelAnimationFrame(frame); };
-  }, [contentTargets, mediaTargets]);
+  }, [contentTargets]);
 
   const selectPortalNode = (nodeId: string) => {
+    if (editingNodeRef.current !== nodeId) setEditingNodeId(null);
     lastSelectedNodeId.current = nodeId;
     onSelectRef.current(nodeId);
+    onActiveRef.current(true);
+  };
+
+  const beginNodeEdit = (nodeId: string) => {
+    selectPortalNode(nodeId);
+    setEditingNodeId(nodeId);
+  };
+
+  const finishNodeEdit = () => {
+    setEditingNodeId(null);
     onActiveRef.current(true);
   };
 
   return (
     <>
       <div className="mindmap-canvas" ref={containerRef} />
-      {mediaTargets.map(({ id, host }) => {
-        const node = tree.nodes[id];
-        return node ? createPortal(
-          <MindMapMediaBlock node={node} store={store} selected={selectedNodeId === id} toolbarTarget={toolbarTarget} onSelect={selectPortalNode} />,
-          host,
-          id,
-        ) : null;
-      })}
       {contentTargets.map(({ id, host }) => {
         const node = tree.nodes[id];
         return node ? createPortal(
-          <MindMapNodeContentBlock node={node} store={store} selected={selectedNodeId === id} toolbarTarget={toolbarTarget} onSelect={selectPortalNode} focusRequest={focusRequest} onFocusRequestHandled={onFocusRequestHandled} />,
+          <MindMapNodeContent
+            node={node}
+            store={store}
+            selected={selectedNodeId === id}
+            editing={editingNodeId === id}
+            toolbarTarget={toolbarTarget}
+            onSelect={selectPortalNode}
+            onEdit={beginNodeEdit}
+            onFinishEdit={finishNodeEdit}
+            focusRequest={focusRequest}
+            onFocusRequestHandled={onFocusRequestHandled}
+          />,
           host,
           id,
         ) : null;

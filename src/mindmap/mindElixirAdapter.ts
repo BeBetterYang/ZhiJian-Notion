@@ -3,7 +3,6 @@ import MindElixir from "mind-elixir";
 import {
   firstMarks,
   getNodeStyle,
-  normalizeRichText,
   richTextToPlainText,
   type ZhiJianNode,
   type ZhiJianTree,
@@ -15,7 +14,6 @@ export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
     const style = getNodeStyle(node.props?.style);
     const marks = firstMarks(node.content);
     const topic = node.type === "table" ? "表格" : richTextToPlainText(node.content) || " ";
-    const hasContentBlocks = Boolean(node.blocks?.length || node.description);
     return {
       id: node.id,
       topic,
@@ -29,15 +27,11 @@ export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
         fontStyle: marks?.italic ? "italic" : style.fontStyle,
         textDecoration: marksToTextDecoration(marks) ?? style.textDecorationLine ?? style.textDecoration,
       } as NodeObj["style"] & { fontStyle?: string },
-      dangerouslySetInnerHTML: node.type === "table"
-        ? mediaSlotHtml(node.id)
-        : hasContentBlocks
-          ? contentSlotHtml(node.id)
-          : undefined,
+      dangerouslySetInnerHTML: contentSlotHtml(node.id),
       metadata: {
         type: node.type,
         plainText: topic,
-        richTextHtml: node.type === "table" || hasContentBlocks ? undefined : richTextToHtml(node.content),
+        richTextHtml: undefined,
         checked: node.type === "todo" ? node.props?.checked ?? false : undefined,
         hasQuote: node.blocks?.some((block) => block.type === "quote") ?? false,
         imageCount: node.blocks?.filter((block) => block.type === "image").length ?? 0,
@@ -59,36 +53,11 @@ export function createMindMapStructureSignature(tree: ZhiJianTree) {
   return JSON.stringify(visit(root));
 }
 
-function mediaSlotHtml(id: string) {
-  return `<div class="mindmap-blocknote-slot mindmap-blocknote-slot-table" data-zhijian-media-node="${escapeHtml(id)}"></div>`;
-}
-
 function contentSlotHtml(id: string) {
   return `<div class="mindmap-node-content-slot" data-zhijian-node-content="${escapeHtml(id)}"></div>`;
 }
 
 export { renderMindMapNode };
-
-function richTextToHtml(content: ZhiJianNode["content"]) {
-  const richText = normalizeRichText(content);
-  const spans = richText.spans?.length ? richText.spans : [{ text: richText.text, marks: richText.marks }];
-  return spans.map((span) => {
-    const style = [
-      span.marks?.bold ? "font-weight:700" : "",
-      span.marks?.italic ? "font-style:italic" : "",
-      span.marks?.underline || span.marks?.strike
-        ? `text-decoration:${[span.marks.underline ? "underline" : "", span.marks.strike ? "line-through" : ""].filter(Boolean).join(" ")}`
-        : "",
-      span.marks?.textColor ? `color:${escapeHtml(span.marks.textColor)}` : "",
-      span.marks?.backgroundColor ? `background:${escapeHtml(span.marks.backgroundColor)}` : "",
-    ].filter(Boolean).join(";");
-    const text = escapeHtml(span.text);
-    const inner = span.marks?.linkUrl
-      ? `<a href="${escapeHtml(span.marks.linkUrl)}" target="_blank" rel="noreferrer">${text}</a>`
-      : text;
-    return `<span style="${style}">${inner}</span>`;
-  }).join("");
-}
 
 function escapeHtml(value: string) {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");

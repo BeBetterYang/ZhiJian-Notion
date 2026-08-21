@@ -1,7 +1,7 @@
 import type { NodeObj } from "mind-elixir";
 import { describe, expect, it } from "vitest";
 import { createInitialTree } from "../core/tree";
-import { createMindMapStructureSignature, renderMindMapNode, treeToMindElixir } from "./mindElixirAdapter";
+import { createMindMapStructureSignature, treeToMindElixir } from "./mindElixirAdapter";
 
 describe("mindElixirAdapter", () => {
   it("projects one domain node with quote and images as one visual node", () => {
@@ -23,7 +23,7 @@ describe("mindElixirAdapter", () => {
     tree.nodes.web.type = "table";
     tree.nodes.web.props = { table: { rows: [[{ content: { text: "单元格" } }]] } };
     const table = (treeToMindElixir(tree).nodeData.children as NodeObj[])[0];
-    expect(table.dangerouslySetInnerHTML).toContain('data-zhijian-media-node="web"');
+    expect(table.dangerouslySetInnerHTML).toContain('data-zhijian-node-content="web"');
     expect(JSON.stringify(table)).not.toContain("单元格");
   });
 
@@ -35,14 +35,14 @@ describe("mindElixirAdapter", () => {
     expect(web.note).toBe("这是描述内容");
   });
 
-  it("renders todo state and rich text", () => {
+  it("projects todo state without embedding renderer HTML", () => {
     const tree = createInitialTree();
     tree.nodes.web.type = "todo";
     tree.nodes.web.props = { checked: true };
     tree.nodes.web.content = { text: "任务", spans: [{ text: "任务", marks: { bold: true } }] };
     const node = (treeToMindElixir(tree).nodeData.children as NodeObj[])[0];
-    expect(renderMindMapNode(node.topic, node)).toContain("mindmap-todo is-checked");
-    expect(renderMindMapNode(node.topic, node)).toContain("font-weight:700");
+    expect(node.metadata).toMatchObject({ type: "todo", checked: true });
+    expect(node.dangerouslySetInnerHTML).toContain('data-zhijian-node-content="web"');
   });
 
   it("does not change visible structure when blocks change", () => {
