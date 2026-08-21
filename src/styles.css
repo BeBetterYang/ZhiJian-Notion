@@ -217,6 +217,23 @@ textarea {
   height: auto;
 }
 
+/* Persistent portal hosts: transparent passthrough wrappers that keep a stable
+   DOM identity across mind.refresh() so embedded editors are not remounted. */
+.mindmap-media-host {
+  display: inline-block;
+  width: max-content;
+  height: auto;
+  overflow: visible;
+  vertical-align: middle;
+  pointer-events: auto;
+}
+
+.mindmap-group-host {
+  display: block;
+  width: max-content;
+  pointer-events: auto;
+}
+
 .mindmap-blocknote-node {
   width: max-content;
   height: auto;

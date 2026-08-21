@@ -132,4 +132,22 @@ describe("TreeStore", () => {
       style: { color: "red" },
     });
   });
+
+  it("keeps media node text content empty on edit and type change", () => {
+    const store = new TreeStore(createInitialTree());
+
+    store.updateType("web", "image");
+    store.updateContent("web", "https://example.com/should-not-persist.png");
+    expect(store.getNode("web")?.content.text).toBe("");
+
+    store.updateType("app", "table");
+    expect(store.getNode("app")?.content.text).toBe("");
+
+    // Converting a text node that had content into an image drops the stale text.
+    store.updateContent("app", "text");
+    store.updateType("app", "text");
+    store.updateContent("app", "残留文本");
+    store.updateType("app", "image");
+    expect(store.getNode("app")?.content.text).toBe("");
+  });
 });

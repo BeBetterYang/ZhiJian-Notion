@@ -35,6 +35,53 @@ export function getCachedImageAssetUrl(assetId: string) {
   return urlsByAssetId.get(assetId) ?? "";
 }
 
+/**
+ * Rebuild the in-memory assetId → object-URL map from IndexedDB. Object URLs do
+ * not survive a page reload, so without this every persisted image would resolve
+ * to an empty URL. Call once, before the editors first render, so
+ * getCachedImageAssetUrl() can resolve assets saved in a previous session.
+ */
+export async function rehydrateImageAssets(): Promise<void> {
+  if (typeof indexedDB === "undefined") {
+    return;
+  }
+  let database: IDBDatabase;
+  try {
+    database = await openDatabase();
+  } catch {
+    return;
+  }
+  try {
+    const entries = await new Promise<Array<{ assetId: IDBValidKey; file: unknown }>>(
+      (resolve, reject) => {
+        const transaction = database.transaction(STORE_NAME, "readonly");
+        const store = transaction.objectStore(STORE_NAME);
+        const keysRequest = store.getAllKeys();
+        const valuesRequest = store.getAll();
+        transaction.oncomplete = () =>
+          resolve(
+            keysRequest.result.map((assetId, index) => ({
+              assetId,
+              file: valuesRequest.result[index],
+            })),
+          );
+        transaction.onerror = () => reject(transaction.error);
+      },
+    );
+    entries.forEach(({ assetId, file }) => {
+      if (typeof assetId === "string" && file instanceof Blob && !urlsByAssetId.has(assetId)) {
+        const url = URL.createObjectURL(file);
+        urlsByAssetId.set(assetId, url);
+        assetIdsByUrl.set(url, assetId);
+      }
+    });
+  } catch {
+    // Ignore rehydration failures; affected images simply stay unavailable.
+  } finally {
+    database.close();
+  }
+}
+
 function openDatabase() {
   return new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DATABASE_NAME, 1);

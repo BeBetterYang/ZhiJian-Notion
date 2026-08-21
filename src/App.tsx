@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createInitialTree } from "./core/tree";
-import { TreeStore } from "./core/treeStore";
+import { TreeStore, attachTreePersistence, loadPersistedTree } from "./core/treeStore";
 import { useTree } from "./core/treeStore/useTree";
 import { MindMapEditor } from "./mindmap/MindMapEditor";
 import type { MindMapTextSelection } from "./mindmap/MindMapEditor";
@@ -8,7 +8,8 @@ import { OutlineEditor } from "./outline/OutlineEditor";
 import "./styles.css";
 
 export default function App() {
-  const store = useMemo(() => new TreeStore(createInitialTree()), []);
+  const store = useMemo(() => new TreeStore(loadPersistedTree() ?? createInitialTree()), []);
+  useEffect(() => attachTreePersistence(store), [store]);
   const tree = useTree(store);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectionActive, setSelectionActive] = useState(false);

@@ -64,7 +64,7 @@ export class TreeStore {
   updateContent(id: string, content: string | RichTextContent) {
     this.commit((draft) => {
       const node = this.requireDraftNode(draft, id);
-      node.content = node.type === "table" ? plainTextContent("") : normalizeRichText(content);
+      node.content = isMediaType(node.type) ? plainTextContent("") : normalizeRichText(content);
       draft.nodes[id] = touchNode(node);
     });
   }
@@ -96,7 +96,7 @@ export class TreeStore {
           ? { image: image ?? { previewWidth: 480, showPreview: true } }
           : undefined),
       };
-      if (type === "table") {
+      if (isMediaType(type)) {
         node.content = plainTextContent("");
       }
       draft.nodes[id] = touchNode(node);
@@ -368,6 +368,13 @@ function createDefaultTable() {
       Array.from({ length: 3 }, () => ({ content: plainTextContent("") })),
     ),
   };
+}
+
+// Media nodes carry their payload in props (props.table / props.image); their
+// text content is always empty so no stale text lingers when a node is edited
+// or converted between types.
+function isMediaType(type: ZhiJianNodeType) {
+  return type === "table" || type === "image";
 }
 
 function createId() {

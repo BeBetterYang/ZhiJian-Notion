@@ -238,6 +238,15 @@ function MindMapTextGroupEditor({
       if (handleTreeHistoryKeyDown(event, store)) {
         return;
       }
+      // A plain Enter would split the projected block into an orphan block that
+      // is not backed by any node; the next projection then wipes it, which reads
+      // as "Enter does nothing / content jumps back". Keep Shift+Enter for soft
+      // line breaks inside the node's own content.
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       if (event.key !== "Backspace" && event.key !== "Delete") {
         return;
       }

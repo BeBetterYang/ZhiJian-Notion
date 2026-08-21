@@ -13,6 +13,7 @@ import {
 import { applyMindElixirOperation } from "./mindElixirCommands";
 import { MindMapMediaBlock } from "./MindMapMediaBlock";
 import { MindMapNodeGroupBlock } from "./MindMapNodeGroupBlock";
+import { textOffset } from "../outline/mindMapTextSelection";
 
 interface MindMapEditorProps {
   store: TreeStore;
@@ -53,7 +54,15 @@ export function MindMapEditor({
   const onSelectNodeRef = useRef(onSelectNode);
   const onSelectionActiveChangeRef = useRef(onSelectionActiveChange);
   const onTextSelectionChangeRef = useRef(onTextSelectionChange);
-  const [mediaTargets, setMediaTargets] = useState<Array<{ id: string; element: HTMLElement }>>(
+  const selectedNodeIdRef = useRef(selectedNodeId);
+  // Portals mount into these persistent per-node host elements rather than into
+  // mind-elixir's slot DOM directly. mind.refresh() rebuilds the slots on every
+  // structural change; re-parenting a stable host into the new slot keeps the
+  // portal's container identity constant, so the BlockNote editors are NOT
+  // remounted and keep their focus, caret, and in-flight edit state.
+  const mediaHosts = useRef(new Map<string, HTMLDivElement>());
+  const groupHosts = useRef(new Map<string, HTMLDivElement>());
+  const [mediaTargets, setMediaTargets] = useState<Array<{ id: string; host: HTMLElement }>>(
     [],
   );
   const [groupTargets, setGroupTargets] = useState<
@@ -61,39 +70,58 @@ export function MindMapEditor({
       primaryId: string;
       quoteId?: string;
       imageIds: string[];
-      element: HTMLElement;
+      host: HTMLElement;
     }>
   >([]);
 
   const collectMediaTargets = useCallback(() => {
-    const elements = Array.from(
-      containerRef.current?.querySelectorAll<HTMLElement>("[data-zhijian-media-node]") ?? [],
+    const container = containerRef.current;
+    const mediaSlots = Array.from(
+      container?.querySelectorAll<HTMLElement>("[data-zhijian-media-node]") ?? [],
     );
-    setMediaTargets(
-      elements.flatMap((element) => {
-        const id = element.dataset.zhijianMediaNode;
-        return id ? [{ id, element }] : [];
-      }),
+    const nextMedia = mediaSlots.flatMap((slot) => {
+      const id = slot.dataset.zhijianMediaNode;
+      if (!id) {
+        return [];
+      }
+      const host = ensureHost(mediaHosts.current, id, "mindmap-media-host");
+      if (host.parentElement !== slot) {
+        slot.appendChild(host);
+      }
+      return [{ id, host }];
+    });
+    pruneHosts(
+      mediaHosts.current,
+      nextMedia.map((target) => target.id),
     );
-    const groupElements = Array.from(
-      containerRef.current?.querySelectorAll<HTMLElement>("[data-zhijian-group-primary]") ?? [],
+    setMediaTargets(nextMedia);
+
+    const groupSlots = Array.from(
+      container?.querySelectorAll<HTMLElement>("[data-zhijian-group-primary]") ?? [],
     );
-    setGroupTargets(
-      groupElements.flatMap((element) => {
-        const primaryId = element.dataset.zhijianGroupPrimary;
-        if (!primaryId) {
-          return [];
-        }
-        return [
-          {
-            primaryId,
-            quoteId: element.dataset.zhijianGroupQuote || undefined,
-            imageIds: (element.dataset.zhijianGroupImages ?? "").split(",").filter(Boolean),
-            element,
-          },
-        ];
-      }),
+    const nextGroups = groupSlots.flatMap((slot) => {
+      const primaryId = slot.dataset.zhijianGroupPrimary;
+      if (!primaryId) {
+        return [];
+      }
+      const host = ensureHost(groupHosts.current, primaryId, "mindmap-group-host");
+      if (host.parentElement !== slot) {
+        slot.appendChild(host);
+      }
+      return [
+        {
+          primaryId,
+          quoteId: slot.dataset.zhijianGroupQuote || undefined,
+          imageIds: (slot.dataset.zhijianGroupImages ?? "").split(",").filter(Boolean),
+          host,
+        },
+      ];
+    });
+    pruneHosts(
+      groupHosts.current,
+      nextGroups.map((target) => target.primaryId),
     );
+    setGroupTargets(nextGroups);
   }, []);
 
   useEffect(() => {
@@ -101,7 +129,8 @@ export function MindMapEditor({
     onSelectNodeRef.current = onSelectNode;
     onSelectionActiveChangeRef.current = onSelectionActiveChange;
     onTextSelectionChangeRef.current = onTextSelectionChange;
-  }, [onSelectNode, onSelectionActiveChange, onTextSelectionChange, store]);
+    selectedNodeIdRef.current = selectedNodeId;
+  }, [onSelectNode, onSelectionActiveChange, onTextSelectionChange, selectedNodeId, store]);
 
   useEffect(() => {
     if (!containerRef.current || mindRef.current) {
@@ -271,7 +300,7 @@ export function MindMapEditor({
     suppressOperation.current = true;
     mind.refresh(nextData);
     mind.clearHistory?.();
-    const nodeIdToRestore = selectedNodeId ?? lastSelectedNodeId.current;
+    const nodeIdToRestore = selectedNodeIdRef.current ?? lastSelectedNodeId.current;
     const refreshTimer = window.setTimeout(() => {
       if (mindRef.current !== mind || !mind.nodes?.isConnected) {
         return;
@@ -293,7 +322,7 @@ export function MindMapEditor({
     }, 0);
 
     return () => window.clearTimeout(refreshTimer);
-  }, [collectMediaTargets, selectedNodeId, tree]);
+  }, [collectMediaTargets, tree]);
 
   useEffect(() => {
     const mind = mindRef.current;
@@ -330,8 +359,8 @@ export function MindMapEditor({
   useEffect(() => {
     const mind = mindRef.current;
     const observedTargets = [
-      ...mediaTargets.map(({ element }) => element),
-      ...groupTargets.map(({ element }) => element),
+      ...mediaTargets.map(({ host }) => host),
+      ...groupTargets.map(({ host }) => host),
     ];
     if (!mind || observedTargets.length === 0) {
       return;
@@ -369,7 +398,7 @@ export function MindMapEditor({
   return (
     <>
       <div className="mindmap-canvas" ref={containerRef} />
-      {mediaTargets.map(({ id, element }) => {
+      {mediaTargets.map(({ id, host }) => {
         const node = tree.nodes[id];
         return node
           ? createPortal(
@@ -381,12 +410,12 @@ export function MindMapEditor({
                 toolbarTarget={toolbarTarget}
                 onSelect={handlePortalSelect}
               />,
-              element,
+              host,
               id,
             )
           : null;
       })}
-      {groupTargets.map(({ primaryId, quoteId, imageIds, element }) => {
+      {groupTargets.map(({ primaryId, quoteId, imageIds, host }) => {
         const primary = tree.nodes[primaryId];
         if (!primary) {
           return null;
@@ -404,12 +433,35 @@ export function MindMapEditor({
             onFocusRequestHandled={onFocusRequestHandled}
             onDeleteEmptyQuote={handleDeleteEmptyQuote}
           />,
-          element,
+          host,
           `group-${primaryId}`,
         );
       })}
     </>
   );
+}
+
+function ensureHost(
+  hosts: Map<string, HTMLDivElement>,
+  id: string,
+  className: string,
+) {
+  let host = hosts.get(id);
+  if (!host) {
+    host = document.createElement("div");
+    host.className = className;
+    hosts.set(id, host);
+  }
+  return host;
+}
+
+function pruneHosts(hosts: Map<string, HTMLDivElement>, activeIds: string[]) {
+  const active = new Set(activeIds);
+  for (const id of Array.from(hosts.keys())) {
+    if (!active.has(id)) {
+      hosts.delete(id);
+    }
+  }
 }
 
 function updateMindMapNodesInPlace(mind: MindElixir, root: import("mind-elixir").NodeObj) {
@@ -453,11 +505,4 @@ function updateMindMapNodesInPlace(mind: MindElixir, root: import("mind-elixir")
   visit(root);
   mind.linkDiv();
   return mountTargetsChanged;
-}
-
-function textOffset(root: HTMLElement, node: Node, offset: number) {
-  const range = document.createRange();
-  range.selectNodeContents(root);
-  range.setEnd(node, offset);
-  return range.toString().length;
 }

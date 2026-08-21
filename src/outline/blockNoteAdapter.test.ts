@@ -226,6 +226,81 @@ describe("blockNoteAdapter styles", () => {
   });
 });
 
+describe("blockNoteAdapter round-trip stability", () => {
+  // The outline seam (OutlineEditor onChange -> store.replaceTreeFromView) only
+  // overwrites the whole tree when blockProjectionSignature(nextTree) differs
+  // from the current tree. That guard is only safe if projecting a tree to
+  // BlockNote and parsing it straight back is a fixpoint: otherwise every editor
+  // settle would report a phantom change, overwrite untouched nodes, and loop.
+  it("reaches a projection fixpoint after one round-trip across every node type", () => {
+    const tree = createInitialTree();
+    tree.nodes.root.content = {
+      text: "产品规划",
+      spans: [{ text: "产品", marks: { bold: true } }, { text: "规划" }],
+    };
+    tree.nodes.web.type = "heading";
+    tree.nodes.web.props = { headingLevel: 2 };
+    tree.nodes.app.type = "todo";
+    tree.nodes.app.props = { checked: true };
+    tree.nodes.root.children.push("quote", "table", "image");
+    tree.nodes.quote = {
+      id: "quote",
+      parentId: "root",
+      children: [],
+      type: "quote",
+      content: { text: "引用当前节点" },
+    };
+    tree.nodes.table = {
+      id: "table",
+      parentId: "root",
+      children: [],
+      type: "table",
+      content: { text: "" },
+      props: {
+        table: {
+          rows: [
+            [{ content: { text: "甲" } }, { content: { text: "乙" } }],
+            [{ content: { text: "丙" } }, { content: { text: "丁" } }],
+          ],
+          columnWidths: [120, 160],
+          headerRows: 1,
+        },
+      },
+    };
+    tree.nodes.image = {
+      id: "image",
+      parentId: "root",
+      children: [],
+      type: "image",
+      content: { text: "" },
+      props: {
+        image: {
+          url: "data:image/png;base64,abc",
+          name: "规划图",
+          caption: "说明",
+          previewWidth: 360,
+          showPreview: true,
+        },
+      },
+    };
+
+    const projected = treeToBlockNote(tree) as unknown as Block[];
+    const parsed = blockNoteToTree(projected, tree)!;
+
+    // Structure is preserved verbatim: no node dropped, reordered, or reparented.
+    expect(parsed.rootId).toBe(tree.rootId);
+    expect(Object.keys(parsed.nodes).sort()).toEqual(Object.keys(tree.nodes).sort());
+    expect(parsed.nodes.root.children).toEqual(tree.nodes.root.children);
+
+    // The signature the seam compares is unchanged, so no spurious overwrite fires.
+    expect(signature(parsed)).toBe(signature(tree));
+  });
+});
+
+function signature(tree: ZhiJianTree) {
+  return JSON.stringify(treeToBlockNote(tree));
+}
+
 function block(id: string, text: string, styles: Record<string, unknown>): Block {
   return {
     id,
