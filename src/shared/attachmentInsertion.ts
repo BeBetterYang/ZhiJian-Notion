@@ -11,12 +11,8 @@ type Editor<BS extends BlockSchema, IS extends InlineContentSchema, SS extends S
 export function nodeInsertionReference<BS extends BlockSchema, IS extends InlineContentSchema, SS extends StyleSchema>(
   editor: Editor<BS, IS, SS>, selectedBlockId: string,
 ) {
-  let block = editor.getBlock(selectedBlockId);
-  while (block) {
-    const parent = editor.getParentBlock(block.id);
-    if (!parent) return block;
-    block = parent;
-  }
+  // Return the selected block itself — attachments go into its children.
+  // If it's already a child of another block, we still attach here (nested case).
   return editor.getBlock(selectedBlockId);
 }
 
@@ -27,6 +23,7 @@ export function insertNodeAttachmentBlocks<BS extends BlockSchema, IS extends In
 ) {
   const reference = nodeInsertionReference(editor, selectedBlockId);
   if (!reference) return [];
+
   const owner = reference.type === "table"
     ? editor.insertBlocks(
       [{ type: "paragraph", content: "" }] as unknown as Parameters<Editor<BS, IS, SS>["insertBlocks"]>[0],
@@ -34,6 +31,7 @@ export function insertNodeAttachmentBlocks<BS extends BlockSchema, IS extends In
       "after",
     )[0]
     : reference;
+
   if (!owner) return [];
   const next = editor.updateBlock(owner, {
     children: [...owner.children, ...blocks] as unknown as Parameters<Editor<BS, IS, SS>["updateBlock"]>[1]["children"],

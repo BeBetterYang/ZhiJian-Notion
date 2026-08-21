@@ -33,6 +33,18 @@ describe("blockNoteAdapter", () => {
     expect(parsed.nodes.root.children).toEqual([]);
   });
 
+  it("projects and restores description with quote styling", () => {
+    const tree = createInitialTree();
+    tree.nodes.web.description = { text: "这是描述内容" };
+    const [projected] = treeToBlockNote(tree);
+    const web = projected.children?.[0] as Block;
+    expect(web.children?.[0].type).toBe("quote");
+    expect(web.children?.[0].id).toBe("web::description");
+    const parsed = blockNoteToTree([projected as Block], tree)!;
+    expect(parsed.nodes.web.description?.text).toBe("这是描述内容");
+    expect(parsed.nodes.web.blocks).toBeUndefined();
+  });
+
   it("keeps table data in an exclusive table node", () => {
     const table = {
       id: "table", type: "table", props: {},

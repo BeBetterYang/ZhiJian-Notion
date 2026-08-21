@@ -1,4 +1,4 @@
-import type { ZhiJianNode, ZhiJianTree } from "./types";
+import type { ZhiJianNode, ZhiJianNodeBlock, ZhiJianTree } from "./types";
 import { normalizeRichText, plainTextContent } from "./richText";
 
 export function cloneTree(tree: ZhiJianTree): ZhiJianTree {
@@ -16,9 +16,16 @@ export function cloneNode(node: ZhiJianNode): ZhiJianNode {
     children: [...node.children],
     content: normalizeRichText(node.content),
     description: node.description ? normalizeRichText(node.description) : undefined,
+    blocks: node.blocks?.map(cloneNodeBlock),
     props: node.props ? { ...node.props } : undefined,
     meta: node.meta ? { ...node.meta } : undefined,
   };
+}
+
+function cloneNodeBlock(block: ZhiJianNodeBlock): ZhiJianNodeBlock {
+  return block.type === "quote"
+    ? { ...block, content: normalizeRichText(block.content) }
+    : { ...block, image: { ...block.image } };
 }
 
 export function nowMeta() {

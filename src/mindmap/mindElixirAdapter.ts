@@ -15,7 +15,7 @@ export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
     const style = getNodeStyle(node.props?.style);
     const marks = firstMarks(node.content);
     const topic = node.type === "table" ? "表格" : richTextToPlainText(node.content) || " ";
-    const hasContentBlocks = Boolean(node.blocks?.length);
+    const hasContentBlocks = Boolean(node.blocks?.length || node.description);
     return {
       id: node.id,
       topic,

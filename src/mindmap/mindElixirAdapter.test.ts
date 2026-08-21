@@ -27,6 +27,14 @@ describe("mindElixirAdapter", () => {
     expect(JSON.stringify(table)).not.toContain("单元格");
   });
 
+  it("mounts described nodes for inline quote-style editing", () => {
+    const tree = createInitialTree();
+    tree.nodes.web.description = { text: "这是描述内容" };
+    const web = (treeToMindElixir(tree).nodeData.children as NodeObj[])[0];
+    expect(web.dangerouslySetInnerHTML).toContain('data-zhijian-node-content="web"');
+    expect(web.note).toBe("这是描述内容");
+  });
+
   it("renders todo state and rich text", () => {
     const tree = createInitialTree();
     tree.nodes.web.type = "todo";

@@ -27,6 +27,7 @@ function visitNode(tree: ZhiJianTree, id: string): PartialBlock {
     props: toBlockNoteProps(node),
     content: toBlockNoteContent(node),
     children: [
+      ...(node.description ? [descriptionToPartialBlock(node)] : []),
       ...(node.blocks ?? []).map(blockToPartialBlock),
       ...node.children.map((childId) => visitNode(tree, childId)),
     ],
@@ -43,14 +44,23 @@ export function blockNoteToTree(blocks: Block[], previousTree?: ZhiJianTree): Zh
   const visit = (block: Block, parentId: string | null) => {
     const type = fromBlockNoteType(block.type);
     const previous = previousTree?.nodes[block.id];
-    const attachmentBlocks = block.children.filter(isAttachmentBlock);
-    const childBlocks = block.children.filter((child) => !isAttachmentBlock(child));
+    const descriptionBlock = block.children.find(
+      (child) => child.id === descriptionBlockId(block.id) && child.type === "quote",
+    );
+    const attachmentBlocks = block.children.filter(
+      (child) => isAttachmentBlock(child) && child.id !== descriptionBlockId(block.id),
+    );
+    const childBlocks = block.children.filter(
+      (child) => !isAttachmentBlock(child) || child.id === descriptionBlockId(block.id),
+    ).filter((child) => child.id !== descriptionBlockId(block.id));
     nodes[block.id] = {
       id: block.id,
       parentId,
       children: childBlocks.map((child) => child.id),
       content: contentFromBlock(type, block),
-      description: previous?.description,
+      description: descriptionBlock
+        ? blockNoteContentToRichText(descriptionBlock.content)
+        : previous?.description,
       type,
       blocks: attachmentBlocks.length
         ? attachmentBlocks.map(blockToNodeBlock)
@@ -178,6 +188,18 @@ function blockToPartialBlock(block: ZhiJianNodeBlock): PartialBlock {
       showPreview: image.showPreview ?? true,
     },
   } as PartialBlock;
+}
+
+function descriptionToPartialBlock(node: ZhiJianNode): PartialBlock {
+  return {
+    id: descriptionBlockId(node.id),
+    type: "quote",
+    content: richTextToBlockNoteInline(node.description ?? { text: "" }),
+  } as PartialBlock;
+}
+
+function descriptionBlockId(nodeId: string) {
+  return `${nodeId}::description`;
 }
 
 function blockToNodeBlock(block: Block): ZhiJianNodeBlock {
