@@ -260,6 +260,15 @@ textarea {
   display: none;
 }
 
+.outline-panel
+  .bn-editor
+  > .bn-block-group
+  > .bn-block-outer:first-child
+  > .bn-block
+  > .bn-block-group {
+  margin-left: 0;
+}
+
 /* Keep BlockNote's native drag events, but place its transparent hit area on
    top of the persistent node marker. */
 .outline-panel .bn-side-menu {
