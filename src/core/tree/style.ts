@@ -7,7 +7,6 @@ export interface NodeVisualStyle {
   color?: string;
   backgroundColor?: string;
   linkUrl?: string;
-  imageUrl?: string;
 }
 
 export function getNodeStyle(style?: object): NodeVisualStyle {

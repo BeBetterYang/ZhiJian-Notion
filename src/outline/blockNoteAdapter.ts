@@ -44,6 +44,7 @@ export function blockNoteToTree(blocks: Block[], previousTree?: ZhiJianTree): Zh
     const children = childBlocks.map((child) => child.id);
     const blockProps = block.props as Record<string, unknown>;
     const blockContent = contentFromBlock(type, block);
+    const previousProps = previous?.props;
     nodes[block.id] = {
       id: block.id,
       parentId,
@@ -52,13 +53,21 @@ export function blockNoteToTree(blocks: Block[], previousTree?: ZhiJianTree): Zh
       description: previous?.description,
       type,
       props: {
-        ...previous?.props,
-        checked: typeof blockProps.checked === "boolean" ? blockProps.checked : previous?.props?.checked,
-        headingLevel:
-          type === "heading" ? normalizeHeadingLevel(blockProps.level) : previous?.props?.headingLevel,
-        table: type === "table" ? tableDataFromBlock(block) : previous?.props?.table,
-        image: type === "image" ? imageDataFromBlock(block) : previous?.props?.image,
-        style: getNodeStyle(previous?.props?.style),
+        collapsed: previousProps?.collapsed,
+        ...(type === "todo"
+          ? {
+              checked:
+                typeof blockProps.checked === "boolean"
+                  ? blockProps.checked
+                  : previousProps?.checked ?? false,
+            }
+          : undefined),
+        ...(type === "heading"
+          ? { headingLevel: normalizeHeadingLevel(blockProps.level) }
+          : undefined),
+        ...(type === "table" ? { table: tableDataFromBlock(block) } : undefined),
+        ...(type === "image" ? { image: imageDataFromBlock(block) } : undefined),
+        style: getNodeStyle(previousProps?.style),
       },
       meta: previous?.meta ?? {
         createdAt: Date.now(),
@@ -111,7 +120,6 @@ function fromBlockNoteType(type: string): ZhiJianNodeType {
 }
 
 function toBlockNoteProps(node: ZhiJianNode) {
-  const style = getNodeStyle(node.props?.style);
   if (node.type === "heading") {
     return { level: node.props?.headingLevel ?? 1, isToggleable: false };
   }
@@ -122,9 +130,7 @@ function toBlockNoteProps(node: ZhiJianNode) {
     const image = node.props?.image;
     return {
       url:
-        (image?.assetId ? getCachedImageAssetUrl(image.assetId) : image?.url) ??
-        style.imageUrl ??
-        richTextToPlainText(node.content),
+        (image?.assetId ? getCachedImageAssetUrl(image.assetId) : image?.url) ?? "",
       name: image?.name ?? "图片",
       caption:
         image?.caption ?? (node.description ? richTextToPlainText(node.description) : ""),

@@ -1,7 +1,7 @@
 import type { Block } from "@blocknote/core";
 import { describe, expect, it } from "vitest";
 import { blockNoteToTree, treeToBlockNote } from "./blockNoteAdapter";
-import type { ZhiJianTree } from "../core/tree";
+import { createInitialTree, type ZhiJianTree } from "../core/tree";
 
 describe("blockNoteAdapter styles", () => {
   it("extracts BlockNote text styles into ZhiJianTree node style", () => {
@@ -137,6 +137,29 @@ describe("blockNoteAdapter styles", () => {
     });
   });
 
+  it("does not restore an image URL from text or legacy visual style", () => {
+    const tree: ZhiJianTree = {
+      rootId: "image",
+      nodes: {
+        image: {
+          id: "image",
+          parentId: null,
+          children: [],
+          content: { text: "https://example.com/legacy.png" },
+          type: "image",
+          props: {
+            image: { name: "独立图片" },
+            style: { imageUrl: "https://example.com/style.png" },
+          },
+        },
+      },
+    };
+
+    const [projected] = treeToBlockNote(tree);
+
+    expect(projected.props).toMatchObject({ url: "", name: "独立图片" });
+  });
+
   it("round-trips a quote as a dedicated node type", () => {
     const quoteBlock = {
       id: "quote",
@@ -153,6 +176,27 @@ describe("blockNoteAdapter styles", () => {
     const [projected] = treeToBlockNote(tree);
     expect(projected.type).toBe("quote");
     expect(projected.content).toEqual("引用当前节点");
+  });
+
+  it("does not retain media or Todo state after a block type change", () => {
+    const previous = createInitialTree();
+    previous.nodes.web.type = "image";
+    previous.nodes.web.props = {
+      image: { url: "asset:image" },
+      table: { rows: [[{ content: { text: "旧表格" } }]] },
+      checked: true,
+      headingLevel: 3,
+      collapsed: true,
+      style: { color: "red" },
+    };
+
+    const tree = blockNoteToTree([block("web", "正文", {})], previous)!;
+
+    expect(tree.nodes.web.type).toBe("text");
+    expect(tree.nodes.web.props).toEqual({
+      collapsed: true,
+      style: expect.objectContaining({ color: "red" }),
+    });
   });
 
   it("normalizes additional top-level blocks into root children", () => {

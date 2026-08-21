@@ -7,6 +7,7 @@ import type { TreeStore } from "../core/treeStore";
 import { blockNoteToTree, treeToBlockNote } from "../outline/blockNoteAdapter";
 import { ZhiJianFormattingToolbar } from "../shared/ZhiJianFormattingToolbar";
 import { zhijianDictionary } from "../shared/zhijianDictionary";
+import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 import { MindMapMediaBlock } from "./MindMapMediaBlock";
 
 interface MindMapNodeGroupBlockProps {
@@ -234,6 +235,9 @@ function MindMapTextGroupEditor({
     };
     const stopMindMapPointerHandling = (event: Event) => event.stopPropagation();
     const preserveGroupBlocks = (event: KeyboardEvent) => {
+      if (handleTreeHistoryKeyDown(event, store)) {
+        return;
+      }
       if (event.key !== "Backspace" && event.key !== "Delete") {
         return;
       }
@@ -298,6 +302,7 @@ function MindMapTextGroupEditor({
     onDeleteEmptyQuote,
     onSelect,
     selected,
+    store,
   ]);
 
   return (

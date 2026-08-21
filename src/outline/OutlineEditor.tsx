@@ -14,6 +14,7 @@ import type { MindMapTextSelection } from "../mindmap/MindMapEditor";
 import { resolveMindMapTextRange } from "./mindMapTextSelection";
 import { saveImageAsset } from "../shared/imageAssetStore";
 import { zhijianDictionary } from "../shared/zhijianDictionary";
+import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 
 interface OutlineEditorProps {
   store: TreeStore;
@@ -119,17 +120,7 @@ export function OutlineEditor({
     <section
       className="outline-panel"
       onKeyDownCapture={(event) => {
-        const isUndo = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z";
-        if (!isUndo) {
-          return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-        if (event.shiftKey) {
-          store.redo();
-        } else {
-          store.undo();
-        }
+        handleTreeHistoryKeyDown(event.nativeEvent, store);
       }}
     >
       {editorView}

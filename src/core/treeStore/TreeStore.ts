@@ -85,19 +85,19 @@ export class TreeStore {
   updateType(id: string, type: ZhiJianNodeType) {
     this.commit((draft) => {
       const node = this.requireDraftNode(draft, id);
+      const { checked, headingLevel, image, table, ...sharedProps } = node.props ?? {};
       node.type = type;
+      node.props = {
+        ...sharedProps,
+        ...(type === "todo" ? { checked: checked ?? false } : undefined),
+        ...(type === "heading" ? { headingLevel: headingLevel ?? 1 } : undefined),
+        ...(type === "table" ? { table: table ?? createDefaultTable() } : undefined),
+        ...(type === "image"
+          ? { image: image ?? { previewWidth: 480, showPreview: true } }
+          : undefined),
+      };
       if (type === "table") {
         node.content = plainTextContent("");
-        node.props = {
-          ...node.props,
-          table: node.props?.table ?? createDefaultTable(),
-        };
-      }
-      if (type === "heading") {
-        node.props = {
-          ...node.props,
-          headingLevel: node.props?.headingLevel ?? 1,
-        };
       }
       draft.nodes[id] = touchNode(node);
     });

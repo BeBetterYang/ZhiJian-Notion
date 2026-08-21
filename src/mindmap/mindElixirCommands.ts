@@ -1,5 +1,5 @@
 import type { NodeObj, Operation } from "mind-elixir";
-import { firstMarks, plainTextContent } from "../core/tree";
+import { plainTextContent, replaceRichTextPlainText, richTextToPlainText } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
 
 export function applyMindElixirOperation(operation: Operation, store: TreeStore) {
@@ -39,10 +39,10 @@ function updateNodeText(obj: NodeObj, store: TreeStore) {
   if (!current) {
     return;
   }
-  store.updateContent(obj.id, {
-    text: obj.topic,
-    marks: firstMarks(current.content),
-  });
+  if (richTextToPlainText(current.content) === obj.topic) {
+    return;
+  }
+  store.updateContent(obj.id, replaceRichTextPlainText(current.content, obj.topic));
 }
 
 function createNodeFromMind(obj: NodeObj, store: TreeStore) {

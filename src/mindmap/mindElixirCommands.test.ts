@@ -38,6 +38,32 @@ describe("applyMindElixirOperation", () => {
     expect(store.getNode("web")?.content.text).toBe("新引用");
   });
 
+  it("preserves unaffected rich text spans during native text editing", () => {
+    const tree = createInitialTree();
+    tree.nodes.web.content = {
+      text: "Web端",
+      spans: [
+        { text: "Web", marks: { bold: true, textColor: "blue" } },
+        { text: "端", marks: { italic: true } },
+      ],
+    };
+    const store = new TreeStore(tree);
+
+    applyMindElixirOperation(
+      {
+        name: "finishEdit",
+        obj: node("web", "Web新版端"),
+        origin: "Web端",
+      },
+      store,
+    );
+
+    expect(store.getNode("web")?.content.spans).toEqual([
+      { text: "Web新版", marks: { bold: true, textColor: "blue" } },
+      { text: "端", marks: { italic: true } },
+    ]);
+  });
+
   it("creates child nodes from MindElixir addChild operation", () => {
     const store = new TreeStore(createInitialTree());
     const parent = node("web", "Web端");

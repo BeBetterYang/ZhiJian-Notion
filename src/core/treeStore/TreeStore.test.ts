@@ -111,4 +111,25 @@ describe("TreeStore", () => {
     expect(store.getNode("web")?.props?.table?.rows).toHaveLength(2);
     expect(store.getNode("web")?.props?.table?.rows[0]).toHaveLength(3);
   });
+
+  it("clears type-specific state when changing node type", () => {
+    const tree = createInitialTree();
+    tree.nodes.web.type = "image";
+    tree.nodes.web.props = {
+      checked: true,
+      headingLevel: 3,
+      image: { url: "asset:image", previewWidth: 320 },
+      table: { rows: [[{ content: { text: "旧表格" } }]] },
+      collapsed: true,
+      style: { color: "red" },
+    };
+    const store = new TreeStore(tree);
+
+    store.updateType("web", "text");
+
+    expect(store.getNode("web")?.props).toEqual({
+      collapsed: true,
+      style: { color: "red" },
+    });
+  });
 });

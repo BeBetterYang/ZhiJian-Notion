@@ -8,6 +8,7 @@ import { blockNoteToTree, treeToBlockNote } from "../outline/blockNoteAdapter";
 import { ZhiJianFormattingToolbar } from "../shared/ZhiJianFormattingToolbar";
 import { saveImageAsset } from "../shared/imageAssetStore";
 import { zhijianDictionary } from "../shared/zhijianDictionary";
+import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 
 interface MindMapMediaBlockProps {
   node: ZhiJianNode;
@@ -72,12 +73,16 @@ export function MindMapMediaBlock({
       });
     };
     const editOnDoubleClick = (event: Event) => beginMediaEdit(event, true);
+    const useUnifiedHistory = (event: KeyboardEvent) => {
+      handleTreeHistoryKeyDown(event, store);
+    };
     const stopMindMapKeyboardHandling = (event: Event) => event.stopPropagation();
     const stopMindMapWheel = (event: Event) => event.stopPropagation();
     container.addEventListener("pointerdown", beginMediaEdit);
     container.addEventListener("mousedown", selectMediaBlock);
     container.addEventListener("click", selectMediaBlock);
     container.addEventListener("dblclick", editOnDoubleClick);
+    container.addEventListener("keydown", useUnifiedHistory, true);
     container.addEventListener("keydown", stopMindMapKeyboardHandling);
     container.addEventListener("wheel", stopMindMapWheel);
     return () => {
@@ -85,10 +90,11 @@ export function MindMapMediaBlock({
       container.removeEventListener("mousedown", selectMediaBlock);
       container.removeEventListener("click", selectMediaBlock);
       container.removeEventListener("dblclick", editOnDoubleClick);
+      container.removeEventListener("keydown", useUnifiedHistory, true);
       container.removeEventListener("keydown", stopMindMapKeyboardHandling);
       container.removeEventListener("wheel", stopMindMapWheel);
     };
-  }, [editor, node.id, onSelect, selected]);
+  }, [editor, node.id, onSelect, selected, store]);
 
   useEffect(() => {
     const projected = treeToBlockNote(singleNodeTree(node));
@@ -119,6 +125,10 @@ export function MindMapMediaBlock({
         formattingToolbar={false}
         onChange={() => {
           if (applyingExternalChange.current) {
+            return;
+          }
+          if (!editor.getBlock(node.id)) {
+            store.deleteNode(node.id);
             return;
           }
           const parsed = blockNoteToTree(editor.document, singleNodeTree(node));
