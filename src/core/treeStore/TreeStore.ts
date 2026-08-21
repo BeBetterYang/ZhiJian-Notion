@@ -86,6 +86,9 @@ export class TreeStore {
   }
 
   updateType(id: string, type: ZhiJianNodeType) {
+    if (id === this.tree.rootId) {
+      return;
+    }
     this.commit((draft) => {
       const node = this.requireDraftNode(draft, id);
       const { checked, headingLevel, table, ...sharedProps } = node.props ?? {};
@@ -109,7 +112,15 @@ export class TreeStore {
   updateProps(id: string, props: NonNullable<ZhiJianNode["props"]>) {
     this.commit((draft) => {
       const node = this.requireDraftNode(draft, id);
-      node.props = { ...node.props, ...props };
+      if (id === this.tree.rootId) {
+        const rootProps = { ...props };
+        delete rootProps.style;
+        delete rootProps.checked;
+        delete rootProps.table;
+        node.props = { ...node.props, ...rootProps, headingLevel: 1 };
+      } else {
+        node.props = { ...node.props, ...props };
+      }
       draft.nodes[id] = touchNode(node);
     });
   }
@@ -200,6 +211,9 @@ export class TreeStore {
   }
 
   updateStyle(id: string, style: NodeVisualStyle) {
+    if (id === this.tree.rootId) {
+      return;
+    }
     this.commit((draft) => {
       const node = this.requireDraftNode(draft, id);
       node.props = {
@@ -217,6 +231,11 @@ export class TreeStore {
     this.commit((draft) => {
       draft.rootId = nextTree.rootId;
       draft.nodes = cloneTree(nextTree).nodes;
+      const root = draft.nodes[draft.rootId];
+      if (root) {
+        root.type = "heading";
+        root.props = { headingLevel: 1 };
+      }
     });
   }
 

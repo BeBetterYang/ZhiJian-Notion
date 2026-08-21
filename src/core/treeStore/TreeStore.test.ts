@@ -63,4 +63,21 @@ describe("TreeStore", () => {
     expect(store.getNode("web")?.props?.table).toBeUndefined();
     expect(store.getNode("web")?.props?.checked).toBe(false);
   });
+
+  it("protects the single root heading from deletion and style changes", () => {
+    const store = new TreeStore(createInitialTree());
+    store.updateType("root", "todo");
+    store.updateStyle("root", { color: "red", fontSize: "40px" });
+    store.updateProps("root", { style: { color: "red" }, headingLevel: 3 });
+    store.deleteNode("root");
+    expect(store.getNode("root")?.type).toBe("heading");
+    expect(store.getNode("root")?.props).toEqual({ headingLevel: 1 });
+
+    const next = createInitialTree();
+    next.nodes.root.type = "text";
+    next.nodes.root.props = { style: { color: "red" } };
+    store.replaceTreeFromView(next);
+    expect(store.getNode("root")?.type).toBe("heading");
+    expect(store.getNode("root")?.props).toEqual({ headingLevel: 1 });
+  });
 });

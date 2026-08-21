@@ -50,8 +50,8 @@ function createNodeFromMind(obj: NodeObj, store: TreeStore) {
     updateNodeText(obj, store);
     return;
   }
-  const parentId = obj.parent?.id;
-  if (!parentId || !store.getNode(parentId)) {
+  const parentId = obj.parent?.id ?? store.getSnapshot().rootId;
+  if (obj.id === store.getSnapshot().rootId || !store.getNode(parentId)) {
     return;
   }
   store.createNode({

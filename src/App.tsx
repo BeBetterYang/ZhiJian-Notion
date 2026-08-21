@@ -35,16 +35,12 @@ export default function App() {
     [activeView],
   );
 
-  const createSibling = (nodeId: string) => {
-    const node = store.getNode(nodeId);
-    if (!node?.parentId) {
-      return;
-    }
-    const parent = store.getNode(node.parentId);
-    const index = parent ? parent.children.indexOf(nodeId) + 1 : undefined;
+  const createRootChild = () => {
+    const root = store.getNode(tree.rootId);
+    if (!root) return;
     const newId = store.createNode({
-      parentId: node.parentId,
-      index,
+      parentId: root.id,
+      index: root.children.length,
       content: "",
     });
     setSelectedNodeId(newId);
@@ -92,7 +88,7 @@ export default function App() {
           <button type="button" onClick={() => store.redo()}>
             重做
           </button>
-          <button type="button" onClick={() => createSibling(selectedNode?.id ?? tree.rootId)}>
+          <button type="button" onClick={createRootChild}>
             新建
           </button>
           <button
