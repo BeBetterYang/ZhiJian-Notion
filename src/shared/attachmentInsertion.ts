@@ -11,15 +11,20 @@ type Editor<BS extends BlockSchema, IS extends InlineContentSchema, SS extends S
 export function nodeInsertionReference<BS extends BlockSchema, IS extends InlineContentSchema, SS extends StyleSchema>(
   editor: Editor<BS, IS, SS>, selectedBlockId: string,
 ) {
-  const visit = (blocks: ReturnType<Editor<BS, IS, SS>["getBlock"]>[], id: string): ReturnType<Editor<BS, IS, SS>["getBlock"]> | undefined => {
+  type BlockValue = NonNullable<ReturnType<Editor<BS, IS, SS>["getBlock"]>>;
+  const visit = (blocks: BlockValue[], parent: BlockValue | undefined): BlockValue | undefined => {
     for (const block of blocks) {
-      if (block?.id === id) return block;
-      const nested = visit(block?.children ?? [], id);
-      if (nested) return block;
+      if (block.id === selectedBlockId) {
+        return isAttachmentBlock(block.type) || block.id.endsWith("::description")
+          ? parent ?? block
+          : block;
+      }
+      const nested = visit(block.children, block);
+      if (nested) return nested;
     }
     return undefined;
   };
-  return visit(editor.document, selectedBlockId);
+  return visit(editor.document, undefined);
 }
 
 export function insertNodeAttachmentBlocks<BS extends BlockSchema, IS extends InlineContentSchema, SS extends StyleSchema>(
@@ -40,7 +45,7 @@ export function insertNodeAttachmentBlocks<BS extends BlockSchema, IS extends In
 
   if (!owner) return [];
   const next = editor.updateBlock(owner, {
-    children: [...owner.children, ...blocks] as unknown as Parameters<Editor<BS, IS, SS>["updateBlock"]>[1]["children"],
+    children: [...blocks, ...owner.children] as unknown as Parameters<Editor<BS, IS, SS>["updateBlock"]>[1]["children"],
   });
   return next.children.slice(-blocks.length);
 }
