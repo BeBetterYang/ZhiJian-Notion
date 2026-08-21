@@ -200,6 +200,29 @@ textarea {
   content: none;
 }
 
+/* Keep BlockNote's native drag events, but present the handle as the same
+   small node marker instead of the default drag-indicator glyph. */
+.outline-panel .bn-side-menu [draggable="true"] {
+  width: 16px;
+  min-width: 16px;
+  height: 24px;
+  padding: 0;
+}
+
+.outline-panel .bn-side-menu [draggable="true"] svg {
+  display: none;
+}
+
+.outline-panel .bn-side-menu [draggable="true"]::before {
+  content: "";
+  display: block;
+  width: 8px;
+  height: 8px;
+  margin: 8px 4px;
+  border-radius: 50%;
+  background: #62656b;
+}
+
 .outline-panel .bn-visual-media-wrapper {
   max-width: min(720px, 100%);
 }

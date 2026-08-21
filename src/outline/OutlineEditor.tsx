@@ -5,6 +5,7 @@ import { SideMenuExtension } from "@blocknote/core/extensions";
 import {
   FormattingToolbarController,
   AddBlockButton,
+  DragHandleButton,
   SideMenu,
   SideMenuController,
   useCreateBlockNote,
@@ -154,6 +155,7 @@ function RootProtectedSideMenu() {
   return (
     <SideMenu>
       <AddBlockButton />
+      <DragHandleButton />
     </SideMenu>
   );
 }
