@@ -72,6 +72,13 @@ export function blockNoteToTree(blocks: Block[], previousTree?: ZhiJianTree): Zh
   };
 
   visit(first, null);
+  // BlockNote can create a second top-level block when Enter is pressed on
+  // the root block. The domain model has exactly one root, so normalize every
+  // additional top-level block into a child of that root.
+  blocks.slice(1).forEach((block) => {
+    visit(block, first.id);
+    nodes[first.id].children.push(block.id);
+  });
   return { rootId: first.id, nodes };
 }
 

@@ -66,6 +66,18 @@ describe("blockNoteAdapter", () => {
     expect(parsed.nodes.web.type).toBe("heading");
     expect(parsed.nodes.app.props?.checked).toBe(true);
   });
+
+  it("normalizes extra top-level blocks under the single root", () => {
+    const tree = blockNoteToTree([
+      block("root", "根标题", {}),
+      block("heading-2", "同级标题", {}),
+    ])!;
+    tree.nodes["heading-2"].type = "heading";
+    tree.nodes["heading-2"].props = { headingLevel: 2 };
+    expect(tree.rootId).toBe("root");
+    expect(tree.nodes["heading-2"].parentId).toBe("root");
+    expect(tree.nodes.root.children).toContain("heading-2");
+  });
 });
 
 function block(id: string, text: string, styles: Record<string, unknown>): Block {
