@@ -602,6 +602,10 @@ textarea {
 }
 
 .mindmap-node-quote {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  box-sizing: border-box;
   margin: 0.2em 0;
   padding-left: 0.7em;
   border-left: 3px solid #b5b5b5;
@@ -631,22 +635,23 @@ textarea {
 
 .mindmap-node-images:has(> .mindmap-node-image:only-child) {
   display: block;
-  width: min(42em, 70vw);
-  max-width: 42em;
+  width: 16em;
+  max-width: 16em;
 }
 
 .mindmap-node-images:has(> .mindmap-node-image:only-child) .mindmap-node-image {
   width: 100%;
-  height: auto;
-  min-height: 12em;
-  max-height: 28em;
+  height: 16em;
+  min-height: 0;
+  max-height: 16em;
+  aspect-ratio: 1;
   border-radius: 4px;
 }
 
 .mindmap-node-images:has(> .mindmap-node-image:only-child) .mindmap-node-image img {
   width: 100%;
-  height: auto;
-  max-height: 28em;
+  height: 100%;
+  max-height: none;
   object-fit: contain;
 }
 

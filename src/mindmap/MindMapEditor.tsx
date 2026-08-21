@@ -290,6 +290,7 @@ export function MindMapEditor({
       const blockId = target?.closest<HTMLElement>("[data-block-id]")?.dataset.blockId;
       event.preventDefault();
       event.stopPropagation();
+      event.stopImmediatePropagation();
       beginNodeEdit(nodeId, blockId);
     };
     container.addEventListener("click", onRendererClick, true);

@@ -20,7 +20,7 @@ export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
       note: node.description ? richTextToPlainText(node.description) : undefined,
       expanded: !node.props?.collapsed,
       style: {
-        fontSize: style.fontSize,
+        fontSize: node.id === tree.rootId ? "20px" : style.fontSize,
         color: marks?.textColor ?? style.color,
         background: marks?.backgroundColor ?? style.backgroundColor,
         fontWeight: marks?.bold ? "700" : style.fontWeight,
