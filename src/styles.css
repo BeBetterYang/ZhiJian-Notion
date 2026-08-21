@@ -150,6 +150,52 @@ textarea {
   min-height: 100%;
 }
 
+/* Match the outline scale: fixed document title, normal body text, and
+   quieter attachment/description text. */
+.outline-panel
+  .bn-editor
+  > .bn-block-group
+  > .bn-block-outer:first-child
+  > .bn-block
+  > .bn-block-content {
+  font-size: 34px;
+  line-height: 1.2;
+}
+
+.outline-panel
+  .bn-editor
+  > .bn-block-group
+  > .bn-block-outer:first-child
+  > .bn-block
+  > .bn-block-content[data-content-type="heading"]
+  > h1 {
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.outline-panel .bn-block-content[data-content-type="paragraph"],
+.outline-panel .bn-block-content[data-content-type="checkListItem"] {
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.outline-panel .bn-block-content[data-content-type="quote"] {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.outline-panel .bn-block-content[data-content-type="quote"] blockquote {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.outline-panel
+  .bn-block-outer:has(
+    > .bn-block > .bn-block-content[data-content-type="quote"]
+  )::before {
+  display: none;
+}
+
 /* Keep the root title visually distinct while restoring BlockNote's normal
    placeholders for every other block. */
 .outline-panel
