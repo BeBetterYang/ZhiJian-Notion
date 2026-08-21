@@ -20,17 +20,17 @@ describe("applyMindElixirOperation", () => {
     expect(richTextToPlainText(store.getNode("web")!.content)).toBe("Web 编辑器");
   });
 
-  it("updates a sibling quote through its own content", () => {
+  it("updates a todo node through its own content", () => {
     const tree = createInitialTree();
-    tree.nodes.web.type = "quote";
-    tree.nodes.web.content = { text: "旧引用" };
+    tree.nodes.web.type = "todo";
+    tree.nodes.web.content = { text: "旧任务" };
     const store = new TreeStore(tree);
 
     applyMindElixirOperation(
       {
         name: "finishEdit",
         obj: node("web", "新引用"),
-        origin: "旧引用",
+        origin: "旧任务",
       },
       store,
     );

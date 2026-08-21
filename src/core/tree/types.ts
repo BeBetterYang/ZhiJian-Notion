@@ -4,9 +4,7 @@ export type ZhiJianNodeType =
   | "text"
   | "heading"
   | "todo"
-  | "quote"
-  | "table"
-  | "image";
+  | "table";
 
 export interface ZhiJianTableCell {
   content: RichTextContent;
@@ -33,6 +31,18 @@ export interface ZhiJianImageData {
   showPreview?: boolean;
 }
 
+export type ZhiJianNodeBlock =
+  | {
+      id: string;
+      type: "quote";
+      content: RichTextContent;
+    }
+  | {
+      id: string;
+      type: "image";
+      image: ZhiJianImageData;
+    };
+
 export interface ZhiJianNode {
   id: string;
   parentId: string | null;
@@ -40,12 +50,12 @@ export interface ZhiJianNode {
   content: RichTextContent;
   description?: RichTextContent;
   type: ZhiJianNodeType;
+  blocks?: ZhiJianNodeBlock[];
   props?: {
     checked?: boolean;
     collapsed?: boolean;
     headingLevel?: 1 | 2 | 3;
     table?: ZhiJianTableData;
-    image?: ZhiJianImageData;
     style?: object;
   };
   meta?: {

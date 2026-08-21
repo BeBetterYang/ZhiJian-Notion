@@ -6,6 +6,8 @@ export interface MindMapNodeMetadata {
   plainText: string;
   richTextHtml?: string;
   checked?: boolean;
+  hasQuote?: boolean;
+  imageCount?: number;
 }
 
 export function renderMindMapNode(topic: string, obj: NodeObj) {

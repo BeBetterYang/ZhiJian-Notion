@@ -2,6 +2,7 @@ export type {
   TreeListener,
   ZhiJianImageData,
   ZhiJianNode,
+  ZhiJianNodeBlock,
   ZhiJianNodeType,
   ZhiJianTableCell,
   ZhiJianTableData,

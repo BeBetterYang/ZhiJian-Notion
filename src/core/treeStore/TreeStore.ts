@@ -2,6 +2,7 @@ import type {
   RichTextContent,
   TreeListener,
   ZhiJianNode,
+  ZhiJianNodeBlock,
   ZhiJianNodeType,
   ZhiJianTree,
 } from "../tree";
@@ -15,6 +16,7 @@ export interface CreateNodeInput {
   content?: string | RichTextContent;
   description?: string | RichTextContent;
   type?: ZhiJianNodeType;
+  blocks?: ZhiJianNodeBlock[];
   props?: ZhiJianNode["props"];
   id?: string;
 }
@@ -23,6 +25,7 @@ export interface UpdateNodeInput {
   id: string;
   content?: string | RichTextContent;
   props?: NonNullable<ZhiJianNode["props"]>;
+  blocks?: ZhiJianNodeBlock[];
 }
 
 export class TreeStore {
@@ -64,7 +67,7 @@ export class TreeStore {
   updateContent(id: string, content: string | RichTextContent) {
     this.commit((draft) => {
       const node = this.requireDraftNode(draft, id);
-      node.content = isMediaType(node.type) ? plainTextContent("") : normalizeRichText(content);
+      node.content = normalizeRichText(content);
       draft.nodes[id] = touchNode(node);
     });
   }
@@ -85,18 +88,18 @@ export class TreeStore {
   updateType(id: string, type: ZhiJianNodeType) {
     this.commit((draft) => {
       const node = this.requireDraftNode(draft, id);
-      const { checked, headingLevel, image, table, ...sharedProps } = node.props ?? {};
+      const { checked, headingLevel, table, ...sharedProps } = node.props ?? {};
       node.type = type;
+      if (type === "table") {
+        node.blocks = undefined;
+      }
       node.props = {
         ...sharedProps,
         ...(type === "todo" ? { checked: checked ?? false } : undefined),
         ...(type === "heading" ? { headingLevel: headingLevel ?? 1 } : undefined),
         ...(type === "table" ? { table: table ?? createDefaultTable() } : undefined),
-        ...(type === "image"
-          ? { image: image ?? { previewWidth: 480, showPreview: true } }
-          : undefined),
       };
-      if (isMediaType(type)) {
+      if (type === "table") {
         node.content = plainTextContent("");
       }
       draft.nodes[id] = touchNode(node);
@@ -121,8 +124,74 @@ export class TreeStore {
         if (update.props) {
           node.props = { ...node.props, ...update.props };
         }
+        if (update.blocks !== undefined) {
+          node.blocks = node.type === "table" ? undefined : cloneBlocks(update.blocks);
+        }
         draft.nodes[node.id] = touchNode(node);
       });
+    });
+  }
+
+  updateNodeDocument(
+    id: string,
+    content: string | RichTextContent,
+    blocks: ZhiJianNodeBlock[],
+  ) {
+    this.commit((draft) => {
+      const node = this.requireDraftNode(draft, id);
+      node.content = normalizeRichText(content);
+      node.blocks = node.type === "table" ? undefined : cloneBlocks(blocks);
+      draft.nodes[id] = touchNode(node);
+    });
+  }
+
+  addNodeBlock(nodeId: string, block: ZhiJianNodeBlock, index?: number) {
+    this.commit((draft) => {
+      const node = this.requireDraftNode(draft, nodeId);
+      if (node.type === "table") {
+        return;
+      }
+      const blocks = node.blocks ? cloneBlocks(node.blocks) : [];
+      blocks.splice(clampIndex(index ?? blocks.length, blocks), 0, cloneBlock(block));
+      node.blocks = blocks;
+      draft.nodes[nodeId] = touchNode(node);
+    });
+  }
+
+  updateNodeBlock(nodeId: string, blockId: string, patch: Partial<ZhiJianNodeBlock>) {
+    this.commit((draft) => {
+      const node = this.requireDraftNode(draft, nodeId);
+      const blocks = node.blocks ? cloneBlocks(node.blocks) : [];
+      const index = blocks.findIndex((block) => block.id === blockId);
+      if (index < 0) {
+        return;
+      }
+      blocks[index] = { ...blocks[index], ...patch } as ZhiJianNodeBlock;
+      node.blocks = blocks;
+      draft.nodes[nodeId] = touchNode(node);
+    });
+  }
+
+  deleteNodeBlock(nodeId: string, blockId: string) {
+    this.commit((draft) => {
+      const node = this.requireDraftNode(draft, nodeId);
+      node.blocks = (node.blocks ?? []).filter((block) => block.id !== blockId);
+      draft.nodes[nodeId] = touchNode(node);
+    });
+  }
+
+  moveNodeBlock(nodeId: string, blockId: string, index: number) {
+    this.commit((draft) => {
+      const node = this.requireDraftNode(draft, nodeId);
+      const blocks = node.blocks ? cloneBlocks(node.blocks) : [];
+      const currentIndex = blocks.findIndex((block) => block.id === blockId);
+      if (currentIndex < 0) {
+        return;
+      }
+      const [moved] = blocks.splice(currentIndex, 1);
+      blocks.splice(clampIndex(index, blocks), 0, moved);
+      node.blocks = blocks;
+      draft.nodes[nodeId] = touchNode(node);
     });
   }
 
@@ -165,6 +234,7 @@ export class TreeStore {
           content: type === "table" ? plainTextContent("") : normalizeRichText(input.content ?? ""),
           description: input.description ? normalizeRichText(input.description) : undefined,
           type,
+          blocks: type === "table" ? undefined : input.blocks ? cloneBlocks(input.blocks) : undefined,
           props: {
             ...(type === "table" ? { table: createDefaultTable() } : undefined),
             ...(type === "heading" ? { headingLevel: 1 as const } : undefined),
@@ -370,17 +440,20 @@ function createDefaultTable() {
   };
 }
 
-// Media nodes carry their payload in props (props.table / props.image); their
-// text content is always empty so no stale text lingers when a node is edited
-// or converted between types.
-function isMediaType(type: ZhiJianNodeType) {
-  return type === "table" || type === "image";
+function cloneBlocks(blocks: ZhiJianNodeBlock[]) {
+  return blocks.map(cloneBlock);
+}
+
+function cloneBlock(block: ZhiJianNodeBlock): ZhiJianNodeBlock {
+  return block.type === "quote"
+    ? { ...block, content: normalizeRichText(block.content) }
+    : { ...block, image: { ...block.image } };
 }
 
 function createId() {
   return globalThis.crypto?.randomUUID?.() ?? `node_${Math.random().toString(36).slice(2)}`;
 }
 
-function clampIndex(index: number, children: string[]) {
-  return Math.max(0, Math.min(index, children.length));
+function clampIndex<T>(index: number, items: T[]) {
+  return Math.max(0, Math.min(index, items.length));
 }

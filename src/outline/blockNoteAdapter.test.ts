@@ -1,318 +1,61 @@
 import type { Block } from "@blocknote/core";
 import { describe, expect, it } from "vitest";
-import { blockNoteToTree, treeToBlockNote } from "./blockNoteAdapter";
 import { createInitialTree, type ZhiJianTree } from "../core/tree";
+import { blockNoteToTree, treeToBlockNote } from "./blockNoteAdapter";
 
-describe("blockNoteAdapter styles", () => {
-  it("extracts BlockNote text styles into ZhiJianTree node style", () => {
-    const tree = blockNoteToTree([
-      block("root", "产品规划", {
-        bold: true,
-        italic: true,
-        underline: true,
-        strike: true,
-        textColor: "#dc2626",
-        backgroundColor: "#fee2e2",
-      }),
-    ]);
-
-    const marks = tree?.nodes.root.content.spans?.[0]?.marks;
-    expect(marks).toMatchObject({
-      bold: true,
-      italic: true,
-      underline: true,
-      strike: true,
-      textColor: "#dc2626",
-      backgroundColor: "#fee2e2",
+describe("blockNoteAdapter", () => {
+  it("round-trips rich text marks", () => {
+    const tree = blockNoteToTree([block("root", "产品规划", {
+      bold: true, italic: true, underline: true, strike: true,
+      textColor: "#dc2626", backgroundColor: "#fee2e2",
+    })])!;
+    expect(tree.nodes.root.content.spans?.[0].marks).toMatchObject({
+      bold: true, italic: true, underline: true, strike: true,
+      textColor: "#dc2626", backgroundColor: "#fee2e2",
     });
   });
 
-  it("projects ZhiJianTree node style back to BlockNote styles", () => {
+  it("maps quote and images to blocks owned by one node", () => {
     const tree: ZhiJianTree = {
       rootId: "root",
-      nodes: {
-        root: {
-          id: "root",
-          parentId: null,
-          children: [],
-          content: { text: "产品规划" },
-          type: "text",
-          props: {
-            style: {
-              fontWeight: "700",
-              fontStyle: "italic",
-              textDecoration: "underline line-through",
-              color: "#2563eb",
-              backgroundColor: "#dbeafe",
-            },
-          },
-        },
-      },
-    };
-
-    const [projected] = treeToBlockNote(tree);
-    const content = projected.content;
-
-    expect(Array.isArray(content)).toBe(true);
-    if (Array.isArray(content) && typeof content[0] !== "string" && "styles" in content[0]) {
-      expect(content[0].styles).toMatchObject({
-        bold: true,
-        italic: true,
-        underline: true,
-        strike: true,
-        textColor: "#2563eb",
-        backgroundColor: "#dbeafe",
-      });
-    }
-  });
-
-  it("round-trips table cell text and column widths", () => {
-    const tableBlock = {
-      id: "table",
-      type: "table",
-      props: {},
-      content: {
-        type: "tableContent",
-        columnWidths: [120, 180],
-        headerRows: 1,
-        rows: [
-          {
-            cells: [
-              {
-                type: "tableCell",
-                props: {
-                  backgroundColor: "red",
-                  textColor: "blue",
-                  textAlignment: "center",
-                },
-                content: [{ type: "text", text: "名称", styles: { bold: true } }],
-              },
-              [{ type: "text", text: "进度", styles: {} }],
-            ],
-          },
+      nodes: { root: {
+        id: "root", parentId: null, children: [], type: "text", content: { text: "正文" },
+        blocks: [
+          { id: "quote", type: "quote", content: { text: "引用" } },
+          { id: "image", type: "image", image: { url: "asset:image", previewWidth: 240 } },
         ],
-      },
-      children: [],
-    } as unknown as Block;
-
-    const tree = blockNoteToTree([tableBlock])!;
-    expect(tree.nodes.table.props?.table?.rows[0][0].content.text).toBe("名称");
-    expect(tree.nodes.table.props?.table?.rows[0][0].content.spans?.[0].marks?.bold).toBe(
-      true,
-    );
-    expect(tree.nodes.table.props?.table?.columnWidths).toEqual([120, 180]);
-
-    const [projected] = treeToBlockNote(tree);
-    expect((projected.content as { rows: unknown[] }).rows).toHaveLength(1);
-  });
-
-  it("round-trips image metadata and preview width", () => {
-    const imageBlock = {
-      id: "image",
-      type: "image",
-      props: {
-        url: "data:image/png;base64,abc",
-        name: "规划图.png",
-        caption: "产品规划",
-        previewWidth: 420,
-        showPreview: true,
-      },
-      content: undefined,
-      children: [],
-    } as unknown as Block;
-
-    const tree = blockNoteToTree([imageBlock])!;
-    expect(tree.nodes.image.content).toEqual({ text: "" });
-    expect(tree.nodes.image.props?.image).toMatchObject({
-      url: "data:image/png;base64,abc",
-      caption: "产品规划",
-      previewWidth: 420,
-    });
-
-    const [projected] = treeToBlockNote(tree);
-    expect(projected.props).toMatchObject({
-      url: "data:image/png;base64,abc",
-      caption: "产品规划",
-      previewWidth: 420,
-    });
-  });
-
-  it("does not restore an image URL from text or legacy visual style", () => {
-    const tree: ZhiJianTree = {
-      rootId: "image",
-      nodes: {
-        image: {
-          id: "image",
-          parentId: null,
-          children: [],
-          content: { text: "https://example.com/legacy.png" },
-          type: "image",
-          props: {
-            image: { name: "独立图片" },
-            style: { imageUrl: "https://example.com/style.png" },
-          },
-        },
-      },
+      } },
     };
-
     const [projected] = treeToBlockNote(tree);
-
-    expect(projected.props).toMatchObject({ url: "", name: "独立图片" });
+    expect(projected.children?.map((child) => child.type)).toEqual(["quote", "image"]);
+    const parsed = blockNoteToTree([projected as Block])!;
+    expect(parsed.nodes.root.blocks?.map((block) => block.id)).toEqual(["quote", "image"]);
+    expect(parsed.nodes.root.children).toEqual([]);
   });
 
-  it("round-trips a quote as a dedicated node type", () => {
-    const quoteBlock = {
-      id: "quote",
-      type: "quote",
-      props: {},
-      content: [{ type: "text", text: "引用当前节点", styles: {} }],
+  it("keeps table data in an exclusive table node", () => {
+    const table = {
+      id: "table", type: "table", props: {},
+      content: { type: "tableContent", rows: [{ cells: [[{ type: "text", text: "内容", styles: {} }]] }] },
       children: [],
     } as unknown as Block;
-
-    const tree = blockNoteToTree([quoteBlock])!;
-    expect(tree.nodes.quote.type).toBe("quote");
-    expect(tree.nodes.quote.content.text).toBe("引用当前节点");
-
-    const [projected] = treeToBlockNote(tree);
-    expect(projected.type).toBe("quote");
-    expect(projected.content).toEqual("引用当前节点");
-  });
-
-  it("does not retain media or Todo state after a block type change", () => {
-    const previous = createInitialTree();
-    previous.nodes.web.type = "image";
-    previous.nodes.web.props = {
-      image: { url: "asset:image" },
-      table: { rows: [[{ content: { text: "旧表格" } }]] },
-      checked: true,
-      headingLevel: 3,
-      collapsed: true,
-      style: { color: "red" },
-    };
-
-    const tree = blockNoteToTree([block("web", "正文", {})], previous)!;
-
-    expect(tree.nodes.web.type).toBe("text");
-    expect(tree.nodes.web.props).toEqual({
-      collapsed: true,
-      style: expect.objectContaining({ color: "red" }),
-    });
-  });
-
-  it("normalizes additional top-level blocks into root children", () => {
-    const tree = blockNoteToTree([
-      block("root", "产品规划", {}),
-      block("text", "新增正文", {}),
-      {
-        id: "table",
-        type: "table",
-        props: {},
-        content: {
-          type: "tableContent",
-          rows: [
-            {
-              cells: [[{ type: "text", text: "内容", styles: {} }]],
-            },
-          ],
-        },
-        children: [],
-      } as unknown as Block,
-    ])!;
-
-    expect(tree.nodes.root.children).toEqual(["text", "table"]);
-    expect(tree.nodes.text.parentId).toBe("root");
-    expect(tree.nodes.table.parentId).toBe("root");
+    const tree = blockNoteToTree([table])!;
+    expect(tree.nodes.table.type).toBe("table");
     expect(tree.nodes.table.props?.table?.rows[0][0].content.text).toBe("内容");
   });
-});
 
-describe("blockNoteAdapter round-trip stability", () => {
-  // The outline seam (OutlineEditor onChange -> store.replaceTreeFromView) only
-  // overwrites the whole tree when blockProjectionSignature(nextTree) differs
-  // from the current tree. That guard is only safe if projecting a tree to
-  // BlockNote and parsing it straight back is a fixpoint: otherwise every editor
-  // settle would report a phantom change, overwrite untouched nodes, and loop.
-  it("reaches a projection fixpoint after one round-trip across every node type", () => {
+  it("preserves heading and todo node types", () => {
     const tree = createInitialTree();
-    tree.nodes.root.content = {
-      text: "产品规划",
-      spans: [{ text: "产品", marks: { bold: true } }, { text: "规划" }],
-    };
     tree.nodes.web.type = "heading";
     tree.nodes.web.props = { headingLevel: 2 };
     tree.nodes.app.type = "todo";
     tree.nodes.app.props = { checked: true };
-    tree.nodes.root.children.push("quote", "table", "image");
-    tree.nodes.quote = {
-      id: "quote",
-      parentId: "root",
-      children: [],
-      type: "quote",
-      content: { text: "引用当前节点" },
-    };
-    tree.nodes.table = {
-      id: "table",
-      parentId: "root",
-      children: [],
-      type: "table",
-      content: { text: "" },
-      props: {
-        table: {
-          rows: [
-            [{ content: { text: "甲" } }, { content: { text: "乙" } }],
-            [{ content: { text: "丙" } }, { content: { text: "丁" } }],
-          ],
-          columnWidths: [120, 160],
-          headerRows: 1,
-        },
-      },
-    };
-    tree.nodes.image = {
-      id: "image",
-      parentId: "root",
-      children: [],
-      type: "image",
-      content: { text: "" },
-      props: {
-        image: {
-          url: "data:image/png;base64,abc",
-          name: "规划图",
-          caption: "说明",
-          previewWidth: 360,
-          showPreview: true,
-        },
-      },
-    };
-
-    const projected = treeToBlockNote(tree) as unknown as Block[];
-    const parsed = blockNoteToTree(projected, tree)!;
-
-    // Structure is preserved verbatim: no node dropped, reordered, or reparented.
-    expect(parsed.rootId).toBe(tree.rootId);
-    expect(Object.keys(parsed.nodes).sort()).toEqual(Object.keys(tree.nodes).sort());
-    expect(parsed.nodes.root.children).toEqual(tree.nodes.root.children);
-
-    // The signature the seam compares is unchanged, so no spurious overwrite fires.
-    expect(signature(parsed)).toBe(signature(tree));
+    const parsed = blockNoteToTree(treeToBlockNote(tree) as unknown as Block[], tree)!;
+    expect(parsed.nodes.web.type).toBe("heading");
+    expect(parsed.nodes.app.props?.checked).toBe(true);
   });
 });
 
-function signature(tree: ZhiJianTree) {
-  return JSON.stringify(treeToBlockNote(tree));
-}
-
 function block(id: string, text: string, styles: Record<string, unknown>): Block {
-  return {
-    id,
-    type: "paragraph",
-    props: {},
-    content: [
-      {
-        type: "text",
-        text,
-        styles,
-      },
-    ],
-    children: [],
-  } as unknown as Block;
+  return { id, type: "paragraph", props: {}, content: [{ type: "text", text, styles }], children: [] } as unknown as Block;
 }

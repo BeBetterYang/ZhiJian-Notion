@@ -5,283 +5,135 @@ import { createPortal } from "react-dom";
 import type { ZhiJianNode, ZhiJianTree } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
 import { blockNoteToTree, treeToBlockNote } from "../outline/blockNoteAdapter";
+import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
+import { saveImageAsset } from "../shared/imageAssetStore";
 import { ZhiJianFormattingToolbar } from "../shared/ZhiJianFormattingToolbar";
 import { zhijianDictionary } from "../shared/zhijianDictionary";
-import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
-import { MindMapMediaBlock } from "./MindMapMediaBlock";
 
-interface MindMapNodeGroupBlockProps {
-  primary: ZhiJianNode;
-  quote?: ZhiJianNode;
-  images: ZhiJianNode[];
+interface MindMapNodeContentBlockProps {
+  node: ZhiJianNode;
   store: TreeStore;
-  selectedNodeId: string | null;
+  selected: boolean;
   toolbarTarget: HTMLElement | null;
   onSelect: (nodeId: string) => void;
   focusRequest: { nodeId: string; requestId: number } | null;
   onFocusRequestHandled: (requestId: number) => void;
-  onDeleteEmptyQuote: (primaryId: string, quoteId: string, groupRemains: boolean) => void;
 }
 
-export function MindMapNodeGroupBlock({
-  primary,
-  quote,
-  images,
+export function MindMapNodeContentBlock({
+  node,
   store,
-  selectedNodeId,
+  selected,
   toolbarTarget,
   onSelect,
   focusRequest,
   onFocusRequestHandled,
-  onDeleteEmptyQuote,
-}: MindMapNodeGroupBlockProps) {
-  const textNodes = useMemo(
-    () => [primary.type === "image" ? null : primary, quote].filter(Boolean) as ZhiJianNode[],
-    [primary, quote],
-  );
-
-  return (
-    <div className="mindmap-node-group">
-      {textNodes.length > 0 ? (
-        <MindMapTextGroupEditor
-          nodes={textNodes}
-          store={store}
-          selectedNodeId={selectedNodeId}
-          toolbarTarget={toolbarTarget}
-          onSelect={onSelect}
-          focusRequest={focusRequest}
-          onFocusRequestHandled={onFocusRequestHandled}
-          groupRemainsAfterQuoteDelete={images.length > 0}
-          onDeleteEmptyQuote={onDeleteEmptyQuote}
-        />
-      ) : null}
-      {images.length > 0 ? (
-        <div
-          className="mindmap-image-gallery"
-          style={{ gridTemplateColumns: `repeat(${Math.min(images.length, 3)}, 8em)` }}
-        >
-          {images.map((image) => (
-            <MindMapMediaBlock
-              key={image.id}
-              node={image}
-              store={store}
-              selected={selectedNodeId === image.id}
-              toolbarTarget={toolbarTarget}
-              onSelect={onSelect}
-              hasGroupBody={textNodes.length > 0}
-            />
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-interface MindMapTextGroupEditorProps {
-  nodes: ZhiJianNode[];
-  store: TreeStore;
-  selectedNodeId: string | null;
-  toolbarTarget: HTMLElement | null;
-  onSelect: (nodeId: string) => void;
-  focusRequest: { nodeId: string; requestId: number } | null;
-  onFocusRequestHandled: (requestId: number) => void;
-  groupRemainsAfterQuoteDelete: boolean;
-  onDeleteEmptyQuote: (primaryId: string, quoteId: string, groupRemains: boolean) => void;
-}
-
-function MindMapTextGroupEditor({
-  nodes,
-  store,
-  selectedNodeId,
-  toolbarTarget,
-  onSelect,
-  focusRequest,
-  onFocusRequestHandled,
-  groupRemainsAfterQuoteDelete,
-  onDeleteEmptyQuote,
-}: MindMapTextGroupEditorProps) {
-  const applyingExternalChange = useRef(false);
-  const projectionVersion = useRef(0);
-  const focusPrimaryAfterQuoteDelete = useRef(false);
+}: MindMapNodeContentBlockProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const nodeIds = useMemo(() => nodes.map((node) => node.id), [nodes]);
-  const projectedBlocks = useMemo(
-    () => nodes.flatMap((node) => treeToBlockNote(singleNodeTree(node))),
-    [nodes],
-  );
-  const projectionSignature = JSON.stringify(projectedBlocks);
-  const selected = Boolean(selectedNodeId && nodeIds.includes(selectedNodeId));
+  const applyingExternalChange = useRef(false);
+  const focusPrimaryAfterBlockDelete = useRef(false);
+  const nodeTree = useMemo(() => singleNodeTree(node), [node]);
+  const projectedBlocks = useMemo(() => treeToBlockNote(nodeTree), [nodeTree]);
   const editor = useCreateBlockNote(
-    {
-      initialContent: projectedBlocks,
-      dictionary: zhijianDictionary,
-    },
-    [nodeIds.join(":")],
+    { initialContent: projectedBlocks, dictionary: zhijianDictionary, uploadFile: async (file) => (await saveImageAsset(file)).url },
+    [node.id],
   );
+  const blockIds = useMemo(() => [node.id, ...(node.blocks ?? []).map((block) => block.id)], [node]);
 
   useEffect(() => {
     editor.isEditable = selected;
   }, [editor, selected]);
 
   useEffect(() => {
-    if (!focusPrimaryAfterQuoteDelete.current || nodes.some((node) => node.type === "quote")) {
-      return;
-    }
-    const frame = window.requestAnimationFrame(() => {
-      try {
-        editor.isEditable = true;
-        editor.setTextCursorPosition(nodes[0].id, "end");
-        containerRef.current
-          ?.querySelector<HTMLElement>(".ProseMirror")
-          ?.focus({ preventScroll: true });
-        focusPrimaryAfterQuoteDelete.current = false;
-      } catch {
-        // The primary block may still be remounting after the quote was removed.
-      }
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [editor, nodes]);
-
-  useEffect(() => {
-    if (!focusRequest || !nodeIds.includes(focusRequest.nodeId)) {
-      return;
-    }
+    if (!focusRequest || !blockIds.includes(focusRequest.nodeId)) return;
     const frame = window.requestAnimationFrame(() => {
       try {
         editor.setTextCursorPosition(focusRequest.nodeId, "start");
-        containerRef.current
-          ?.querySelector<HTMLElement>(".ProseMirror")
-          ?.focus({ preventScroll: true });
+        editor.focus();
         onFocusRequestHandled(focusRequest.requestId);
       } catch {
-        // The requested block may have been removed before the group mounted.
+        // The requested block can disappear during the same edit transaction.
       }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [editor, focusRequest, nodeIds, onFocusRequestHandled]);
+  }, [blockIds, editor, focusRequest, onFocusRequestHandled]);
 
   useEffect(() => {
-    return editor.onSelectionChange(() => {
-      const block = editor.getSelection()?.blocks[0] ?? editor.getTextCursorPosition().block;
-      if (nodeIds.includes(block.id)) {
-        onSelect(block.id);
+    if (!focusPrimaryAfterBlockDelete.current) return;
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        editor.isEditable = true;
+        editor.setTextCursorPosition(node.id, "end");
+        editor.focus();
+        focusPrimaryAfterBlockDelete.current = false;
+      } catch {
+        // The editor may still be applying the block projection.
       }
     });
-  }, [editor, nodeIds, onSelect]);
+    return () => window.cancelAnimationFrame(frame);
+  }, [editor, node, node.blocks]);
 
   useEffect(() => {
-    if (currentProjectionSignature(editor.document, nodes) === projectionSignature) {
-      return;
-    }
+    return editor.onSelectionChange(() => onSelect(node.id));
+  }, [editor, node.id, onSelect]);
+
+  useEffect(() => {
+    const current = blockNoteToTree(editor.document, nodeTree);
+    const next = current?.nodes[node.id];
+    if (!next || JSON.stringify(next.content) === JSON.stringify(node.content) && JSON.stringify(next.blocks ?? []) === JSON.stringify(node.blocks ?? [])) return;
     applyingExternalChange.current = true;
-    const version = ++projectionVersion.current;
     editor.replaceBlocks(editor.document, projectedBlocks);
     window.setTimeout(() => {
-      if (projectionVersion.current === version) {
-        applyingExternalChange.current = false;
-      }
+      applyingExternalChange.current = false;
     }, 0);
-  }, [editor, nodes, projectedBlocks, projectionSignature]);
+  }, [editor, node, nodeTree, projectedBlocks]);
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) {
-      return;
-    }
-    const nodeIdAtEvent = (event: Event) => {
-      const blockId = (event.target as Element | null)
-        ?.closest<HTMLElement>("[data-id]")
-        ?.dataset.id;
-      return blockId && nodeIds.includes(blockId) ? blockId : nodes[0].id;
+    if (!container) return;
+    const blockIdAtEvent = (event: Event) => {
+      const id = (event.target as Element | null)?.closest<HTMLElement>("[data-id]")?.dataset.id;
+      return id && blockIds.includes(id) ? id : node.id;
     };
-    const selectEditorBlock = (event: Event) => {
-      window.queueMicrotask(() => onSelect(nodeIdAtEvent(event)));
-      event.stopPropagation();
-    };
-    const placeTextCursor = (event: PointerEvent, forceEdit = false) => {
-      if (event.button !== 0) {
-        return;
-      }
-      const target = event.target as Element | null;
-      if (!target?.closest(".ProseMirror")) {
-        return;
-      }
-      const nodeId = nodeIdAtEvent(event);
+    const placeCursor = (event: PointerEvent, forceEdit = false) => {
+      if (event.button !== 0 || !(event.target as Element | null)?.closest(".ProseMirror")) return;
       if (!selected && !forceEdit) {
         event.preventDefault();
-        onSelect(nodeId);
+        onSelect(node.id);
         event.stopPropagation();
         return;
       }
+      const blockId = blockIdAtEvent(event);
       if (forceEdit) {
         editor.isEditable = true;
-        onSelect(nodeId);
+        onSelect(node.id);
       }
-      const position = editor._tiptapEditor.view.posAtCoords({
-        left: event.clientX,
-        top: event.clientY,
-      });
-      if (position) {
-        editor._tiptapEditor.commands.setTextSelection(position.pos);
-      } else {
-        editor.setTextCursorPosition(nodeId, "end");
-      }
+      const position = editor._tiptapEditor.view.posAtCoords({ left: event.clientX, top: event.clientY });
+      if (position) editor._tiptapEditor.commands.setTextSelection(position.pos);
+      else editor.setTextCursorPosition(blockId, "end");
       editor.focus();
       event.stopPropagation();
     };
-    const editOnDoubleClick = (event: MouseEvent) => {
-      placeTextCursor(event as PointerEvent, true);
+    const onDoubleClick = (event: MouseEvent) => {
+      placeCursor(event as PointerEvent, true);
       event.preventDefault();
     };
     const stopMindMapPointerHandling = (event: Event) => event.stopPropagation();
-    const preserveGroupBlocks = (event: KeyboardEvent) => {
-      if (handleTreeHistoryKeyDown(event, store)) {
-        return;
-      }
-      // A plain Enter would split the projected block into an orphan block that
-      // is not backed by any node; the next projection then wipes it, which reads
-      // as "Enter does nothing / content jumps back". Keep Shift+Enter for soft
-      // line breaks inside the node's own content.
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
-      if (event.key !== "Backspace" && event.key !== "Delete") {
-        return;
-      }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (handleTreeHistoryKeyDown(event, store)) return;
+      if (event.key !== "Backspace" && event.key !== "Delete") return;
       const selection = editor._tiptapEditor.state.selection;
-      if (!selection.empty) {
-        const selectedBlocks = (editor.getSelection()?.blocks ?? []).filter((block) =>
-          nodeIds.includes(block.id),
-        );
-        if (selectedBlocks.length > 1) {
-          event.preventDefault();
-          event.stopPropagation();
-          editor.transact(() => {
-            selectedBlocks.forEach((block) => editor.updateBlock(block.id, { content: [] }));
-          });
-        }
-        return;
-      }
+      if (!selection.empty) return;
       const block = editor.getTextCursorPosition().block;
-      if (!nodeIds.includes(block.id)) {
-        return;
-      }
+      if (!blockIds.includes(block.id)) return;
       const atStart = selection.$from.parentOffset === 0;
       const atEnd = selection.$from.parentOffset === selection.$from.parent.content.size;
-      const currentNode = nodes.find((node) => node.id === block.id);
-      if (
-        event.key === "Backspace" &&
-        atStart &&
-        atEnd &&
-        currentNode?.type === "quote"
-      ) {
+      const blockType = node.blocks?.find((item) => item.id === block.id)?.type;
+      if (event.key === "Backspace" && atStart && atEnd && blockType === "quote") {
         event.preventDefault();
         event.stopPropagation();
-        focusPrimaryAfterQuoteDelete.current = groupRemainsAfterQuoteDelete;
-        onSelect(nodes[0].id);
-        onDeleteEmptyQuote(nodes[0].id, currentNode.id, groupRemainsAfterQuoteDelete);
+        focusPrimaryAfterBlockDelete.current = true;
+        editor.removeBlocks([block.id]);
         return;
       }
       if ((event.key === "Backspace" && atStart) || (event.key === "Delete" && atEnd)) {
@@ -289,33 +141,22 @@ function MindMapTextGroupEditor({
         event.stopPropagation();
       }
     };
-    container.addEventListener("pointerdown", placeTextCursor);
+    container.addEventListener("pointerdown", placeCursor);
     container.addEventListener("mousedown", stopMindMapPointerHandling);
-    container.addEventListener("click", selectEditorBlock);
-    container.addEventListener("dblclick", editOnDoubleClick);
-    container.addEventListener("keydown", preserveGroupBlocks, true);
+    container.addEventListener("dblclick", onDoubleClick);
+    container.addEventListener("keydown", onKeyDown, true);
     container.addEventListener("keydown", stopMindMapPointerHandling);
     return () => {
-      container.removeEventListener("pointerdown", placeTextCursor);
+      container.removeEventListener("pointerdown", placeCursor);
       container.removeEventListener("mousedown", stopMindMapPointerHandling);
-      container.removeEventListener("click", selectEditorBlock);
-      container.removeEventListener("dblclick", editOnDoubleClick);
-      container.removeEventListener("keydown", preserveGroupBlocks, true);
+      container.removeEventListener("dblclick", onDoubleClick);
+      container.removeEventListener("keydown", onKeyDown, true);
       container.removeEventListener("keydown", stopMindMapPointerHandling);
     };
-  }, [
-    editor,
-    groupRemainsAfterQuoteDelete,
-    nodeIds,
-    nodes,
-    onDeleteEmptyQuote,
-    onSelect,
-    selected,
-    store,
-  ]);
+  }, [blockIds, editor, node, onSelect, selected, store]);
 
   return (
-    <div ref={containerRef} className="mindmap-text-group-editor">
+    <div ref={containerRef} className="mindmap-node-content-editor">
       <BlockNoteView
         editor={editor}
         theme="light"
@@ -323,62 +164,21 @@ function MindMapTextGroupEditor({
         slashMenu={false}
         formattingToolbar={false}
         onChange={() => {
-          if (applyingExternalChange.current) {
-            return;
-          }
-          const updates = nodes.flatMap((node) => {
-            const block = editor.getBlock(node.id);
-            if (!block) {
-              return [];
-            }
-            const parsed = blockNoteToTree([block], singleNodeTree(node));
-            const updated = parsed?.nodes[node.id];
-            if (!updated) {
-              return [];
-            }
-            const contentChanged = JSON.stringify(updated.content) !== JSON.stringify(node.content);
-            const checkedChanged = updated.props?.checked !== node.props?.checked;
-            return contentChanged || checkedChanged
-              ? [{ id: node.id, content: updated.content, props: { checked: updated.props?.checked } }]
-              : [];
-          });
-          if (updates.length > 0) {
-            store.updateNodes(updates);
+          if (applyingExternalChange.current) return;
+          const parsed = blockNoteToTree(editor.document, nodeTree);
+          const updated = parsed?.nodes[node.id];
+          if (!updated) return;
+          if (JSON.stringify(updated.content) !== JSON.stringify(node.content) || JSON.stringify(updated.blocks ?? []) !== JSON.stringify(node.blocks ?? [])) {
+            store.updateNodeDocument(node.id, updated.content, updated.blocks ?? []);
           }
         }}
       >
-        {selected && toolbarTarget
-          ? createPortal(
-              <ZhiJianFormattingToolbar showStructuralControls={false} />,
-              toolbarTarget,
-            )
-          : null}
+        {selected && toolbarTarget ? createPortal(<ZhiJianFormattingToolbar />, toolbarTarget) : null}
       </BlockNoteView>
     </div>
   );
 }
 
-function currentProjectionSignature(
-  blocks: Parameters<typeof blockNoteToTree>[0],
-  nodes: ZhiJianNode[],
-) {
-  return JSON.stringify(
-    nodes.flatMap((node) => {
-      const block = blocks.find((candidate) => candidate.id === node.id);
-      if (!block) {
-        return [];
-      }
-      const parsed = blockNoteToTree([block], singleNodeTree(node));
-      return parsed ? treeToBlockNote(parsed) : [];
-    }),
-  );
-}
-
 function singleNodeTree(node: ZhiJianNode): ZhiJianTree {
-  return {
-    rootId: node.id,
-    nodes: {
-      [node.id]: { ...node, children: [] },
-    },
-  };
+  return { rootId: node.id, nodes: { [node.id]: { ...node, children: [] } } };
 }

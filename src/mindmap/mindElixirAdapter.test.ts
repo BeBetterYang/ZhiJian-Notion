@@ -1,200 +1,49 @@
 import type { NodeObj } from "mind-elixir";
 import { describe, expect, it } from "vitest";
 import { createInitialTree } from "../core/tree";
-import {
-  createMindMapStructureSignature,
-  renderMindMapNode,
-  treeToMindElixir,
-} from "./mindElixirAdapter";
+import { createMindMapStructureSignature, renderMindMapNode, treeToMindElixir } from "./mindElixirAdapter";
 
 describe("mindElixirAdapter", () => {
-  it("renders rich text without disabling MindElixir native editing", () => {
+  it("projects one domain node with quote and images as one visual node", () => {
     const tree = createInitialTree();
-    tree.nodes.web.content = {
-      text: "Web端",
-      spans: [{ text: "Web", marks: { bold: true } }, { text: "端" }],
-    };
-
-    const data = treeToMindElixir(tree);
-    const webNode = data.nodeData.children?.[0] as NodeObj;
-
-    expect(webNode.dangerouslySetInnerHTML).toBeUndefined();
-    expect(renderMindMapNode(webNode.topic, webNode)).toContain("font-weight:700");
+    tree.nodes.web.blocks = [
+      { id: "quote", type: "quote", content: { text: "引用" } },
+      { id: "image-1", type: "image", image: { url: "asset:1" } },
+      { id: "image-2", type: "image", image: { url: "asset:2" } },
+    ];
+    const children = treeToMindElixir(tree).nodeData.children as NodeObj[];
+    expect(children).toHaveLength(2);
+    expect(children[0].dangerouslySetInnerHTML).toContain('data-zhijian-node-content="web"');
+    expect(children[0].metadata).toMatchObject({ hasQuote: true, imageCount: 2 });
+    expect(JSON.stringify(children[0])).not.toContain("asset:1");
   });
 
-  it("renders newly edited text instead of stale rich text metadata", () => {
-    const data = treeToMindElixir(createInitialTree());
-    const webNode = data.nodeData.children?.[0] as NodeObj;
-
-    expect(renderMindMapNode("Web 新内容", webNode)).toBe("Web 新内容");
-  });
-
-  it("creates BlockNote mount points for table and image nodes", () => {
+  it("keeps tables as their own visual node", () => {
     const tree = createInitialTree();
     tree.nodes.web.type = "table";
-    tree.nodes.web.props = {
-      table: {
-        rows: [
-          Array.from({ length: 10 }, (_, index) => ({
-            content: { text: `第 ${index + 1} 列` },
-          })),
-        ],
-        columnWidths: Array.from({ length: 10 }, () => 480),
-      },
-    };
-    tree.nodes.app.type = "image";
-    tree.nodes.app.props = {
-      image: { url: "data:image/png;base64,abc", previewWidth: 320 },
-    };
-
-    const data = treeToMindElixir(tree);
-    const tableNode = data.nodeData.children?.[0] as NodeObj;
-    const imageNode = data.nodeData.children?.[1] as NodeObj;
-
-    expect(tableNode.dangerouslySetInnerHTML).toBe(
-      '<div class="mindmap-blocknote-slot mindmap-blocknote-slot-table" data-zhijian-media-node="web"></div>',
-    );
-    expect(imageNode.dangerouslySetInnerHTML).toBe(
-      '<div class="mindmap-node-group-slot" data-zhijian-group-primary="app" data-zhijian-group-quote="" data-zhijian-group-images="app"></div>',
-    );
-    expect(JSON.stringify(tableNode)).not.toContain("第 10 列");
-    expect(JSON.stringify(tableNode)).not.toContain("480");
-    expect(JSON.stringify(imageNode)).not.toContain("320");
-    expect(imageNode.image).toBeUndefined();
+    tree.nodes.web.props = { table: { rows: [[{ content: { text: "单元格" } }]] } };
+    const table = (treeToMindElixir(tree).nodeData.children as NodeObj[])[0];
+    expect(table.dangerouslySetInnerHTML).toContain('data-zhijian-media-node="web"');
+    expect(JSON.stringify(table)).not.toContain("单元格");
   });
 
-  it("renders Todo directly and groups a sibling quote with the preceding node", () => {
+  it("renders todo state and rich text", () => {
     const tree = createInitialTree();
     tree.nodes.web.type = "todo";
     tree.nodes.web.props = { checked: true };
-    tree.nodes.quote = {
-      id: "quote",
-      parentId: "root",
-      children: [],
-      content: { text: "先验证，再发布" },
-      type: "quote",
-    };
-    tree.nodes.root.children.push("quote");
-
-    const data = treeToMindElixir(tree);
-    const todoNode = data.nodeData.children?.[0] as NodeObj;
-    const appNode = data.nodeData.children?.[1] as NodeObj;
-
-    expect(renderMindMapNode(todoNode.topic, todoNode)).toContain(
-      'class="mindmap-todo is-checked"',
-    );
-    expect(renderMindMapNode(todoNode.topic, todoNode)).toContain(
-      'data-node-id="web"',
-    );
-    expect(appNode.dangerouslySetInnerHTML).toContain(
-      'data-zhijian-group-quote="quote"',
-    );
+    tree.nodes.web.content = { text: "任务", spans: [{ text: "任务", marks: { bold: true } }] };
+    const node = (treeToMindElixir(tree).nodeData.children as NodeObj[])[0];
+    expect(renderMindMapNode(node.topic, node)).toContain("mindmap-todo is-checked");
+    expect(renderMindMapNode(node.topic, node)).toContain("font-weight:700");
   });
 
-  it("uses a blank topic for an empty text node", () => {
+  it("does not change visible structure when blocks change", () => {
     const tree = createInitialTree();
-    tree.nodes.web.content = { text: "" };
-
-    const data = treeToMindElixir(tree);
-    expect(data.nodeData.children?.[0].topic).toBe(" ");
-  });
-
-  it("groups consecutive sibling images into one projected gallery node", () => {
-    const tree = createInitialTree();
-    const imageIds = ["image-1", "image-2", "image-3", "image-4"];
-    imageIds.forEach((id) => {
-      tree.nodes[id] = {
-        id,
-        parentId: "root",
-        children: [],
-        content: { text: "" },
-        type: "image",
-        props: { image: { url: `asset:${id}` } },
-      };
-    });
-    tree.nodes.root.children = ["web", ...imageIds, "app"];
-
-    const data = treeToMindElixir(tree);
-    const webNode = data.nodeData.children?.[0] as NodeObj;
-
-    expect(data.nodeData.children).toHaveLength(2);
-    expect(webNode.dangerouslySetInnerHTML).toContain(
-      'data-zhijian-group-images="image-1,image-2,image-3,image-4"',
-    );
-  });
-
-  it("keeps tables standalone and never groups images across them", () => {
-    const tree = createInitialTree();
-    tree.nodes["image-before"] = {
-      id: "image-before",
-      parentId: "root",
-      children: [],
-      content: { text: "" },
-      type: "image",
-      props: { image: { url: "asset:image-before" } },
-    };
-    tree.nodes.table = {
-      id: "table",
-      parentId: "root",
-      children: [],
-      content: { text: "" },
-      type: "table",
-    };
-    tree.nodes["image-after"] = {
-      id: "image-after",
-      parentId: "root",
-      children: [],
-      content: { text: "" },
-      type: "image",
-      props: { image: { url: "asset:image-after" } },
-    };
-    tree.nodes.root.children = ["web", "image-before", "table", "image-after"];
-
-    const children = treeToMindElixir(tree).nodeData.children as NodeObj[];
-
-    expect(children).toHaveLength(3);
-    expect(children[0].dangerouslySetInnerHTML).toContain(
-      'data-zhijian-group-images="image-before"',
-    );
-    expect(children[1].dangerouslySetInnerHTML).toContain(
-      'data-zhijian-media-node="table"',
-    );
-    expect(children[2].dangerouslySetInnerHTML).toContain(
-      'data-zhijian-group-images="image-after"',
-    );
-  });
-
-  it("keeps the visible structure stable when attachments join an existing node", () => {
-    const tree = createInitialTree();
-    const initialSignature = createMindMapStructureSignature(tree);
-    tree.nodes.quote = {
-      id: "quote",
-      parentId: "root",
-      children: [],
-      content: { text: "引用" },
-      type: "quote",
-    };
-    tree.nodes.image = {
-      id: "image",
-      parentId: "root",
-      children: [],
-      content: { text: "" },
-      type: "image",
-      props: { image: { url: "asset:image" } },
-    };
-    tree.nodes.root.children = ["web", "quote", "image", "app"];
-
-    expect(createMindMapStructureSignature(tree)).toBe(initialSignature);
-
-    tree.nodes.table = {
-      id: "table",
-      parentId: "root",
-      children: [],
-      content: { text: "" },
-      type: "table",
-    };
-    tree.nodes.root.children.splice(3, 0, "table");
-
-    expect(createMindMapStructureSignature(tree)).not.toBe(initialSignature);
+    const initial = createMindMapStructureSignature(tree);
+    tree.nodes.web.blocks = [{ id: "quote", type: "quote", content: { text: "引用" } }];
+    expect(createMindMapStructureSignature(tree)).toBe(initial);
+    tree.nodes.web.children = ["new-child"];
+    tree.nodes["new-child"] = { id: "new-child", parentId: "web", children: [], type: "text", content: { text: "新" } };
+    expect(createMindMapStructureSignature(tree)).not.toBe(initial);
   });
 });

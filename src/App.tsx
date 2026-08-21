@@ -22,11 +22,8 @@ export default function App() {
     requestId: number;
   } | null>(null);
   const selectedNode = selectedNodeId ? store.getNode(selectedNodeId) : null;
-  const isMindMapMediaSelected =
-    selectedNode?.type === "table" || selectedNode?.type === "image";
-  const isMindMapGroupSelected = selectedNode
-    ? belongsToMindMapGroup(tree, selectedNode.id)
-    : false;
+  const isMindMapMediaSelected = selectedNode?.type === "table";
+  const isMindMapGroupSelected = Boolean(selectedNode?.blocks?.length);
 
   const handleOutlineSelect = useCallback(
     (nodeId: string) => {
@@ -176,21 +173,4 @@ export default function App() {
       </div>
     </main>
   );
-}
-
-function belongsToMindMapGroup(tree: ReturnType<TreeStore["getSnapshot"]>, nodeId: string) {
-  const node = tree.nodes[nodeId];
-  if (!node) {
-    return false;
-  }
-  if (node.type === "quote" || node.type === "image") {
-    return true;
-  }
-  if (!node.parentId) {
-    return false;
-  }
-  const siblings = tree.nodes[node.parentId]?.children ?? [];
-  const index = siblings.indexOf(nodeId);
-  const nextType = tree.nodes[siblings[index + 1]]?.type;
-  return nextType === "quote" || nextType === "image";
 }
