@@ -234,13 +234,12 @@ textarea {
   height: 10px;
   margin: 7px;
   border-radius: 50%;
-  background: #686970;
-  transition: box-shadow 120ms ease, background-color 120ms ease;
+  background: transparent;
+  transition: box-shadow 120ms ease;
 }
 
 .outline-panel .bn-side-menu [draggable="true"]:hover::before,
 .outline-panel .bn-side-menu [draggable="true"]:focus-visible::before {
-  background: #55575e;
   box-shadow:
     0 0 0 4px rgba(104, 105, 112, 0.16),
     0 0 10px rgba(66, 68, 75, 0.3);
