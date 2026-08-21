@@ -38,7 +38,10 @@ export function MindMapNodeContentBlock({
     { initialContent: projectedBlocks, dictionary: zhijianDictionary, uploadFile: async (file) => (await saveImageAsset(file)).url },
     [node.id],
   );
-  const blockIds = useMemo(() => [node.id, ...(node.blocks ?? []).map((block) => block.id)], [node]);
+  const blockIds = useMemo(
+    () => [node.id, `${node.id}::description`, ...(node.blocks ?? []).map((block) => block.id)],
+    [node],
+  );
 
   useEffect(() => {
     editor.isEditable = selected;
@@ -129,7 +132,8 @@ export function MindMapNodeContentBlock({
       const atStart = selection.$from.parentOffset === 0;
       const atEnd = selection.$from.parentOffset === selection.$from.parent.content.size;
       const blockType = node.blocks?.find((item) => item.id === block.id)?.type;
-      if (event.key === "Backspace" && atStart && atEnd && blockType === "quote") {
+      const isDescription = block.id === `${node.id}::description`;
+      if (event.key === "Backspace" && atStart && atEnd && (blockType === "quote" || isDescription)) {
         event.preventDefault();
         event.stopPropagation();
         focusPrimaryAfterBlockDelete.current = true;
@@ -169,7 +173,12 @@ export function MindMapNodeContentBlock({
           const updated = parsed?.nodes[node.id];
           if (!updated) return;
           if (JSON.stringify(updated.content) !== JSON.stringify(node.content) || JSON.stringify(updated.blocks ?? []) !== JSON.stringify(node.blocks ?? [])) {
-            store.updateNodeDocument(node.id, updated.content, updated.blocks ?? []);
+            store.updateNodeDocument(
+              node.id,
+              updated.content,
+              updated.blocks ?? [],
+              updated.description,
+            );
           }
         }}
       >

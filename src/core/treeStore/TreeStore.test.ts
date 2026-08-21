@@ -21,6 +21,14 @@ describe("TreeStore", () => {
     expect(store.getNode("web")?.description?.text).toBe("第一阶段");
   });
 
+  it("updates and clears the complete node document", () => {
+    const store = new TreeStore(createInitialTree());
+    store.updateNodeDocument("web", "正文", [], "描述");
+    expect(store.getNode("web")?.description?.text).toBe("描述");
+    store.updateNodeDocument("web", "正文", [], "");
+    expect(store.getNode("web")?.description).toBeUndefined();
+  });
+
   it("manages node-internal blocks without creating tree siblings", () => {
     const store = new TreeStore(createInitialTree());
     store.addNodeBlock("web", { id: "quote-1", type: "quote", content: { text: "引用" } });

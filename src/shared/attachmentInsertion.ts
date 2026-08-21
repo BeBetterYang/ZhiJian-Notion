@@ -11,9 +11,15 @@ type Editor<BS extends BlockSchema, IS extends InlineContentSchema, SS extends S
 export function nodeInsertionReference<BS extends BlockSchema, IS extends InlineContentSchema, SS extends StyleSchema>(
   editor: Editor<BS, IS, SS>, selectedBlockId: string,
 ) {
-  // Return the selected block itself — attachments go into its children.
-  // If it's already a child of another block, we still attach here (nested case).
-  return editor.getBlock(selectedBlockId);
+  const visit = (blocks: ReturnType<Editor<BS, IS, SS>["getBlock"]>[], id: string): ReturnType<Editor<BS, IS, SS>["getBlock"]> | undefined => {
+    for (const block of blocks) {
+      if (block?.id === id) return block;
+      const nested = visit(block?.children ?? [], id);
+      if (nested) return block;
+    }
+    return undefined;
+  };
+  return visit(editor.document, selectedBlockId);
 }
 
 export function insertNodeAttachmentBlocks<BS extends BlockSchema, IS extends InlineContentSchema, SS extends StyleSchema>(

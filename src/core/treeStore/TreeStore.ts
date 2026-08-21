@@ -136,10 +136,14 @@ export class TreeStore {
     id: string,
     content: string | RichTextContent,
     blocks: ZhiJianNodeBlock[],
+    description?: string | RichTextContent,
   ) {
     this.commit((draft) => {
       const node = this.requireDraftNode(draft, id);
       node.content = normalizeRichText(content);
+      const nextDescription = description ? normalizeRichText(description) : undefined;
+      if (nextDescription?.text.trim()) node.description = nextDescription;
+      else delete node.description;
       node.blocks = node.type === "table" ? undefined : cloneBlocks(blocks);
       draft.nodes[id] = touchNode(node);
     });

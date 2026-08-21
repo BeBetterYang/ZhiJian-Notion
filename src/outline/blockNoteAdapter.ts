@@ -60,7 +60,7 @@ export function blockNoteToTree(blocks: Block[], previousTree?: ZhiJianTree): Zh
       content: contentFromBlock(type, block),
       description: descriptionBlock
         ? blockNoteContentToRichText(descriptionBlock.content)
-        : previous?.description,
+        : undefined,
       type,
       blocks: attachmentBlocks.length
         ? attachmentBlocks.map(blockToNodeBlock)
