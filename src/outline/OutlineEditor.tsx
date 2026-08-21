@@ -33,7 +33,7 @@ interface OutlineEditorProps {
   mindMapTextSelection: MindMapTextSelection | null;
   mindMapToolbarTarget: HTMLElement | null;
   showMindMapToolbar: boolean;
-  onMindMapInsertQuote: (nodeId: string) => void;
+  onMindMapInsertQuote: (nodeId: string, focusBlockId: string) => void;
 }
 
 export function OutlineEditor({

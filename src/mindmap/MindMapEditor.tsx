@@ -18,7 +18,7 @@ interface MindMapEditorProps {
   onTextSelectionChange: (selection: MindMapTextSelection | null) => void;
   selectedNodeId: string | null;
   toolbarTarget: HTMLElement | null;
-  focusRequest: { nodeId: string; requestId: number } | null;
+  focusRequest: { nodeId: string; focusBlockId: string; requestId: number } | null;
   onFocusRequestHandled: (requestId: number) => void;
 }
 

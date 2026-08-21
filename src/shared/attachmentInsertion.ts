@@ -47,7 +47,7 @@ export function insertNodeAttachmentBlocks<BS extends BlockSchema, IS extends In
   const next = editor.updateBlock(owner, {
     children: [...blocks, ...owner.children] as unknown as Parameters<Editor<BS, IS, SS>["updateBlock"]>[1]["children"],
   });
-  return next.children.slice(-blocks.length);
+  return next.children.slice(0, blocks.length);
 }
 
 // Compatibility wrappers for callers that only need the owning node id.

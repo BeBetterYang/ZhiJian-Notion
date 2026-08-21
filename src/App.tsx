@@ -19,6 +19,7 @@ export default function App() {
     useState<MindMapTextSelection | null>(null);
   const [mindMapFocusRequest, setMindMapFocusRequest] = useState<{
     nodeId: string;
+    focusBlockId: string;
     requestId: number;
   } | null>(null);
   const selectedNode = selectedNodeId ? store.getNode(selectedNodeId) : null;
@@ -119,11 +120,12 @@ export default function App() {
               !isMindMapMediaSelected &&
               !isMindMapGroupSelected
             }
-            onMindMapInsertQuote={(nodeId) => {
+            onMindMapInsertQuote={(nodeId, focusBlockId) => {
               setSelectedNodeId(nodeId);
               setSelectionActive(true);
               setMindMapFocusRequest((current) => ({
                 nodeId,
+                focusBlockId,
                 requestId: (current?.requestId ?? 0) + 1,
               }));
             }}

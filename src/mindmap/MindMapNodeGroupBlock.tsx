@@ -16,7 +16,7 @@ interface MindMapNodeContentBlockProps {
   selected: boolean;
   toolbarTarget: HTMLElement | null;
   onSelect: (nodeId: string) => void;
-  focusRequest: { nodeId: string; requestId: number } | null;
+  focusRequest: { nodeId: string; focusBlockId: string; requestId: number } | null;
   onFocusRequestHandled: (requestId: number) => void;
 }
 
@@ -48,10 +48,11 @@ export function MindMapNodeContentBlock({
   }, [editor, selected]);
 
   useEffect(() => {
-    if (!focusRequest || !blockIds.includes(focusRequest.nodeId)) return;
+    const focusBlockId = focusRequest?.focusBlockId;
+    if (!focusBlockId || !blockIds.includes(focusBlockId)) return;
     const frame = window.requestAnimationFrame(() => {
       try {
-        editor.setTextCursorPosition(focusRequest.nodeId, "start");
+        editor.setTextCursorPosition(focusBlockId, "start");
         editor.focus();
         onFocusRequestHandled(focusRequest.requestId);
       } catch {

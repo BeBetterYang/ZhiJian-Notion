@@ -358,11 +358,6 @@ textarea {
   max-width: none;
 }
 
-.mindmap-blocknote-slot-image {
-  width: max-content;
-  height: auto;
-}
-
 /* Persistent portal hosts: transparent passthrough wrappers that keep a stable
    DOM identity across mind.refresh() so embedded editors are not remounted. */
 .mindmap-media-host {
@@ -371,12 +366,6 @@ textarea {
   height: auto;
   overflow: visible;
   vertical-align: middle;
-  pointer-events: auto;
-}
-
-.mindmap-group-host {
-  display: block;
-  width: max-content;
   pointer-events: auto;
 }
 
@@ -442,11 +431,6 @@ textarea {
   display: none;
 }
 
-.mindmap-blocknote-node-image .ProseMirror-selectednode > .bn-block-content > *::after,
-.mindmap-blocknote-node-image .bn-block-content.ProseMirror-selectednode > *::after {
-  display: none;
-}
-
 .mindmap-blocknote-node-table table {
   width: max-content;
   min-width: 100%;
@@ -459,24 +443,6 @@ textarea {
   min-width: 5em;
   padding: 0.35em 0.5em;
   font-size: inherit;
-}
-
-.mindmap-blocknote-node-image .bn-visual-media-wrapper {
-  width: fit-content !important;
-  max-width: 24em;
-}
-
-.mindmap-blocknote-node-image [data-file-block],
-.mindmap-blocknote-node-image .bn-file-block-content-wrapper {
-  width: fit-content !important;
-}
-
-.mindmap-blocknote-node-image img {
-  display: block;
-  width: auto;
-  max-width: 24em;
-  max-height: 16em;
-  object-fit: contain;
 }
 
 .mindmap-node-text {
@@ -528,98 +494,122 @@ textarea {
   text-decoration: line-through;
 }
 
-.mindmap-node-group-slot,
-.mindmap-node-group {
+.mindmap-node-content-slot,
+.mindmap-content-host,
+.mindmap-node-content-editor {
   display: block;
   width: max-content;
-}
-
-.mindmap-node-group {
-  max-width: none;
-}
-
-.mindmap-node-group-slot,
-.mindmap-node-group,
-.mindmap-text-group-editor,
-.mindmap-text-group-editor * {
+  max-width: 28em;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
   pointer-events: auto;
   user-select: text;
 }
 
-.mindmap-text-group-editor,
-.mindmap-text-group-editor .bn-container,
-.mindmap-text-group-editor .bn-editor,
-.mindmap-text-group-editor .bn-block-group,
-.mindmap-text-group-editor .bn-block-outer,
-.mindmap-text-group-editor .bn-block,
-.mindmap-text-group-editor .bn-block-content {
-  width: max-content;
-  min-width: 0;
-  max-width: 28em;
+.mindmap-node-content-slot *,
+.mindmap-content-host *,
+.mindmap-node-content-editor * {
+  pointer-events: auto;
+  user-select: text;
 }
 
-.mindmap-text-group-editor .bn-editor {
+.mindmap-node-content-editor .bn-container,
+.mindmap-node-content-editor .bn-editor,
+.mindmap-node-content-editor .bn-block-group,
+.mindmap-node-content-editor .bn-block-outer,
+.mindmap-node-content-editor .bn-block,
+.mindmap-node-content-editor .bn-block-content {
+  width: max-content;
+  min-width: 0;
+  min-height: 0;
+  max-width: 28em;
+  margin: 0;
+}
+
+.mindmap-node-content-editor .bn-editor {
   min-height: 0;
   padding: 0;
   background: transparent;
   font-size: inherit;
 }
 
-.mindmap-text-group-editor .bn-block-content {
-  padding: 0.12em 0;
+.mindmap-node-content-editor .bn-block-content {
+  padding: 0.08em 0;
   white-space: normal;
   overflow-wrap: anywhere;
 }
 
-.mindmap-text-group-editor .bn-block-content::after {
+.mindmap-node-content-editor .bn-block-content::after {
   content: none !important;
 }
 
-.mindmap-text-group-editor .bn-trailing-block {
+.mindmap-node-content-editor .bn-trailing-block {
   display: none;
 }
 
-.mindmap-text-group-editor [data-content-type="quote"] blockquote {
-  margin-top: 0.2em;
-  padding-left: 0.7em;
-  border-left-width: 3px;
+.mindmap-node-content-editor .bn-block-group .bn-block-group {
+  margin-left: 0;
 }
 
-.mindmap-image-gallery {
-  display: grid;
-  width: max-content;
-  gap: 0.45em;
-  margin-top: 0.45em;
+.mindmap-node-content-editor [data-content-type="quote"] blockquote {
+  margin: 0.12em 0;
+  padding-left: 0.55em;
+  border-left: 2px solid #9aa0a6;
+  color: #6b7280;
+  font-size: 14px;
+  line-height: 1.45;
 }
 
-.mindmap-image-gallery .mindmap-blocknote-node,
-.mindmap-image-gallery .bn-container,
-.mindmap-image-gallery .bn-editor,
-.mindmap-image-gallery .bn-block-group,
-.mindmap-image-gallery .bn-block-outer,
-.mindmap-image-gallery .bn-block,
-.mindmap-image-gallery .bn-block-content,
-.mindmap-image-gallery [data-file-block],
-.mindmap-image-gallery .bn-file-block-content-wrapper,
-.mindmap-image-gallery .bn-visual-media-wrapper {
+.mindmap-node-content-editor
+  .bn-block-outer:has(
+    > .bn-block > .bn-block-content[data-content-type="image"]
+  ) {
+  display: inline-block;
+  width: 8em;
+  max-width: 8em;
+  margin: 0 0.35em 0.35em 0;
+  vertical-align: top;
+}
+
+.mindmap-node-content-editor
+  .bn-block-outer:has(
+    > .bn-block > .bn-block-content[data-content-type="image"]
+  )
+  .bn-block-content,
+.mindmap-node-content-editor
+  .bn-block-outer:has(
+    > .bn-block > .bn-block-content[data-content-type="image"]
+  )
+  [data-file-block],
+.mindmap-node-content-editor
+  .bn-block-outer:has(
+    > .bn-block > .bn-block-content[data-content-type="image"]
+  )
+  .bn-file-block-content-wrapper,
+.mindmap-node-content-editor
+  .bn-block-outer:has(
+    > .bn-block > .bn-block-content[data-content-type="image"]
+  )
+  .bn-visual-media-wrapper {
   width: 8em !important;
   height: 8em;
   min-height: 0;
-  max-width: none;
+  max-width: 8em;
   padding: 0;
 }
 
-.mindmap-image-gallery .mindmap-blocknote-node {
-  overflow: hidden;
-  border-radius: 4px;
-}
-
-.mindmap-image-gallery img {
+.mindmap-node-content-editor
+  .bn-block-outer:has(
+    > .bn-block > .bn-block-content[data-content-type="image"]
+  )
+  img {
   width: 100% !important;
   height: 100% !important;
   max-width: none;
   max-height: none;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 

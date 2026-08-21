@@ -14,7 +14,7 @@ import { insertNodeAttachmentBlocks } from "./attachmentInsertion";
 interface ZhiJianFormattingToolbarProps {
   showStructuralControls?: boolean;
   hasExternalBody?: boolean;
-  onInsertQuote?: (nodeId: string) => void;
+  onInsertQuote?: (nodeId: string, focusBlockId: string) => void;
 }
 
 export function ZhiJianFormattingToolbar({
@@ -72,7 +72,7 @@ export function ZhiJianFormattingToolbar({
 function InsertQuoteButton({
   onInsertQuote,
 }: {
-  onInsertQuote?: (nodeId: string) => void;
+  onInsertQuote?: (nodeId: string, focusBlockId: string) => void;
 }) {
   const editor = useBlockNoteEditor();
   const Components = useComponentsContext()!;
@@ -89,7 +89,7 @@ function InsertQuoteButton({
         ]);
         if (quote) {
           editor.setTextCursorPosition(quote, "start");
-          onInsertQuote?.(quote.id);
+          onInsertQuote?.(block.id, quote.id);
         }
       }}
     />
