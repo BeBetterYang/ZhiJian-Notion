@@ -98,6 +98,7 @@ export function OutlineEditor({
       editor={editor}
       theme="light"
       formattingToolbar={false}
+      sideMenu={false}
       slashMenu={false}
       onChange={() => {
         if (applyingExternalChange.current) {
