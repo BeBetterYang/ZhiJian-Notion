@@ -22,6 +22,8 @@ export function ZhiJianFormattingToolbar({
   onInsertQuote,
 }: ZhiJianFormattingToolbarProps = {}) {
   const editor = useBlockNoteEditor();
+  const activeBlock = editor.getSelection()?.blocks[0] ?? editor.getTextCursorPosition().block;
+
   const blockTypes = useMemo(
     () =>
       blockTypeSelectItems(editor.dictionary).filter((item) => {
@@ -43,6 +45,12 @@ export function ZhiJianFormattingToolbar({
   const defaultItems = getFormattingToolbarItems(blockTypes).filter(
     (item) => item.key !== "blockTypeSelect",
   );
+
+  // The root block is the fixed document title. It remains editable as text,
+  // but cannot be changed into another block type or receive formatting.
+  if (activeBlock?.id === editor.document[0]?.id) {
+    return null;
+  }
 
   return (
     <FormattingToolbar>

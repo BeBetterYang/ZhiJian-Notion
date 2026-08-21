@@ -1,7 +1,15 @@
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 import type { BlockNoteEditor } from "@blocknote/core";
-import { FormattingToolbarController, useCreateBlockNote } from "@blocknote/react";
+import { SideMenuExtension } from "@blocknote/core/extensions";
+import {
+  FormattingToolbarController,
+  SideMenu,
+  SideMenuController,
+  useCreateBlockNote,
+  useBlockNoteEditor,
+  useExtensionState,
+} from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -106,6 +114,7 @@ export function OutlineEditor({
       }}
     >
       <FormattingToolbarController formattingToolbar={() => <ZhiJianFormattingToolbar />} />
+      <SideMenuController sideMenu={RootProtectedSideMenu} />
       <ZhiJianSlashMenu />
       {showMindMapToolbar && mindMapToolbarTarget
         ? createPortal(
@@ -126,6 +135,21 @@ export function OutlineEditor({
       {editorView}
     </section>
   );
+}
+
+function RootProtectedSideMenu() {
+  const editor = useBlockNoteEditor();
+  const state = useExtensionState(SideMenuExtension, {
+    selector: (extensionState) => extensionState?.block,
+  });
+
+  // The root is a fixed document title. Child blocks keep the standard
+  // BlockNote add/drag controls.
+  if (state?.id && state.id === editor.document[0]?.id) {
+    return null;
+  }
+
+  return <SideMenu />;
 }
 
 function blockProjectionSignature(tree: ReturnType<TreeStore["getSnapshot"]>) {
