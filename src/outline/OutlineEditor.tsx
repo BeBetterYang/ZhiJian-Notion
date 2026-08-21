@@ -4,6 +4,7 @@ import type { BlockNoteEditor } from "@blocknote/core";
 import { SideMenuExtension } from "@blocknote/core/extensions";
 import {
   FormattingToolbarController,
+  AddBlockButton,
   SideMenu,
   SideMenuController,
   useCreateBlockNote,
@@ -150,7 +151,11 @@ function RootProtectedSideMenu() {
     return null;
   }
 
-  return <SideMenu />;
+  return (
+    <SideMenu>
+      <AddBlockButton />
+    </SideMenu>
+  );
 }
 
 function blockProjectionSignature(tree: ReturnType<TreeStore["getSnapshot"]>) {

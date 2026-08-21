@@ -150,6 +150,56 @@ textarea {
   min-height: 100%;
 }
 
+/* Keep the root title visually distinct while restoring BlockNote's normal
+   placeholders for every other block. */
+.outline-panel
+  .bn-editor
+  > .bn-block-group
+  > .bn-block-outer:first-child
+  > .bn-block
+  > .bn-block-content:has(.ProseMirror-trailingBreak:only-child)::after {
+  content: "无标题" !important;
+}
+
+/* The persistent node marker replaces BlockNote's drag handle. */
+.outline-panel
+  .bn-block-group
+  .bn-block-outer
+  > .bn-block
+  > .bn-block-content[data-content-type="paragraph"]::before,
+.outline-panel
+  .bn-block-group
+  .bn-block-outer
+  > .bn-block
+  > .bn-block-content[data-content-type="heading"]::before,
+.outline-panel
+  .bn-block-group
+  .bn-block-outer
+  > .bn-block
+  > .bn-block-content[data-content-type="checkListItem"]::before,
+.outline-panel
+  .bn-block-group
+  .bn-block-outer
+  > .bn-block
+  > .bn-block-content[data-content-type="table"]::before {
+  content: "";
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  margin: 12px 12px 0 0;
+  border-radius: 50%;
+  background: #62656b;
+}
+
+.outline-panel
+  .bn-editor
+  > .bn-block-group
+  > .bn-block-outer:first-child
+  > .bn-block
+  > .bn-block-content::before {
+  content: none;
+}
+
 .outline-panel .bn-visual-media-wrapper {
   max-width: min(720px, 100%);
 }
