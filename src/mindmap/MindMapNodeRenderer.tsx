@@ -1,4 +1,3 @@
-import type { NodeObj } from "mind-elixir";
 import { type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import {
   normalizeRichText,
@@ -90,6 +89,30 @@ export function MindMapNodeRenderer({ node, onSelect, onEdit }: MindMapNodeRende
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function renderMindMapNodeHtml(node: ZhiJianNode) {
+  const primary = node.type === "table"
+    ? renderTableHtml(node)
+    : node.type === "todo"
+      ? `<span class="mindmap-node-todo ${node.props?.checked ? "is-checked" : ""}"><span class="mindmap-node-checkbox" data-node-id="${escapeHtml(node.id)}" role="checkbox" aria-checked="${node.props?.checked ? "true" : "false"}">${node.props?.checked ? "✓" : ""}</span><span class="mindmap-node-rich-text">${renderRichTextHtml(node.content)}</span></span>`
+      : `<span class="mindmap-node-rich-text">${renderRichTextHtml(node.content)}</span>`;
+  const description = node.description
+    ? `<div class="mindmap-node-quote" data-block-id="${escapeHtml(`${node.id}::description`)}">${renderRichTextHtml(node.description)}</div>`
+    : "";
+  const quotes = (node.blocks ?? [])
+    .filter((block): block is Extract<ZhiJianNodeBlock, { type: "quote" }> => block.type === "quote")
+    .map((block) => `<div class="mindmap-node-quote" data-block-id="${escapeHtml(block.id)}">${renderRichTextHtml(block.content)}</div>`)
+    .join("");
+  const images = (node.blocks ?? [])
+    .filter((block): block is Extract<ZhiJianNodeBlock, { type: "image" }> => block.type === "image")
+    .map((block) => {
+      const url = block.image.assetId ? getCachedImageAssetUrl(block.image.assetId) : block.image.url;
+      return `<div class="mindmap-node-image" data-block-id="${escapeHtml(block.id)}">${url ? `<img src="${escapeHtml(url)}" alt="${escapeHtml(block.image.name ?? "图片")}">` : "图片"}</div>`;
+    })
+    .join("");
+  return `<div class="mindmap-node-renderer" data-node-id="${escapeHtml(node.id)}"><div class="mindmap-node-body"><div class="mindmap-node-primary">${primary}</div>${description}${quotes}${images ? `<div class="mindmap-node-images">${images}</div>` : ""}</div></div>`;
+}
+
 function RichTextView({ content }: { content: RichTextContent }) {
   const normalized = normalizeRichText(content);
   const spans = normalized.spans?.length
@@ -163,17 +186,29 @@ function MindMapTablePreview({ node }: { node: ZhiJianNode }) {
   );
 }
 
-// Kept as the native MindElixir fallback for nodes while their React portal mounts.
-// eslint-disable-next-line react-refresh/only-export-components
-export function renderMindMapNode(topic: string, obj: NodeObj) {
-  const metadata = (obj as NodeObj<MindMapNodeMetadata>).metadata;
-  if (!metadata || metadata.plainText !== topic) {
-    return escapeHtml(topic);
-  }
-  if (metadata.type === "todo") {
-    return `<span class="mindmap-todo ${metadata.checked ? "is-checked" : ""}"><span class="mindmap-todo-checkbox" data-node-id="${escapeHtml(obj.id)}" role="checkbox" aria-label="待办" aria-checked="${metadata.checked ? "true" : "false"}">${metadata.checked ? "✓" : ""}</span><span class="mindmap-todo-content">${metadata.richTextHtml ?? escapeHtml(topic)}</span></span>`;
-  }
-  return `<span class="mindmap-node-text">${metadata.richTextHtml ?? escapeHtml(topic)}</span>`;
+function renderTableHtml(node: ZhiJianNode) {
+  const rows = node.props?.table?.rows ?? [];
+  const body = rows.map((row) => `<tr>${row.map((cell) => `<td>${renderRichTextHtml(cell.content)}</td>`).join("")}</tr>`).join("");
+  return `<div class="mindmap-node-table"><table><tbody>${body}</tbody></table>${rows.length ? "" : "表格"}</div>`;
+}
+
+function renderRichTextHtml(content: RichTextContent) {
+  const normalized = normalizeRichText(content);
+  const spans = normalized.spans?.length ? normalized.spans : [{ text: normalized.text, marks: normalized.marks }];
+  return spans.map((span) => {
+    const style = [
+      span.marks?.bold ? "font-weight:700" : "",
+      span.marks?.italic ? "font-style:italic" : "",
+      span.marks?.underline || span.marks?.strike
+        ? `text-decoration:${[span.marks.underline ? "underline" : "", span.marks.strike ? "line-through" : ""].filter(Boolean).join(" ")}`
+        : "",
+      span.marks?.textColor ? `color:${escapeHtml(span.marks.textColor)}` : "",
+      span.marks?.backgroundColor ? `background:${escapeHtml(span.marks.backgroundColor)}` : "",
+    ].filter(Boolean).join(";");
+    const text = escapeHtml(span.text);
+    const inner = `<span${style ? ` style="${style}"` : ""}>${text}</span>`;
+    return span.marks?.linkUrl ? `<a href="${escapeHtml(span.marks.linkUrl)}" target="_blank" rel="noreferrer">${inner}</a>` : inner;
+  }).join("");
 }
 
 function escapeHtml(value: string) {

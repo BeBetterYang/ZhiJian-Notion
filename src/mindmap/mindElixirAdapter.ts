@@ -7,7 +7,7 @@ import {
   type ZhiJianNode,
   type ZhiJianTree,
 } from "../core/tree";
-import { renderMindMapNode, type MindMapNodeMetadata } from "./MindMapNodeRenderer";
+import { renderMindMapNodeHtml, type MindMapNodeMetadata } from "./MindMapNodeRenderer";
 
 export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
   const visit = (node: ZhiJianNode): NodeObj<MindMapNodeMetadata> => {
@@ -27,7 +27,7 @@ export function treeToMindElixir(tree: ZhiJianTree): MindElixirData {
         fontStyle: marks?.italic ? "italic" : style.fontStyle,
         textDecoration: marksToTextDecoration(marks) ?? style.textDecorationLine ?? style.textDecoration,
       } as NodeObj["style"] & { fontStyle?: string },
-      dangerouslySetInnerHTML: contentSlotHtml(node.id),
+      dangerouslySetInnerHTML: renderMindMapNodeHtml(node),
       metadata: {
         type: node.type,
         plainText: topic,
@@ -51,16 +51,6 @@ export function createMindMapStructureSignature(tree: ZhiJianTree) {
     children: node.children?.map(visit) ?? [],
   });
   return JSON.stringify(visit(root));
-}
-
-function contentSlotHtml(id: string) {
-  return `<div class="mindmap-node-content-slot" data-zhijian-node-content="${escapeHtml(id)}"></div>`;
-}
-
-export { renderMindMapNode };
-
-function escapeHtml(value: string) {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
 
 function marksToTextDecoration(marks: ReturnType<typeof firstMarks>) {

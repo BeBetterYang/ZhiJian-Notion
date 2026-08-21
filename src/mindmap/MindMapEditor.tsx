@@ -6,9 +6,12 @@ import { createPortal } from "react-dom";
 import type { TreeStore } from "../core/treeStore";
 import { useTree } from "../core/treeStore/useTree";
 import { textOffset } from "../outline/mindMapTextSelection";
-import { createMindMapStructureSignature, renderMindMapNode, treeToMindElixir } from "./mindElixirAdapter";
+import { createMindMapStructureSignature, treeToMindElixir } from "./mindElixirAdapter";
 import { applyMindElixirOperation } from "./mindElixirCommands";
 import { MindMapNodeContent } from "./MindMapNodeGroupBlock";
+import { renderMindMapNodeHtml } from "./MindMapNodeRenderer";
+
+type EditingTarget = { nodeId: string; focusBlockId?: string } | null;
 
 interface MindMapEditorProps {
   store: TreeStore;
@@ -51,8 +54,8 @@ export function MindMapEditor({
   const selectedNodeRef = useRef(selectedNodeId);
   const contentHosts = useRef(new Map<string, HTMLDivElement>());
   const [contentTargets, setContentTargets] = useState<Array<{ id: string; host: HTMLElement }>>([]);
-  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
-  const editingNodeRef = useRef<string | null>(null);
+  const [editingTarget, setEditingTarget] = useState<EditingTarget>(null);
+  const editingTargetRef = useRef<EditingTarget>(null);
 
   const collectTargets = useCallback(() => {
     const container = containerRef.current;
@@ -68,12 +71,8 @@ export function MindMapEditor({
   }, []);
 
   useEffect(() => {
-    editingNodeRef.current = editingNodeId;
-  }, [editingNodeId]);
-
-  useEffect(() => {
     if (focusRequest?.nodeId && tree.nodes[focusRequest.nodeId]) {
-      setEditingNodeId(focusRequest.nodeId);
+      setEditingTarget({ nodeId: focusRequest.nodeId, focusBlockId: focusRequest.focusBlockId });
     }
   }, [focusRequest, tree.nodes]);
 
@@ -96,7 +95,7 @@ export function MindMapEditor({
       keypress: true,
       allowUndo: false,
       newTopicName: " ",
-      markdown: (topic, obj) => renderMindMapNode(topic, obj as Parameters<typeof renderMindMapNode>[1]),
+      markdown: (topic) => topic,
     });
     mind.init(treeToMindElixir(initialTree.current));
     queueMicrotask(collectTargets);
@@ -104,7 +103,7 @@ export function MindMapEditor({
       if (suppressOperation.current) return;
       if ("obj" in operation && operation.obj?.id) {
         lastSelectedNodeId.current = operation.obj.id;
-        setEditingNodeId(null);
+        setEditingTarget(null);
         onSelectRef.current(operation.obj.id);
         onActiveRef.current(true);
       }
@@ -119,7 +118,7 @@ export function MindMapEditor({
     mind.bus.addListener("selectNodes", (nodes) => {
       if (!nodes[0]) return;
       lastSelectedNodeId.current = nodes[0].id;
-      setEditingNodeId(null);
+      setEditingTarget(null);
       onSelectRef.current(nodes[0].id);
       onActiveRef.current(true);
     });
@@ -181,12 +180,12 @@ export function MindMapEditor({
     const container = containerRef.current;
     if (!container) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (editingNodeRef.current || event.key !== "Enter") return;
+      if (editingTargetRef.current || event.key !== "Enter") return;
       const nodeId = lastSelectedNodeId.current ?? selectedNodeRef.current;
       if (!nodeId || !storeRef.current.getNode(nodeId)) return;
       event.preventDefault();
       event.stopPropagation();
-      setEditingNodeId(nodeId);
+      setEditingTarget({ nodeId });
     };
     container.addEventListener("keydown", onKeyDown, true);
     return () => container.removeEventListener("keydown", onKeyDown, true);
@@ -198,11 +197,13 @@ export function MindMapEditor({
     const nextSignature = createMindMapStructureSignature(tree);
     const nextData = treeToMindElixir(tree);
     if (structureSignature.current === nextSignature) {
-      const changed = updateMindMapNodesInPlace(mind, nextData.nodeData);
+      const changed = updateMindMapNodesInPlace(mind, nextData.nodeData, editingTargetRef.current?.nodeId);
       if (changed) queueMicrotask(collectTargets);
       return;
     }
     structureSignature.current = nextSignature;
+    const editingId = editingTargetRef.current?.nodeId;
+    if (editingId) setProjectedNodeHtml(nextData.nodeData, editingId, contentSlotHtml(editingId));
     suppressOperation.current = true;
     mind.refresh(nextData);
     mind.clearHistory?.();
@@ -210,6 +211,7 @@ export function MindMapEditor({
     const timer = window.setTimeout(() => {
       suppressOperation.current = false;
       collectTargets();
+      if (editingTargetRef.current) replaceNodeHtml(mind, editingTargetRef.current.nodeId, contentSlotHtml(editingTargetRef.current.nodeId));
       if (!restoreId) return;
       try { mind.selectNode(mind.findEle(restoreId)); } catch { lastSelectedNodeId.current = null; }
     }, 0);
@@ -229,22 +231,57 @@ export function MindMapEditor({
     return () => { observer.disconnect(); window.cancelAnimationFrame(frame); };
   }, [contentTargets]);
 
-  const selectPortalNode = (nodeId: string) => {
-    if (editingNodeRef.current !== nodeId) setEditingNodeId(null);
+  const selectPortalNode = useCallback((nodeId: string) => {
+    if (editingTargetRef.current?.nodeId !== nodeId) setEditingTarget(null);
     lastSelectedNodeId.current = nodeId;
     onSelectRef.current(nodeId);
     onActiveRef.current(true);
-  };
+  }, []);
 
-  const beginNodeEdit = (nodeId: string) => {
+  const beginNodeEdit = useCallback((nodeId: string, focusBlockId?: string) => {
     selectPortalNode(nodeId);
-    setEditingNodeId(nodeId);
-  };
+    setEditingTarget({ nodeId, focusBlockId });
+  }, [selectPortalNode]);
 
-  const finishNodeEdit = () => {
-    setEditingNodeId(null);
+  const finishNodeEdit = useCallback(() => {
+    setEditingTarget(null);
     onActiveRef.current(true);
-  };
+  }, []);
+
+  useEffect(() => {
+    const mind = mindRef.current;
+    const previous = editingTargetRef.current;
+    if (previous?.nodeId && previous.nodeId !== editingTarget?.nodeId) {
+      const previousNode = storeRef.current.getNode(previous.nodeId);
+      if (mind && previousNode) replaceNodeHtml(mind, previousNode.id, renderMindMapNodeHtml(previousNode));
+    }
+    if (mind && editingTarget) {
+      replaceNodeHtml(mind, editingTarget.nodeId, contentSlotHtml(editingTarget.nodeId));
+      collectTargets();
+      window.requestAnimationFrame(() => mind.linkDiv());
+    } else if (editingTarget === null && previous) {
+      collectTargets();
+      if (mind) window.requestAnimationFrame(() => mind.linkDiv());
+    }
+    editingTargetRef.current = editingTarget;
+  }, [collectTargets, editingTarget]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const onDoubleClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      const renderer = target?.closest<HTMLElement>(".mindmap-node-renderer[data-node-id]");
+      const nodeId = renderer?.dataset.nodeId;
+      if (!nodeId) return;
+      const blockId = target?.closest<HTMLElement>("[data-block-id]")?.dataset.blockId;
+      event.preventDefault();
+      event.stopPropagation();
+      beginNodeEdit(nodeId, blockId);
+    };
+    container.addEventListener("dblclick", onDoubleClick, true);
+    return () => container.removeEventListener("dblclick", onDoubleClick, true);
+  }, [beginNodeEdit]);
 
   return (
     <>
@@ -256,7 +293,7 @@ export function MindMapEditor({
             node={node}
             store={store}
             selected={selectedNodeId === id}
-            editing={editingNodeId === id}
+            editing={editingTarget?.nodeId === id}
             toolbarTarget={toolbarTarget}
             onSelect={selectPortalNode}
             onEdit={beginNodeEdit}
@@ -287,32 +324,51 @@ function pruneHosts(hosts: Map<string, HTMLDivElement>, activeIds: string[]) {
   for (const id of Array.from(hosts.keys())) if (!active.has(id)) hosts.delete(id);
 }
 
-function updateMindMapNodesInPlace(mind: MindElixir, root: import("mind-elixir").NodeObj) {
+function contentSlotHtml(id: string) {
+  return `<div class="mindmap-node-content-slot" data-zhijian-node-content="${escapeHtml(id)}"></div>`;
+}
+
+function escapeHtml(value: string) {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+}
+
+function replaceNodeHtml(mind: MindElixir, nodeId: string, html: string) {
+  try {
+    const element = mind.findEle(nodeId);
+    element.nodeObj.dangerouslySetInnerHTML = html;
+    element.innerHTML = html;
+  } catch {
+    // A collapsed node may not have a mounted element yet.
+  }
+}
+
+function setProjectedNodeHtml(node: import("mind-elixir").NodeObj, nodeId: string, html: string): boolean {
+  if (node.id === nodeId) {
+    node.dangerouslySetInnerHTML = html;
+    return true;
+  }
+  return node.children?.some((child) => setProjectedNodeHtml(child, nodeId, html)) ?? false;
+}
+
+function updateMindMapNodesInPlace(mind: MindElixir, root: import("mind-elixir").NodeObj, editingNodeId?: string) {
   let slotsChanged = false;
   const visit = (nextNode: typeof root) => {
     try {
       const topicElement = mind.findEle(nextNode.id);
       const currentNode = topicElement.nodeObj;
       const currentHtml = currentNode.dangerouslySetInnerHTML;
+      const nextHtml = nextNode.id === editingNodeId ? contentSlotHtml(nextNode.id) : nextNode.dangerouslySetInnerHTML ?? "";
       currentNode.topic = nextNode.topic;
       currentNode.note = nextNode.note;
       currentNode.style = nextNode.style;
       currentNode.metadata = nextNode.metadata;
-      currentNode.dangerouslySetInnerHTML = nextNode.dangerouslySetInnerHTML;
+      currentNode.dangerouslySetInnerHTML = nextHtml;
       Object.entries(nextNode.style ?? {}).forEach(([property, value]) => {
         (topicElement.style as unknown as Record<string, string>)[property] = String(value ?? "");
       });
-      if (currentHtml !== nextNode.dangerouslySetInnerHTML) {
+      if (currentHtml !== nextHtml) {
         slotsChanged = true;
-        if (nextNode.dangerouslySetInnerHTML) topicElement.innerHTML = nextNode.dangerouslySetInnerHTML;
-        else {
-          topicElement.innerHTML = `<span class="text">${renderMindMapNode(nextNode.topic, nextNode)}</span>`;
-          const text = topicElement.querySelector<HTMLElement>(".text");
-          if (text) topicElement.text = text;
-        }
-      } else if (!nextNode.dangerouslySetInnerHTML) {
-        const text = topicElement.querySelector<HTMLElement>(".text");
-        if (text) text.innerHTML = renderMindMapNode(nextNode.topic, nextNode);
+        topicElement.innerHTML = nextHtml;
       }
     } catch { /* collapsed descendants are not mounted */ }
     nextNode.children?.forEach(visit);

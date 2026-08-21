@@ -13,9 +13,10 @@ describe("mindElixirAdapter", () => {
     ];
     const children = treeToMindElixir(tree).nodeData.children as NodeObj[];
     expect(children).toHaveLength(2);
-    expect(children[0].dangerouslySetInnerHTML).toContain('data-zhijian-node-content="web"');
+    expect(children[0].dangerouslySetInnerHTML).toContain('class="mindmap-node-renderer"');
+    expect(children[0].dangerouslySetInnerHTML).toContain("引用");
     expect(children[0].metadata).toMatchObject({ hasQuote: true, imageCount: 2 });
-    expect(JSON.stringify(children[0])).not.toContain("asset:1");
+    expect(children[0].dangerouslySetInnerHTML).toContain("asset:1");
   });
 
   it("keeps tables as their own visual node", () => {
@@ -23,15 +24,16 @@ describe("mindElixirAdapter", () => {
     tree.nodes.web.type = "table";
     tree.nodes.web.props = { table: { rows: [[{ content: { text: "单元格" } }]] } };
     const table = (treeToMindElixir(tree).nodeData.children as NodeObj[])[0];
-    expect(table.dangerouslySetInnerHTML).toContain('data-zhijian-node-content="web"');
-    expect(JSON.stringify(table)).not.toContain("单元格");
+    expect(table.dangerouslySetInnerHTML).toContain('class="mindmap-node-table"');
+    expect(table.dangerouslySetInnerHTML).toContain("单元格");
+    expect(table.dangerouslySetInnerHTML).toContain("单元格");
   });
 
   it("mounts described nodes for inline quote-style editing", () => {
     const tree = createInitialTree();
     tree.nodes.web.description = { text: "这是描述内容" };
     const web = (treeToMindElixir(tree).nodeData.children as NodeObj[])[0];
-    expect(web.dangerouslySetInnerHTML).toContain('data-zhijian-node-content="web"');
+    expect(web.dangerouslySetInnerHTML).toContain('class="mindmap-node-quote"');
     expect(web.note).toBe("这是描述内容");
   });
 
@@ -42,7 +44,7 @@ describe("mindElixirAdapter", () => {
     tree.nodes.web.content = { text: "任务", spans: [{ text: "任务", marks: { bold: true } }] };
     const node = (treeToMindElixir(tree).nodeData.children as NodeObj[])[0];
     expect(node.metadata).toMatchObject({ type: "todo", checked: true });
-    expect(node.dangerouslySetInnerHTML).toContain('data-zhijian-node-content="web"');
+    expect(node.dangerouslySetInnerHTML).toContain('class="mindmap-node-checkbox"');
   });
 
   it("does not change visible structure when blocks change", () => {
