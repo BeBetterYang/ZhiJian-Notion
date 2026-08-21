@@ -536,6 +536,16 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+/* Complex nodes use the renderer as the visual body; the MindElixir box only
+   supplies positioning and connections. */
+.map-container me-tpc:has(> .mindmap-node-renderer .mindmap-node-images),
+.map-container me-tpc:has(> .mindmap-node-renderer .mindmap-node-quote) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
 .mindmap-node-renderer:has(.mindmap-node-table),
 .mindmap-node-renderer:has(.mindmap-node-table) .mindmap-node-body {
   width: max-content;
@@ -592,12 +602,13 @@ textarea {
 }
 
 .mindmap-node-quote {
-  margin: 0.05em 0;
-  padding-left: 0.55em;
-  border-left: 2px solid #9aa0a6;
+  margin: 0.2em 0;
+  padding-left: 0.7em;
+  border-left: 3px solid #b5b5b5;
   color: #6b7280;
   font-size: 14px;
   line-height: 1.45;
+  white-space: pre-wrap;
 }
 
 .mindmap-node-images {
@@ -616,6 +627,27 @@ textarea {
   justify-content: center;
   overflow: hidden;
   background: #f5f7fa;
+}
+
+.mindmap-node-images:has(> .mindmap-node-image:only-child) {
+  display: block;
+  width: min(42em, 70vw);
+  max-width: 42em;
+}
+
+.mindmap-node-images:has(> .mindmap-node-image:only-child) .mindmap-node-image {
+  width: 100%;
+  height: auto;
+  min-height: 12em;
+  max-height: 28em;
+  border-radius: 4px;
+}
+
+.mindmap-node-images:has(> .mindmap-node-image:only-child) .mindmap-node-image img {
+  width: 100%;
+  height: auto;
+  max-height: 28em;
+  object-fit: contain;
 }
 
 .mindmap-node-image img {
