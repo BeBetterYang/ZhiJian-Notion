@@ -20,6 +20,7 @@ interface MindMapNodeContentProps {
   onSelect: (nodeId: string) => void;
   onEdit: (nodeId: string, focusBlockId?: string) => void;
   onFinishEdit: () => void;
+  focusBlockId?: string;
   focusRequest: { nodeId: string; focusBlockId: string; requestId: number } | null;
   onFocusRequestHandled: (requestId: number) => void;
 }
@@ -36,6 +37,7 @@ function MindMapNodeEditor({
   store,
   selected,
   onFinishEdit,
+  focusBlockId,
   toolbarTarget,
   onSelect,
   focusRequest,
@@ -60,19 +62,24 @@ function MindMapNodeEditor({
   }, [editor, selected]);
 
   useEffect(() => {
-    const focusBlockId = focusRequest?.focusBlockId;
-    if (!focusBlockId || !blockIds.includes(focusBlockId)) return;
+    const requestedBlockId = focusBlockId ?? focusRequest?.focusBlockId ?? node.id;
     const frame = window.requestAnimationFrame(() => {
       try {
-        editor.setTextCursorPosition(focusBlockId, "start");
+        const targetBlockId = editor.getBlock(requestedBlockId) ? requestedBlockId : node.id;
+        editor.setTextCursorPosition(targetBlockId, "start");
         editor.focus();
-        onFocusRequestHandled(focusRequest.requestId);
+        if (focusRequest) onFocusRequestHandled(focusRequest.requestId);
       } catch {
-        // The requested block can disappear during the same edit transaction.
+        try {
+          editor.setTextCursorPosition(node.id, "end");
+          editor.focus();
+        } catch {
+          // The requested block can disappear during the same edit transaction.
+        }
       }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [blockIds, editor, focusRequest, onFocusRequestHandled]);
+  }, [editor, focusBlockId, focusRequest, node.id, onFocusRequestHandled]);
 
   useEffect(() => {
     if (!focusPrimaryAfterBlockDelete.current) return;
@@ -179,7 +186,7 @@ function MindMapNodeEditor({
   }, [blockIds, editor, node, onFinishEdit, onSelect, selected, store]);
 
   return (
-    <div ref={containerRef} className="mindmap-node-editor">
+    <div ref={containerRef} className={`mindmap-node-editor ${node.parentId === null ? "is-root" : ""}`}>
       <BlockNoteView
         editor={editor}
         theme="light"

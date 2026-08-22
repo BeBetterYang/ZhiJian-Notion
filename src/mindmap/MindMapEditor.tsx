@@ -103,7 +103,7 @@ export function MindMapEditor({
       if (suppressOperation.current) return;
       if ("obj" in operation && operation.obj?.id) {
         lastSelectedNodeId.current = operation.obj.id;
-        setEditingTarget(null);
+        if (editingTargetRef.current?.nodeId !== operation.obj.id) setEditingTarget(null);
         onSelectRef.current(operation.obj.id);
         onActiveRef.current(true);
       }
@@ -118,7 +118,7 @@ export function MindMapEditor({
     mind.bus.addListener("selectNodes", (nodes) => {
       if (!nodes[0]) return;
       lastSelectedNodeId.current = nodes[0].id;
-      setEditingTarget(null);
+      if (editingTargetRef.current?.nodeId !== nodes[0].id) setEditingTarget(null);
       onSelectRef.current(nodes[0].id);
       onActiveRef.current(true);
     });
@@ -231,23 +231,27 @@ export function MindMapEditor({
     return () => { observer.disconnect(); window.cancelAnimationFrame(frame); };
   }, [contentTargets]);
 
-  const selectPortalNode = useCallback((nodeId: string) => {
+  const selectTreeNode = useCallback((nodeId: string) => {
     if (editingTargetRef.current?.nodeId !== nodeId) setEditingTarget(null);
     lastSelectedNodeId.current = nodeId;
     onSelectRef.current(nodeId);
     onActiveRef.current(true);
+  }, []);
+
+  const selectMindElixirNode = useCallback((nodeId: string) => {
+    selectTreeNode(nodeId);
     try {
       const mind = mindRef.current;
       if (mind) mind.selectNode(mind.findEle(nodeId));
     } catch {
       // The node may not be mounted while MindElixir is refreshing its tree.
     }
-  }, []);
+  }, [selectTreeNode]);
 
   const beginNodeEdit = useCallback((nodeId: string, focusBlockId?: string) => {
-    selectPortalNode(nodeId);
+    selectMindElixirNode(nodeId);
     setEditingTarget({ nodeId, focusBlockId });
-  }, [selectPortalNode]);
+  }, [selectMindElixirNode]);
 
   const finishNodeEdit = useCallback(() => {
     setEditingTarget(null);
@@ -280,7 +284,7 @@ export function MindMapEditor({
       const renderer = target?.closest<HTMLElement>(".mindmap-node-renderer[data-node-id]");
       const nodeId = renderer?.dataset.nodeId;
       if (!nodeId) return;
-      selectPortalNode(nodeId);
+      selectMindElixirNode(nodeId);
     };
     const onDoubleClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
@@ -299,7 +303,7 @@ export function MindMapEditor({
       container.removeEventListener("click", onRendererClick, true);
       container.removeEventListener("dblclick", onDoubleClick, true);
     };
-  }, [beginNodeEdit, selectPortalNode]);
+  }, [beginNodeEdit, selectMindElixirNode]);
 
   return (
     <>
@@ -313,9 +317,10 @@ export function MindMapEditor({
             selected={selectedNodeId === id}
             editing={editingTarget?.nodeId === id}
             toolbarTarget={toolbarTarget}
-            onSelect={selectPortalNode}
+            onSelect={selectTreeNode}
             onEdit={beginNodeEdit}
             onFinishEdit={finishNodeEdit}
+            focusBlockId={editingTarget?.nodeId === id ? editingTarget.focusBlockId : undefined}
             focusRequest={focusRequest}
             onFocusRequestHandled={onFocusRequestHandled}
           />,

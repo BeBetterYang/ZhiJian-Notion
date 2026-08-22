@@ -709,6 +709,18 @@ textarea {
   font-size: inherit;
 }
 
+.mindmap-node-editor.is-root
+  .bn-block-content[data-content-type="heading"],
+.mindmap-node-editor.is-root
+  .bn-block-content[data-content-type="heading"] > h1,
+.mindmap-node-editor.is-root
+  .bn-block-content[data-content-type="heading"] > h2,
+.mindmap-node-editor.is-root
+  .bn-block-content[data-content-type="heading"] > h3 {
+  font-size: 20px !important;
+  line-height: 1.4 !important;
+}
+
 .mindmap-node-editor .bn-block-content {
   padding: 0.08em 0;
   white-space: normal;
