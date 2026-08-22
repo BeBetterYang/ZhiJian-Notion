@@ -5,7 +5,7 @@ import { TreeStore } from "../core/treeStore";
 import { applyMindElixirOperation } from "./mindElixirCommands";
 
 describe("applyMindElixirOperation", () => {
-  it("updates edited node text through TreeStore command", () => {
+  it("ignores MindElixir native finishEdit data", () => {
     const store = new TreeStore(createInitialTree());
 
     applyMindElixirOperation(
@@ -17,51 +17,7 @@ describe("applyMindElixirOperation", () => {
       store,
     );
 
-    expect(richTextToPlainText(store.getNode("web")!.content)).toBe("Web 编辑器");
-  });
-
-  it("updates a todo node through its own content", () => {
-    const tree = createInitialTree();
-    tree.nodes.web.type = "todo";
-    tree.nodes.web.content = { text: "旧任务" };
-    const store = new TreeStore(tree);
-
-    applyMindElixirOperation(
-      {
-        name: "finishEdit",
-        obj: node("web", "新引用"),
-        origin: "旧任务",
-      },
-      store,
-    );
-
-    expect(store.getNode("web")?.content.text).toBe("新引用");
-  });
-
-  it("preserves unaffected rich text spans during native text editing", () => {
-    const tree = createInitialTree();
-    tree.nodes.web.content = {
-      text: "Web端",
-      spans: [
-        { text: "Web", marks: { bold: true, textColor: "blue" } },
-        { text: "端", marks: { italic: true } },
-      ],
-    };
-    const store = new TreeStore(tree);
-
-    applyMindElixirOperation(
-      {
-        name: "finishEdit",
-        obj: node("web", "Web新版端"),
-        origin: "Web端",
-      },
-      store,
-    );
-
-    expect(store.getNode("web")?.content.spans).toEqual([
-      { text: "Web新版", marks: { bold: true, textColor: "blue" } },
-      { text: "端", marks: { italic: true } },
-    ]);
+    expect(richTextToPlainText(store.getNode("web")!.content)).toBe("Web端");
   });
 
   it("creates child nodes from MindElixir addChild operation", () => {

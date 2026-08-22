@@ -9,7 +9,7 @@ import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 import { saveImageAsset } from "../shared/imageAssetStore";
 import { ZhiJianFormattingToolbar } from "../shared/ZhiJianFormattingToolbar";
 import { zhijianDictionary } from "../shared/zhijianDictionary";
-import { MindMapNodeRenderer } from "./MindMapNodeRenderer";
+import { resolveMindMapFocusBlockId } from "./mindMapInteraction";
 
 interface MindMapNodeContentProps {
   node: ZhiJianNode;
@@ -18,7 +18,6 @@ interface MindMapNodeContentProps {
   editing: boolean;
   toolbarTarget: HTMLElement | null;
   onSelect: (nodeId: string) => void;
-  onEdit: (nodeId: string, focusBlockId?: string) => void;
   onFinishEdit: () => void;
   focusBlockId?: string;
   focusRequest: { nodeId: string; focusBlockId: string; requestId: number } | null;
@@ -26,10 +25,7 @@ interface MindMapNodeContentProps {
 }
 
 export function MindMapNodeContent(props: MindMapNodeContentProps) {
-  if (!props.editing) {
-    return <MindMapNodeRenderer node={props.node} onSelect={props.onSelect} onEdit={props.onEdit} />;
-  }
-  return <MindMapNodeEditor {...props} />;
+  return props.editing ? <MindMapNodeEditor {...props} /> : null;
 }
 
 function MindMapNodeEditor({
@@ -44,7 +40,9 @@ function MindMapNodeEditor({
   onFocusRequestHandled,
 }: MindMapNodeContentProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const applyingExternalChange = useRef(false);
+  const pendingExternalSignature = useRef<string | null>(null);
+  const composing = useRef(false);
+  const deferredExternalApply = useRef<(() => void) | null>(null);
   const focusPrimaryAfterBlockDelete = useRef(false);
   const nodeTree = useMemo(() => singleNodeTree(node), [node]);
   const projectedBlocks = useMemo(() => treeToBlockNote(nodeTree), [nodeTree]);
@@ -52,23 +50,24 @@ function MindMapNodeEditor({
     { initialContent: projectedBlocks, dictionary: zhijianDictionary, uploadFile: async (file) => (await saveImageAsset(file)).url },
     [node.id],
   );
-  const blockIds = useMemo(
-    () => [node.id, `${node.id}::description`, ...(node.blocks ?? []).map((block) => block.id)],
-    [node],
-  );
+  const blockIdSignature = [node.id, ...(node.description ? [`${node.id}::description`] : []), ...(node.blocks ?? []).map((block) => block.id)].join("\u0000");
+  const blockIds = useMemo(() => blockIdSignature.split("\u0000"), [blockIdSignature]);
 
   useEffect(() => {
-    editor.isEditable = selected;
-  }, [editor, selected]);
+    editor.isEditable = true;
+  }, [editor]);
 
   useEffect(() => {
-    const requestedBlockId = focusBlockId ?? focusRequest?.focusBlockId ?? node.id;
+    const requestedBlockId = resolveMindMapFocusBlockId(
+      node.id,
+      blockIds,
+      focusBlockId ?? (focusRequest?.nodeId === node.id ? focusRequest.focusBlockId : undefined),
+    );
     const frame = window.requestAnimationFrame(() => {
       try {
-        const targetBlockId = editor.getBlock(requestedBlockId) ? requestedBlockId : node.id;
-        editor.setTextCursorPosition(targetBlockId, "start");
+        editor.setTextCursorPosition(requestedBlockId, "start");
         editor.focus();
-        if (focusRequest) onFocusRequestHandled(focusRequest.requestId);
+        if (focusRequest?.nodeId === node.id) onFocusRequestHandled(focusRequest.requestId);
       } catch {
         try {
           editor.setTextCursorPosition(node.id, "end");
@@ -79,7 +78,7 @@ function MindMapNodeEditor({
       }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [editor, focusBlockId, focusRequest, node.id, onFocusRequestHandled]);
+  }, [blockIds, editor, focusBlockId, focusRequest, node.id, onFocusRequestHandled]);
 
   useEffect(() => {
     if (!focusPrimaryAfterBlockDelete.current) return;
@@ -103,12 +102,14 @@ function MindMapNodeEditor({
   useEffect(() => {
     const current = blockNoteToTree(editor.document, nodeTree);
     const next = current?.nodes[node.id];
-    if (!next || JSON.stringify(next.content) === JSON.stringify(node.content) && JSON.stringify(next.blocks ?? []) === JSON.stringify(node.blocks ?? [])) return;
-    applyingExternalChange.current = true;
-    editor.replaceBlocks(editor.document, projectedBlocks);
-    window.setTimeout(() => {
-      applyingExternalChange.current = false;
-    }, 0);
+    const nextSignature = nodeDocumentSignature(node);
+    if (!next || nodeDocumentSignature(next) === nextSignature) return;
+    const applyProjection = () => {
+      pendingExternalSignature.current = nextSignature;
+      editor.replaceBlocks(editor.document, projectedBlocks);
+    };
+    if (composing.current) deferredExternalApply.current = applyProjection;
+    else applyProjection();
   }, [editor, node, nodeTree, projectedBlocks]);
 
   useEffect(() => {
@@ -142,6 +143,15 @@ function MindMapNodeEditor({
       event.preventDefault();
     };
     const stopMindMapPointerHandling = (event: Event) => event.stopPropagation();
+    const onCompositionStart = () => {
+      composing.current = true;
+    };
+    const onCompositionEnd = () => {
+      composing.current = false;
+      const apply = deferredExternalApply.current;
+      deferredExternalApply.current = null;
+      apply?.();
+    };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -176,12 +186,16 @@ function MindMapNodeEditor({
     container.addEventListener("dblclick", onDoubleClick);
     container.addEventListener("keydown", onKeyDown, true);
     container.addEventListener("keydown", stopMindMapPointerHandling);
+    container.addEventListener("compositionstart", onCompositionStart, true);
+    container.addEventListener("compositionend", onCompositionEnd, true);
     return () => {
       container.removeEventListener("pointerdown", placeCursor);
       container.removeEventListener("mousedown", stopMindMapPointerHandling);
       container.removeEventListener("dblclick", onDoubleClick);
       container.removeEventListener("keydown", onKeyDown, true);
       container.removeEventListener("keydown", stopMindMapPointerHandling);
+      container.removeEventListener("compositionstart", onCompositionStart, true);
+      container.removeEventListener("compositionend", onCompositionEnd, true);
     };
   }, [blockIds, editor, node, onFinishEdit, onSelect, selected, store]);
 
@@ -194,11 +208,15 @@ function MindMapNodeEditor({
         slashMenu={false}
         formattingToolbar={false}
         onChange={() => {
-          if (applyingExternalChange.current) return;
           const parsed = blockNoteToTree(editor.document, nodeTree);
           const updated = parsed?.nodes[node.id];
           if (!updated) return;
-          if (JSON.stringify(updated.content) !== JSON.stringify(node.content) || JSON.stringify(updated.blocks ?? []) !== JSON.stringify(node.blocks ?? [])) {
+          const updatedSignature = nodeDocumentSignature(updated);
+          if (pendingExternalSignature.current) {
+            if (updatedSignature === pendingExternalSignature.current) pendingExternalSignature.current = null;
+            return;
+          }
+          if (updatedSignature !== nodeDocumentSignature(node)) {
             store.updateNodeDocument(
               node.id,
               updated.content,
@@ -216,4 +234,12 @@ function MindMapNodeEditor({
 
 function singleNodeTree(node: ZhiJianNode): ZhiJianTree {
   return { rootId: node.id, nodes: { [node.id]: { ...node, children: [] } } };
+}
+
+function nodeDocumentSignature(node: ZhiJianNode) {
+  return JSON.stringify({
+    content: node.content,
+    description: node.description ?? null,
+    blocks: node.blocks ?? [],
+  });
 }

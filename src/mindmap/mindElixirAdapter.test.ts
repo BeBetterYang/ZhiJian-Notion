@@ -13,7 +13,8 @@ describe("mindElixirAdapter", () => {
     ];
     const children = treeToMindElixir(tree).nodeData.children as NodeObj[];
     expect(children).toHaveLength(2);
-    expect(children[0].dangerouslySetInnerHTML).toContain('class="mindmap-node-renderer"');
+    expect(children[0].dangerouslySetInnerHTML).toContain('class="mindmap-node-shell"');
+    expect(children[0].dangerouslySetInnerHTML).toContain('class="mindmap-node-editor-slot"');
     expect(children[0].dangerouslySetInnerHTML).toContain("引用");
     expect(children[0].metadata).toMatchObject({ hasQuote: true, imageCount: 2 });
     expect(children[0].dangerouslySetInnerHTML).toContain("asset:1");
@@ -33,7 +34,7 @@ describe("mindElixirAdapter", () => {
     const tree = createInitialTree();
     tree.nodes.web.description = { text: "这是描述内容" };
     const web = (treeToMindElixir(tree).nodeData.children as NodeObj[])[0];
-    expect(web.dangerouslySetInnerHTML).toContain('class="mindmap-node-quote"');
+    expect(web.dangerouslySetInnerHTML).toContain('class="mindmap-node-quote mindmap-node-description"');
     expect(web.note).toBe("这是描述内容");
   });
 
@@ -55,5 +56,11 @@ describe("mindElixirAdapter", () => {
     tree.nodes.web.children = ["new-child"];
     tree.nodes["new-child"] = { id: "new-child", parentId: "web", children: [], type: "text", content: { text: "新" } };
     expect(createMindMapStructureSignature(tree)).not.toBe(initial);
+  });
+
+  it("uses the same 20px visual token for the root display and editor shell", () => {
+    const root = treeToMindElixir(createInitialTree()).nodeData;
+    expect(root.style?.fontSize).toBe("20px");
+    expect(root.dangerouslySetInnerHTML).toContain("--mindmap-font-size:20px");
   });
 });

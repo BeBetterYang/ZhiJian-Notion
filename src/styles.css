@@ -362,160 +362,9 @@ textarea {
   max-width: calc(100% - 32px);
 }
 
-.mindmap-blocknote-slot {
-  display: inline-block;
-  overflow: visible;
-  font-size: inherit;
-  vertical-align: middle;
-}
-
-.mindmap-blocknote-slot-table {
-  width: max-content;
-  height: auto;
-}
-
-.map-container me-tpc:has(> .mindmap-blocknote-slot-table) {
-  width: max-content;
-  max-width: none;
-}
-
-/* Persistent portal hosts: transparent passthrough wrappers that keep a stable
-   DOM identity across mind.refresh() so embedded editors are not remounted. */
-.mindmap-media-host {
-  display: inline-block;
-  width: max-content;
-  height: auto;
-  overflow: visible;
-  vertical-align: middle;
-  pointer-events: auto;
-}
-
-.mindmap-blocknote-node {
-  width: max-content;
-  height: auto;
-  overflow: visible;
-  pointer-events: auto;
-  user-select: text;
-  border: 0;
-  background: transparent;
-}
-
-.mindmap-blocknote-node * {
-  pointer-events: auto;
-}
-
-.mindmap-blocknote-node.is-selected {
-  border-color: transparent;
-}
-
-.mindmap-blocknote-node .bn-container,
-.mindmap-blocknote-node .bn-editor {
-  width: max-content;
-  height: auto;
-  min-height: 0;
-  padding: 0;
-  font-size: inherit;
-  background: transparent;
-}
-
-.mindmap-blocknote-node .bn-block-outer,
-.mindmap-blocknote-node .bn-block,
-.mindmap-blocknote-node .bn-block-group,
-.mindmap-blocknote-node .bn-block-content {
-  width: max-content;
-  min-height: 0;
-  margin: 0;
-}
-
-.mindmap-blocknote-node .bn-block-content {
-  padding: 0;
-}
-
-.mindmap-blocknote-node-table .tableWrapper {
-  width: max-content !important;
-  overflow: visible !important;
-  padding: 0 !important;
-}
-
-.mindmap-blocknote-node-table,
-.mindmap-blocknote-node-table .bn-container,
-.mindmap-blocknote-node-table .bn-editor,
-.mindmap-blocknote-node-table .bn-block-group,
-.mindmap-blocknote-node-table .bn-block-outer,
-.mindmap-blocknote-node-table .bn-block,
-.mindmap-blocknote-node-table .bn-block-content {
-  width: max-content !important;
-  max-width: none !important;
-}
-
-.mindmap-blocknote-node .bn-trailing-block {
-  display: none;
-}
-
-.mindmap-blocknote-node-table table {
-  width: max-content;
-  min-width: 100%;
-  max-width: none;
-  font-size: inherit;
-}
-
-.mindmap-blocknote-node-table td,
-.mindmap-blocknote-node-table th {
-  min-width: 5em;
-  padding: 0.35em 0.5em;
-  font-size: inherit;
-}
-
-.mindmap-node-text {
-  display: inline-block;
-  max-width: 16em;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-.mindmap-todo {
-  display: inline-flex;
-  max-width: 17em;
-  align-items: center;
-  gap: 0.45em;
-  white-space: normal;
-}
-
-.mindmap-todo-checkbox {
-  width: 0.8em;
-  height: 0.8em;
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-  border: 1px solid #9ca3af;
-  border-radius: 2px;
-  background: #ffffff;
-  color: #ffffff;
-  font-size: 1em;
-  font-weight: 700;
-  line-height: 1;
-  pointer-events: auto;
-  cursor: pointer;
-}
-
-.mindmap-todo.is-checked .mindmap-todo-checkbox {
-  border-color: #2383e2;
-  background: #2383e2;
-}
-
-.mindmap-todo-content {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.mindmap-todo.is-checked .mindmap-todo-content {
-  color: #73808a;
-  text-decoration: line-through;
-}
-
-.mindmap-node-content-slot,
+.mindmap-node-shell,
+.mindmap-node-display,
+.mindmap-node-editor-slot,
 .mindmap-content-host,
 .mindmap-node-renderer,
 .mindmap-node-editor {
@@ -530,24 +379,45 @@ textarea {
   user-select: text;
 }
 
+.mindmap-node-shell {
+  color: var(--mindmap-color, #273142);
+  background: var(--mindmap-background, transparent);
+  font-size: var(--mindmap-font-size, 16px);
+  font-style: var(--mindmap-font-style, normal);
+  font-weight: var(--mindmap-font-weight, 400);
+  line-height: var(--mindmap-line-height, 1.5);
+  text-decoration: var(--mindmap-text-decoration, none);
+}
+
+.mindmap-node-editor-slot,
+.mindmap-content-host {
+  display: none;
+}
+
+.mindmap-node-shell.is-editing > .mindmap-node-display {
+  display: none;
+}
+
+.mindmap-node-shell.is-editing > .mindmap-node-editor-slot,
+.mindmap-node-shell.is-editing > .mindmap-node-editor-slot > .mindmap-content-host {
+  display: block;
+}
+
 .mindmap-node-renderer {
-  color: #273142;
-  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
-/* Complex nodes use the renderer as the visual body; the MindElixir box only
-   supplies positioning and connections. */
-.map-container me-tpc:has(> .mindmap-node-renderer .mindmap-node-images),
-.map-container me-tpc:has(> .mindmap-node-renderer .mindmap-node-quote) {
+.map-container me-tpc:has(> .mindmap-node-shell .mindmap-node-images),
+.map-container me-tpc:has(> .mindmap-node-shell .mindmap-node-quote) {
   border: 0 !important;
   border-radius: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
 }
 
-.mindmap-node-renderer:has(.mindmap-node-table),
-.mindmap-node-renderer:has(.mindmap-node-table) .mindmap-node-body {
+.mindmap-node-shell:has(.mindmap-node-table),
+.mindmap-node-shell:has(.mindmap-node-table) .mindmap-node-renderer,
+.mindmap-node-shell:has(.mindmap-node-table) .mindmap-node-body {
   width: max-content;
   max-width: none;
 }
@@ -681,7 +551,7 @@ textarea {
   vertical-align: top;
 }
 
-.mindmap-node-content-slot *,
+.mindmap-node-shell *,
 .mindmap-content-host *,
 .mindmap-node-renderer *,
 .mindmap-node-editor * {
@@ -702,23 +572,25 @@ textarea {
   margin: 0;
 }
 
+.mindmap-node-editor,
+.mindmap-node-editor .bn-container,
+.mindmap-node-editor .bn-editor,
+.mindmap-node-editor .bn-block-content,
+.mindmap-node-editor .bn-block-content > h1,
+.mindmap-node-editor .bn-block-content > h2,
+.mindmap-node-editor .bn-block-content > h3,
+.mindmap-node-editor .bn-inline-content {
+  color: inherit;
+  font-size: var(--mindmap-font-size, 16px) !important;
+  font-style: inherit;
+  font-weight: inherit;
+  line-height: var(--mindmap-line-height, 1.5) !important;
+}
+
 .mindmap-node-editor .bn-editor {
   min-height: 0;
   padding: 0;
   background: transparent;
-  font-size: inherit;
-}
-
-.mindmap-node-editor.is-root
-  .bn-block-content[data-content-type="heading"],
-.mindmap-node-editor.is-root
-  .bn-block-content[data-content-type="heading"] > h1,
-.mindmap-node-editor.is-root
-  .bn-block-content[data-content-type="heading"] > h2,
-.mindmap-node-editor.is-root
-  .bn-block-content[data-content-type="heading"] > h3 {
-  font-size: 20px !important;
-  line-height: 1.4 !important;
 }
 
 .mindmap-node-editor .bn-block-content {
@@ -746,6 +618,19 @@ textarea {
   color: #6b7280;
   font-size: 14px;
   line-height: 1.45;
+}
+
+.mindmap-node-shell:has(.mindmap-node-table) .mindmap-node-editor,
+.mindmap-node-shell:has(.mindmap-node-table) .mindmap-node-editor .bn-container,
+.mindmap-node-shell:has(.mindmap-node-table) .mindmap-node-editor .bn-editor,
+.mindmap-node-shell:has(.mindmap-node-table) .mindmap-node-editor .bn-block-group,
+.mindmap-node-shell:has(.mindmap-node-table) .mindmap-node-editor .bn-block-outer,
+.mindmap-node-shell:has(.mindmap-node-table) .mindmap-node-editor .bn-block,
+.mindmap-node-shell:has(.mindmap-node-table) .mindmap-node-editor .bn-block-content,
+.mindmap-node-shell:has(.mindmap-node-table) .tableWrapper {
+  width: max-content !important;
+  max-width: none !important;
+  overflow: visible !important;
 }
 
 .mindmap-node-editor

@@ -1,17 +1,14 @@
 import "mind-elixir/style.css";
-import MindElixir, { type Operation } from "mind-elixir";
+import MindElixir, { type MindElixirData, type NodeObj, type Operation } from "mind-elixir";
 import { zh_CN } from "mind-elixir/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { TreeStore } from "../core/treeStore";
 import { useTree } from "../core/treeStore/useTree";
-import { textOffset } from "../outline/mindMapTextSelection";
 import { createMindMapStructureSignature, treeToMindElixir } from "./mindElixirAdapter";
 import { applyMindElixirOperation } from "./mindElixirCommands";
+import { displayClickAction, mindMapUpdateMode, shouldExitEditing, type EditingTarget } from "./mindMapInteraction";
 import { MindMapNodeContent } from "./MindMapNodeGroupBlock";
-import { renderMindMapNodeHtml } from "./MindMapNodeRenderer";
-
-type EditingTarget = { nodeId: string; focusBlockId?: string } | null;
 
 interface MindMapEditorProps {
   store: TreeStore;
@@ -30,39 +27,33 @@ export interface MindMapTextSelection {
   to: number;
 }
 
-export function MindMapEditor({
-  store,
-  onSelectNode,
-  onSelectionActiveChange,
-  onTextSelectionChange,
-  selectedNodeId,
-  toolbarTarget,
-  focusRequest,
-  onFocusRequestHandled,
-}: MindMapEditorProps) {
+export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, onTextSelectionChange, selectedNodeId, toolbarTarget, focusRequest, onFocusRequestHandled }: MindMapEditorProps) {
   const tree = useTree(store);
   const containerRef = useRef<HTMLDivElement>(null);
   const mindRef = useRef<MindElixir | null>(null);
   const suppressOperation = useRef(false);
-  const lastSelectedNodeId = useRef<string | null>(null);
   const initialTree = useRef(tree);
   const structureSignature = useRef(createMindMapStructureSignature(tree));
+  const pendingStructure = useRef<{ data: MindElixirData; signature: string } | null>(null);
   const storeRef = useRef(store);
   const onSelectRef = useRef(onSelectNode);
   const onActiveRef = useRef(onSelectionActiveChange);
   const onTextSelectionRef = useRef(onTextSelectionChange);
   const selectedNodeRef = useRef(selectedNodeId);
+  const lastSelectedNodeId = useRef<string | null>(selectedNodeId);
+  const editingTargetRef = useRef<EditingTarget>(null);
+  const beginNodeEditRef = useRef<(nodeId: string, focusBlockId?: string) => void>(() => undefined);
+  const pointerSelectionBefore = useRef<{ nodeId: string; selectedNodeId: string | null } | null>(null);
   const contentHosts = useRef(new Map<string, HTMLDivElement>());
   const [contentTargets, setContentTargets] = useState<Array<{ id: string; host: HTMLElement }>>([]);
   const [editingTarget, setEditingTarget] = useState<EditingTarget>(null);
-  const editingTargetRef = useRef<EditingTarget>(null);
 
   const collectTargets = useCallback(() => {
-    const container = containerRef.current;
-    const content = Array.from(container?.querySelectorAll<HTMLElement>("[data-zhijian-node-content]") ?? []).flatMap((slot) => {
+    const slots = Array.from(containerRef.current?.querySelectorAll<HTMLElement>("[data-zhijian-node-content]") ?? []);
+    const content = slots.flatMap((slot) => {
       const id = slot.dataset.zhijianNodeContent;
       if (!id) return [];
-      const host = ensureHost(contentHosts.current, id, "mindmap-content-host");
+      const host = ensureHost(contentHosts.current, id);
       if (host.parentElement !== slot) slot.appendChild(host);
       return [{ id, host }];
     });
@@ -70,11 +61,21 @@ export function MindMapEditor({
     setContentTargets(content);
   }, []);
 
-  useEffect(() => {
-    if (focusRequest?.nodeId && tree.nodes[focusRequest.nodeId]) {
-      setEditingTarget({ nodeId: focusRequest.nodeId, focusBlockId: focusRequest.focusBlockId });
-    }
-  }, [focusRequest, tree.nodes]);
+  const refreshStructure = useCallback((data: MindElixirData, signature: string) => {
+    const mind = mindRef.current;
+    if (!mind) return;
+    structureSignature.current = signature;
+    suppressOperation.current = true;
+    mind.refresh(data);
+    mind.clearHistory?.();
+    queueMicrotask(() => {
+      suppressOperation.current = false;
+      collectTargets();
+      const restoreId = selectedNodeRef.current ?? lastSelectedNodeId.current;
+      if (!restoreId) return;
+      try { mind.selectNode(mind.findEle(restoreId)); } catch { lastSelectedNodeId.current = null; }
+    });
+  }, [collectTargets]);
 
   useEffect(() => {
     storeRef.current = store;
@@ -98,142 +99,48 @@ export function MindMapEditor({
       markdown: (topic) => topic,
     });
     mind.init(treeToMindElixir(initialTree.current));
+    mind.beginEdit = async (element) => {
+      const nodeId = (element ?? mind.currentNode)?.nodeObj.id;
+      if (nodeId) beginNodeEditRef.current(nodeId);
+    };
     queueMicrotask(collectTargets);
     mind.bus.addListener("operation", (operation: Operation) => {
       if (suppressOperation.current) return;
       if ("obj" in operation && operation.obj?.id) {
-        lastSelectedNodeId.current = operation.obj.id;
-        if (editingTargetRef.current?.nodeId !== operation.obj.id) setEditingTarget(null);
-        onSelectRef.current(operation.obj.id);
+        const nodeId = operation.obj.id;
+        lastSelectedNodeId.current = nodeId;
+        selectedNodeRef.current = nodeId;
+        if (shouldExitEditing(editingTargetRef.current, nodeId)) setEditingTarget(null);
+        onSelectRef.current(nodeId);
         onActiveRef.current(true);
       }
       applyMindElixirOperation(operation, storeRef.current);
       structureSignature.current = createMindMapStructureSignature(storeRef.current.getSnapshot());
-      if (operation.name === "addChild" || operation.name === "insertSibling" || operation.name === "insertBefore") {
-        queueMicrotask(() => {
-          try { mind.beginEdit(mind.findEle(operation.obj.id)); } catch { /* node may be gone */ }
-        });
-      }
+      if (operation.name === "addChild" || operation.name === "insertSibling" || operation.name === "insertBefore") beginNodeEditRef.current(operation.obj.id);
     });
     mind.bus.addListener("selectNodes", (nodes) => {
-      if (!nodes[0]) return;
-      lastSelectedNodeId.current = nodes[0].id;
-      if (editingTargetRef.current?.nodeId !== nodes[0].id) setEditingTarget(null);
-      onSelectRef.current(nodes[0].id);
+      const nodeId = nodes[0]?.id;
+      if (!nodeId) return;
+      lastSelectedNodeId.current = nodeId;
+      selectedNodeRef.current = nodeId;
+      if (shouldExitEditing(editingTargetRef.current, nodeId)) setEditingTarget(null);
+      onSelectRef.current(nodeId);
       onActiveRef.current(true);
     });
     mind.bus.addListener("unselectNodes", () => {
+      if (editingTargetRef.current) return;
       onActiveRef.current(false);
       onTextSelectionRef.current(null);
     });
     mind.bus.addListener("changeDirection", () => window.requestAnimationFrame(collectTargets));
     mindRef.current = mind;
-    return () => {
-      mind.destroy();
-      mindRef.current = null;
-    };
+    return () => { mind.destroy(); mindRef.current = null; };
   }, [collectTargets]);
 
-  useEffect(() => {
-    const onSelectionChange = () => {
-      const container = containerRef.current;
-      const selection = document.getSelection();
-      const editorElement = container?.querySelector<HTMLElement>("#input-box");
-      if (!container || !selection || !editorElement || !selection.anchorNode || !selection.focusNode) return;
-      if (!editorElement.contains(selection.anchorNode) || !editorElement.contains(selection.focusNode)) return;
-      onActiveRef.current(true);
-      if (!selection.isCollapsed && lastSelectedNodeId.current) {
-        onTextSelectionRef.current({
-          nodeId: lastSelectedNodeId.current,
-          from: textOffset(editorElement, selection.anchorNode, selection.anchorOffset),
-          to: textOffset(editorElement, selection.focusNode, selection.focusOffset),
-        });
-      } else {
-        onTextSelectionRef.current(null);
-      }
-    };
-    document.addEventListener("selectionchange", onSelectionChange);
-    return () => document.removeEventListener("selectionchange", onSelectionChange);
-  }, []);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const toggleTodo = (event: PointerEvent) => {
-      const checkbox = (event.target as Element | null)?.closest<HTMLElement>(".mindmap-todo-checkbox, .mindmap-node-checkbox");
-      const nodeId = checkbox?.dataset.nodeId;
-      if (!nodeId || event.button !== 0) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const node = storeRef.current.getNode(nodeId);
-      if (node?.type !== "todo") return;
-      storeRef.current.updateProps(nodeId, { checked: !(node.props?.checked ?? false) });
-      lastSelectedNodeId.current = nodeId;
-      onSelectRef.current(nodeId);
-      onActiveRef.current(true);
-    };
-    container.addEventListener("pointerdown", toggleTodo, true);
-    return () => container.removeEventListener("pointerdown", toggleTodo, true);
-  }, []);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (editingTargetRef.current || event.key !== "Enter") return;
-      const nodeId = lastSelectedNodeId.current ?? selectedNodeRef.current;
-      if (!nodeId || !storeRef.current.getNode(nodeId)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      setEditingTarget({ nodeId });
-    };
-    container.addEventListener("keydown", onKeyDown, true);
-    return () => container.removeEventListener("keydown", onKeyDown, true);
-  }, []);
-
-  useEffect(() => {
-    const mind = mindRef.current;
-    if (!mind) return;
-    const nextSignature = createMindMapStructureSignature(tree);
-    const nextData = treeToMindElixir(tree);
-    if (structureSignature.current === nextSignature) {
-      const changed = updateMindMapNodesInPlace(mind, nextData.nodeData, editingTargetRef.current?.nodeId);
-      if (changed) queueMicrotask(collectTargets);
-      return;
-    }
-    structureSignature.current = nextSignature;
-    const editingId = editingTargetRef.current?.nodeId;
-    if (editingId) setProjectedNodeHtml(nextData.nodeData, editingId, contentSlotHtml(editingId));
-    suppressOperation.current = true;
-    mind.refresh(nextData);
-    mind.clearHistory?.();
-    const restoreId = selectedNodeRef.current ?? lastSelectedNodeId.current;
-    const timer = window.setTimeout(() => {
-      suppressOperation.current = false;
-      collectTargets();
-      if (editingTargetRef.current) replaceNodeHtml(mind, editingTargetRef.current.nodeId, contentSlotHtml(editingTargetRef.current.nodeId));
-      if (!restoreId) return;
-      try { mind.selectNode(mind.findEle(restoreId)); } catch { lastSelectedNodeId.current = null; }
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [collectTargets, tree]);
-
-  useEffect(() => {
-    const mind = mindRef.current;
-    const targets = contentTargets.map(({ host }) => host);
-    if (!mind || !targets.length) return;
-    let frame = 0;
-    const observer = new ResizeObserver(() => {
-      window.cancelAnimationFrame(frame);
-      frame = window.requestAnimationFrame(() => mind.linkDiv());
-    });
-    targets.forEach((target) => observer.observe(target));
-    return () => { observer.disconnect(); window.cancelAnimationFrame(frame); };
-  }, [contentTargets]);
-
   const selectTreeNode = useCallback((nodeId: string) => {
-    if (editingTargetRef.current?.nodeId !== nodeId) setEditingTarget(null);
+    if (shouldExitEditing(editingTargetRef.current, nodeId)) setEditingTarget(null);
     lastSelectedNodeId.current = nodeId;
+    selectedNodeRef.current = nodeId;
     onSelectRef.current(nodeId);
     onActiveRef.current(true);
   }, []);
@@ -244,7 +151,7 @@ export function MindMapEditor({
       const mind = mindRef.current;
       if (mind) mind.selectNode(mind.findEle(nodeId));
     } catch {
-      // The node may not be mounted while MindElixir is refreshing its tree.
+      // Collapsed descendants may not be mounted.
     }
   }, [selectTreeNode]);
 
@@ -252,6 +159,7 @@ export function MindMapEditor({
     selectMindElixirNode(nodeId);
     setEditingTarget({ nodeId, focusBlockId });
   }, [selectMindElixirNode]);
+  beginNodeEditRef.current = beginNodeEdit;
 
   const finishNodeEdit = useCallback(() => {
     setEditingTarget(null);
@@ -259,51 +167,108 @@ export function MindMapEditor({
   }, []);
 
   useEffect(() => {
-    const mind = mindRef.current;
+    if (!focusRequest?.nodeId || !tree.nodes[focusRequest.nodeId]) return;
+    beginNodeEdit(focusRequest.nodeId, focusRequest.focusBlockId);
+  }, [beginNodeEdit, focusRequest, tree.nodes]);
+
+  useEffect(() => {
+    const nextSignature = createMindMapStructureSignature(tree);
+    const nextData = treeToMindElixir(tree);
+    const mode = mindMapUpdateMode(structureSignature.current !== nextSignature, editingTargetRef.current !== null);
+    if (mode === "content") {
+      const addedShell = updateMindMapNodesInPlace(mindRef.current, nextData.nodeData, editingTargetRef.current?.nodeId);
+      if (addedShell) queueMicrotask(collectTargets);
+      return;
+    }
+    if (mode === "defer-structure") {
+      pendingStructure.current = { data: nextData, signature: nextSignature };
+      return;
+    }
+    refreshStructure(nextData, nextSignature);
+  }, [collectTargets, refreshStructure, tree]);
+
+  useEffect(() => {
     const previous = editingTargetRef.current;
-    if (previous?.nodeId && previous.nodeId !== editingTarget?.nodeId) {
-      const previousNode = storeRef.current.getNode(previous.nodeId);
-      if (mind && previousNode) replaceNodeHtml(mind, previousNode.id, renderMindMapNodeHtml(previousNode));
-    }
-    if (mind && editingTarget) {
-      replaceNodeHtml(mind, editingTarget.nodeId, contentSlotHtml(editingTarget.nodeId));
-      collectTargets();
-      window.requestAnimationFrame(() => mind.linkDiv());
-    } else if (editingTarget === null && previous) {
-      collectTargets();
-      if (mind) window.requestAnimationFrame(() => mind.linkDiv());
-    }
+    setShellEditing(containerRef.current, previous?.nodeId, false);
+    setShellEditing(containerRef.current, editingTarget?.nodeId, true);
     editingTargetRef.current = editingTarget;
-  }, [collectTargets, editingTarget]);
+    window.requestAnimationFrame(() => mindRef.current?.linkDiv());
+    if (editingTarget === null && pendingStructure.current) {
+      const pending = pendingStructure.current;
+      pendingStructure.current = null;
+      refreshStructure(pending.data, pending.signature);
+    }
+  }, [editingTarget, refreshStructure]);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const onRendererClick = (event: MouseEvent) => {
+    const onPointerDown = (event: PointerEvent) => {
+      const shell = (event.target as Element | null)?.closest<HTMLElement>(".mindmap-node-shell[data-node-id]");
+      if (shell?.dataset.nodeId) pointerSelectionBefore.current = { nodeId: shell.dataset.nodeId, selectedNodeId: selectedNodeRef.current };
+      const checkbox = (event.target as Element | null)?.closest<HTMLElement>(".mindmap-node-checkbox");
+      const nodeId = checkbox?.dataset.nodeId;
+      if (!nodeId || event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const node = storeRef.current.getNode(nodeId);
+      if (node?.type !== "todo") return;
+      storeRef.current.updateProps(nodeId, { checked: !(node.props?.checked ?? false) });
+      selectTreeNode(nodeId);
+    };
+    const onClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
-      const renderer = target?.closest<HTMLElement>(".mindmap-node-renderer[data-node-id]");
-      const nodeId = renderer?.dataset.nodeId;
+      const shell = target?.closest<HTMLElement>(".mindmap-node-shell[data-node-id]");
+      const nodeId = shell?.dataset.nodeId;
       if (!nodeId) return;
-      selectMindElixirNode(nodeId);
+      const interactive = Boolean(target?.closest("a,button,input,select,textarea,[role=checkbox]"));
+      const selectedBefore = pointerSelectionBefore.current?.nodeId === nodeId ? pointerSelectionBefore.current.selectedNodeId : selectedNodeRef.current;
+      const action = displayClickAction(selectedBefore, editingTargetRef.current, nodeId, interactive);
+      pointerSelectionBefore.current = null;
+      if (action === "select") selectMindElixirNode(nodeId);
+      if (action === "edit") beginNodeEdit(nodeId, target?.closest<HTMLElement>("[data-block-id]")?.dataset.blockId);
     };
     const onDoubleClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
-      const renderer = target?.closest<HTMLElement>(".mindmap-node-renderer[data-node-id]");
-      const nodeId = renderer?.dataset.nodeId;
-      if (!nodeId) return;
-      const blockId = target?.closest<HTMLElement>("[data-block-id]")?.dataset.blockId;
+      const shell = target?.closest<HTMLElement>(".mindmap-node-shell[data-node-id]");
+      const nodeId = shell?.dataset.nodeId;
+      if (!nodeId || target?.closest("a,button,input,select,textarea,[role=checkbox]")) return;
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      beginNodeEdit(nodeId, blockId);
+      beginNodeEdit(nodeId, target?.closest<HTMLElement>("[data-block-id]")?.dataset.blockId);
     };
-    container.addEventListener("click", onRendererClick, true);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (editingTargetRef.current || event.key !== "Enter") return;
+      const nodeId = lastSelectedNodeId.current ?? selectedNodeRef.current;
+      if (!nodeId || !storeRef.current.getNode(nodeId)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      beginNodeEdit(nodeId);
+    };
+    container.addEventListener("pointerdown", onPointerDown, true);
+    container.addEventListener("click", onClick, true);
     container.addEventListener("dblclick", onDoubleClick, true);
+    container.addEventListener("keydown", onKeyDown, true);
     return () => {
-      container.removeEventListener("click", onRendererClick, true);
+      container.removeEventListener("pointerdown", onPointerDown, true);
+      container.removeEventListener("click", onClick, true);
       container.removeEventListener("dblclick", onDoubleClick, true);
+      container.removeEventListener("keydown", onKeyDown, true);
     };
-  }, [beginNodeEdit, selectMindElixirNode]);
+  }, [beginNodeEdit, selectMindElixirNode, selectTreeNode]);
+
+  useEffect(() => {
+    const targets = contentTargets.map(({ host }) => host);
+    if (!targets.length) return;
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => mindRef.current?.linkDiv());
+    });
+    targets.forEach((target) => observer.observe(target));
+    return () => { observer.disconnect(); window.cancelAnimationFrame(frame); };
+  }, [contentTargets]);
 
   return (
     <>
@@ -311,19 +276,7 @@ export function MindMapEditor({
       {contentTargets.map(({ id, host }) => {
         const node = tree.nodes[id];
         return node ? createPortal(
-          <MindMapNodeContent
-            node={node}
-            store={store}
-            selected={selectedNodeId === id}
-            editing={editingTarget?.nodeId === id}
-            toolbarTarget={toolbarTarget}
-            onSelect={selectTreeNode}
-            onEdit={beginNodeEdit}
-            onFinishEdit={finishNodeEdit}
-            focusBlockId={editingTarget?.nodeId === id ? editingTarget.focusBlockId : undefined}
-            focusRequest={focusRequest}
-            onFocusRequestHandled={onFocusRequestHandled}
-          />,
+          <MindMapNodeContent node={node} store={store} selected={selectedNodeId === id} editing={editingTarget?.nodeId === id} toolbarTarget={toolbarTarget} onSelect={selectTreeNode} onFinishEdit={finishNodeEdit} focusBlockId={editingTarget?.nodeId === id ? editingTarget.focusBlockId : undefined} focusRequest={focusRequest} onFocusRequestHandled={onFocusRequestHandled} />,
           host,
           id,
         ) : null;
@@ -332,11 +285,11 @@ export function MindMapEditor({
   );
 }
 
-function ensureHost(hosts: Map<string, HTMLDivElement>, id: string, className: string) {
+function ensureHost(hosts: Map<string, HTMLDivElement>, id: string) {
   let host = hosts.get(id);
   if (!host) {
     host = document.createElement("div");
-    host.className = className;
+    host.className = "mindmap-content-host";
     hosts.set(id, host);
   }
   return host;
@@ -347,56 +300,52 @@ function pruneHosts(hosts: Map<string, HTMLDivElement>, activeIds: string[]) {
   for (const id of Array.from(hosts.keys())) if (!active.has(id)) hosts.delete(id);
 }
 
-function contentSlotHtml(id: string) {
-  return `<div class="mindmap-node-content-slot" data-zhijian-node-content="${escapeHtml(id)}"></div>`;
+function setShellEditing(container: HTMLElement | null, nodeId: string | undefined, editing: boolean) {
+  if (!container || !nodeId) return;
+  const shell = Array.from(container.querySelectorAll<HTMLElement>(".mindmap-node-shell[data-node-id]")).find((element) => element.dataset.nodeId === nodeId);
+  shell?.classList.toggle("is-editing", editing);
 }
 
-function escapeHtml(value: string) {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
-}
-
-function replaceNodeHtml(mind: MindElixir, nodeId: string, html: string) {
-  try {
-    const element = mind.findEle(nodeId);
-    element.nodeObj.dangerouslySetInnerHTML = html;
-    element.innerHTML = html;
-  } catch {
-    // A collapsed node may not have a mounted element yet.
-  }
-}
-
-function setProjectedNodeHtml(node: import("mind-elixir").NodeObj, nodeId: string, html: string): boolean {
-  if (node.id === nodeId) {
-    node.dangerouslySetInnerHTML = html;
-    return true;
-  }
-  return node.children?.some((child) => setProjectedNodeHtml(child, nodeId, html)) ?? false;
-}
-
-function updateMindMapNodesInPlace(mind: MindElixir, root: import("mind-elixir").NodeObj, editingNodeId?: string) {
-  let slotsChanged = false;
-  const visit = (nextNode: typeof root) => {
+function updateMindMapNodesInPlace(mind: MindElixir | null, root: NodeObj, editingNodeId?: string) {
+  if (!mind) return false;
+  let addedShell = false;
+  const visit = (nextNode: NodeObj) => {
     try {
       const topicElement = mind.findEle(nextNode.id);
       const currentNode = topicElement.nodeObj;
-      const currentHtml = currentNode.dangerouslySetInnerHTML;
-      const nextHtml = nextNode.id === editingNodeId ? contentSlotHtml(nextNode.id) : nextNode.dangerouslySetInnerHTML ?? "";
       currentNode.topic = nextNode.topic;
       currentNode.note = nextNode.note;
       currentNode.style = nextNode.style;
       currentNode.metadata = nextNode.metadata;
-      currentNode.dangerouslySetInnerHTML = nextHtml;
+      currentNode.dangerouslySetInnerHTML = nextNode.dangerouslySetInnerHTML;
       Object.entries(nextNode.style ?? {}).forEach(([property, value]) => {
         (topicElement.style as unknown as Record<string, string>)[property] = String(value ?? "");
       });
-      if (currentHtml !== nextHtml) {
-        slotsChanged = true;
-        topicElement.innerHTML = nextHtml;
-      }
-    } catch { /* collapsed descendants are not mounted */ }
+      addedShell = updateStableShell(topicElement, nextNode.dangerouslySetInnerHTML ?? "", nextNode.id === editingNodeId) || addedShell;
+    } catch {
+      // Collapsed descendants are not mounted.
+    }
     nextNode.children?.forEach(visit);
   };
   visit(root);
   mind.linkDiv();
-  return slotsChanged;
+  return addedShell;
+}
+
+function updateStableShell(topicElement: HTMLElement, nextHtml: string, editing: boolean) {
+  const currentShell = topicElement.querySelector<HTMLElement>(":scope > .mindmap-node-shell");
+  if (!currentShell) {
+    topicElement.innerHTML = nextHtml;
+    topicElement.querySelector<HTMLElement>(":scope > .mindmap-node-shell")?.classList.toggle("is-editing", editing);
+    return true;
+  }
+  const template = document.createElement("template");
+  template.innerHTML = nextHtml;
+  const nextShell = template.content.querySelector<HTMLElement>(".mindmap-node-shell");
+  const currentDisplay = currentShell.querySelector<HTMLElement>(":scope > .mindmap-node-display");
+  const nextDisplay = nextShell?.querySelector<HTMLElement>(":scope > .mindmap-node-display");
+  if (!nextShell || !currentDisplay || !nextDisplay) return false;
+  currentShell.style.cssText = nextShell.style.cssText;
+  if (currentDisplay.innerHTML !== nextDisplay.innerHTML) currentDisplay.innerHTML = nextDisplay.innerHTML;
+  return false;
 }

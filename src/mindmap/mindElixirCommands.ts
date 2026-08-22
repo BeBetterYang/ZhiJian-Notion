@@ -1,12 +1,9 @@
 import type { NodeObj, Operation } from "mind-elixir";
-import { plainTextContent, replaceRichTextPlainText, richTextToPlainText } from "../core/tree";
+import { plainTextContent } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
 
 export function applyMindElixirOperation(operation: Operation, store: TreeStore) {
   switch (operation.name) {
-    case "finishEdit":
-      updateNodeText(operation.obj, store);
-      return;
     case "addChild":
     case "insertSibling":
     case "insertBefore":
@@ -34,20 +31,8 @@ export function applyMindElixirOperation(operation: Operation, store: TreeStore)
   }
 }
 
-function updateNodeText(obj: NodeObj, store: TreeStore) {
-  const current = store.getNode(obj.id);
-  if (!current) {
-    return;
-  }
-  if (richTextToPlainText(current.content) === obj.topic) {
-    return;
-  }
-  store.updateContent(obj.id, replaceRichTextPlainText(current.content, obj.topic));
-}
-
 function createNodeFromMind(obj: NodeObj, store: TreeStore) {
   if (store.getNode(obj.id)) {
-    updateNodeText(obj, store);
     return;
   }
   const parentId = obj.parent?.id ?? store.getSnapshot().rootId;
