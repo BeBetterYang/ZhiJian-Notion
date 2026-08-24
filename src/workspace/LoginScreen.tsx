@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { FiEye, FiEyeOff } from "react-icons/fi";
 import type { WorkspaceSession } from "./auth";
-import { validateLogin, validateRegistration } from "./auth";
+import { login, register } from "./auth";
 import logoUrl from "./assets/zhijian-logo.png";
 
 interface LoginScreenProps {
@@ -16,15 +16,24 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   const [registrationCode, setRegistrationCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const result = mode === "register" ? validateRegistration(username, email, password, registrationCode) : validateLogin(email, password);
+    if (submitting) return;
+    setSubmitting(true);
+    setError("");
+    setNotice("");
+    const result = mode === "register"
+      ? await register(username, email, password, registrationCode)
+      : await login(email, password);
+    setSubmitting(false);
     if (!result.session) {
-      setError(result.error ?? (mode === "register" ? "注册失败，请重试。" : "登录失败，请重试。"));
+      if (result.message) setNotice(result.message);
+      else setError(result.error ?? (mode === "register" ? "注册失败，请重试。" : "登录失败，请重试。"));
       return;
     }
-    setError("");
     const url = new URL(window.location.href);
     url.searchParams.delete("auth");
     window.history.replaceState({}, "", url);
@@ -40,6 +49,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
     setRegistrationCode("");
     setPassword("");
     setError("");
+    setNotice("");
   };
 
   return (
@@ -115,7 +125,8 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             </span>
           </label>
           <div className="form-error" role="alert">{error}</div>
-          <button type="submit" className="primary-button">{mode === "register" ? "注册" : "继续"}</button>
+          <div className="form-notice" role="status">{notice}</div>
+          <button type="submit" className="primary-button" disabled={submitting}>{submitting ? "处理中..." : mode === "register" ? "注册" : "继续"}</button>
           <p className="auth-switch">
             {mode === "register" ? "已有账户？" : "是新用户吗？"}
             <a href={mode === "register" ? "/workspace.html" : "/workspace.html?auth=register"} onClick={(event) => { event.preventDefault(); switchMode(mode === "register" ? "login" : "register"); }}>{mode === "register" ? "请登录" : "请注册"}</a>

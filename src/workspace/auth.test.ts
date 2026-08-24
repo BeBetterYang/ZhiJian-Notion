@@ -1,29 +1,55 @@
-import { describe, expect, it } from "vitest";
-import { validateLogin, validateRegistration } from "./auth";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { login, register } from "./auth";
 
 describe("workspace login", () => {
-  it("accepts a valid local preview session without retaining the password", () => {
-    const result = validateLogin(" Yang.Yang@example.com ", "123456");
-    expect(result.session).toEqual({ email: "yang.yang@example.com", name: "Yang Yang" });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("logs in through the auth API without retaining the password", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({
+      session: { email: "yang.yang@example.com", name: "杨洋", userId: "user-1", accessToken: "token" },
+    }), { status: 200 }));
+
+    const result = await login(" Yang.Yang@example.com ", "123456");
+    expect(fetch).toHaveBeenCalledWith("/api/auth/login", expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ email: " Yang.Yang@example.com ", password: "123456" }),
+    }));
+    expect(result.session).toMatchObject({ email: "yang.yang@example.com", accessToken: "token" });
     expect(result.session).not.toHaveProperty("password");
   });
 
-  it("rejects invalid credentials", () => {
-    expect(validateLogin("invalid", "123456").error).toContain("邮箱");
-    expect(validateLogin("user@example.com", "123").error).toContain("6");
+  it("rejects invalid credentials before calling the auth API", async () => {
+    const request = vi.spyOn(globalThis, "fetch");
+    expect((await login("invalid", "123456")).error).toContain("邮箱");
+    expect((await login("user@example.com", "123")).error).toContain("6");
+    expect(request).not.toHaveBeenCalled();
   });
 
-  it("registers a local preview session without retaining the password", () => {
-    const result = validateRegistration("枝间用户", "new.user@example.com", "secure-password", "nihaozhijian");
-    expect(result.session).toEqual({ email: "new.user@example.com", name: "枝间用户" });
-    expect(result.session).not.toHaveProperty("password");
+  it("registers through the auth API with the registration code", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({
+      session: { email: "new.user@example.com", name: "枝间用户", userId: "user-2", accessToken: "token" },
+    }), { status: 200 }));
+
+    const result = await register("枝间用户", "new.user@example.com", "secure-password", "nihaozhijian");
+    expect(fetch).toHaveBeenCalledWith("/api/auth/register", expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({
+        name: "枝间用户",
+        email: "new.user@example.com",
+        password: "secure-password",
+        code: "nihaozhijian",
+      }),
+    }));
+    expect(result.session).toMatchObject({ email: "new.user@example.com", name: "枝间用户" });
   });
 
-  it("requires a username when registering", () => {
-    expect(validateRegistration("  ", "new.user@example.com", "secure-password", "nihaozhijian").error).toContain("用户名");
+  it("requires a username when registering", async () => {
+    expect((await register("  ", "new.user@example.com", "secure-password", "nihaozhijian")).error).toContain("用户名");
   });
 
-  it("requires the registration code when registering", () => {
-    expect(validateRegistration("枝间用户", "new.user@example.com", "secure-password", "wrong").error).toContain("注册码");
+  it("requires the registration code when registering", async () => {
+    expect((await register("枝间用户", "new.user@example.com", "secure-password", "wrong")).error).toContain("注册码");
   });
 });

@@ -15,7 +15,7 @@ export interface WorkspaceServerState {
 }
 
 export async function loadWorkspaceState(session: WorkspaceSession): Promise<WorkspaceServerState | null> {
-  const response = await fetch(`/api/workspace?email=${encodeURIComponent(session.email)}`);
+  const response = await fetch("/api/workspace", { headers: authHeaders(session) });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error("无法从服务器读取工作区数据。");
   return response.json() as Promise<WorkspaceServerState>;
@@ -24,8 +24,8 @@ export async function loadWorkspaceState(session: WorkspaceSession): Promise<Wor
 export async function saveWorkspaceState(session: WorkspaceSession, state: WorkspaceServerState) {
   const response = await fetch("/api/workspace", {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: session.email, ...state }),
+    headers: authHeaders(session),
+    body: JSON.stringify(state),
   });
   if (!response.ok) throw new Error("无法保存工作区数据到服务器。");
 }
@@ -33,8 +33,15 @@ export async function saveWorkspaceState(session: WorkspaceSession, state: Works
 export async function saveWorkspaceDocument(session: WorkspaceSession, fileId: string, tree: ZhiJianTree) {
   const response = await fetch(`/api/workspace/documents/${encodeURIComponent(fileId)}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: session.email, tree }),
+    headers: authHeaders(session),
+    body: JSON.stringify({ tree }),
   });
   if (!response.ok) throw new Error("无法保存文档到服务器。");
+}
+
+function authHeaders(session: WorkspaceSession) {
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${session.accessToken}`,
+  };
 }
