@@ -197,14 +197,14 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
       timer = setTimeout(() => {
         timer = null;
         void saveWorkspaceDocument(session, activeFile.id, tree)
-          .catch(() => setServerStatus("文档保存到服务器失败。"));
+          .catch((error) => setServerStatus(`文档保存到服务器失败：${errorMessage(error)}`));
       }, 400);
     });
     return () => {
       if (timer) {
         clearTimeout(timer);
         void saveWorkspaceDocument(session, activeFile.id, activeDocumentStore.getSnapshot())
-          .catch(() => setServerStatus("文档保存到服务器失败。"));
+          .catch((error) => setServerStatus(`文档保存到服务器失败：${errorMessage(error)}`));
       }
       unsubscribe();
     };
@@ -217,7 +217,7 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
         profile: userProfile,
         nodes,
         documents: snapshotDocumentStores(documentStores.current),
-      }).catch(() => setServerStatus("工作区保存到服务器失败。"));
+      }).catch((error) => setServerStatus(`工作区保存到服务器失败：${errorMessage(error)}`));
     }, 500);
     return () => clearTimeout(timer);
   }, [nodes, serverReady, session, userProfile]);
@@ -1151,4 +1151,8 @@ function NodeMenu({ node, nodes, moveOpen, onRename, onMoveToggle, onMove, onFav
       <button type="button" className="danger" onClick={onDelete}><FiTrash2 />删除</button>
     </div>
   );
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error && error.message ? error.message : "未知错误";
 }
