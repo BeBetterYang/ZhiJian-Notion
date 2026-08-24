@@ -17,6 +17,19 @@ describe("treePersistence", () => {
     expect(loadPersistedTree()).toEqual(tree);
   });
 
+  it("keeps workspace documents isolated under custom storage keys", () => {
+    const first = createInitialTree();
+    const second = createInitialTree();
+    second.nodes.root.content.text = "第二个文档";
+
+    persistTree(first, "zhijian.workspace.document.first.v1");
+    persistTree(second, "zhijian.workspace.document.second.v1");
+
+    expect(loadPersistedTree("zhijian.workspace.document.first.v1")?.nodes.root.content.text).toBe("产品规划");
+    expect(loadPersistedTree("zhijian.workspace.document.second.v1")?.nodes.root.content.text).toBe("第二个文档");
+    expect(loadPersistedTree()).toBeNull();
+  });
+
   it("returns null when nothing is stored", () => {
     expect(loadPersistedTree()).toBeNull();
   });

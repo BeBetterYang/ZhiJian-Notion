@@ -6,10 +6,10 @@ import {
   useBlockNoteEditor,
   useComponentsContext,
 } from "@blocknote/react";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RiDoubleQuotesL, RiImage2Line, RiTable2 } from "react-icons/ri";
 import { saveImageAsset } from "./imageAssetStore";
-import { insertNodeAttachmentBlocks } from "./attachmentInsertion";
+import { insertImageBlocks, insertNodeAttachmentBlocks } from "./attachmentInsertion";
 
 interface ZhiJianFormattingToolbarProps {
   showStructuralControls?: boolean;
@@ -22,6 +22,18 @@ export function ZhiJianFormattingToolbar({
   onInsertQuote,
 }: ZhiJianFormattingToolbarProps = {}) {
   const editor = useBlockNoteEditor();
+  // What the toolbar offers depends on the block the caret is in, so it has to
+  // follow the caret. BlockNote's own controller re-renders this on every selection
+  // change; the map's two hosts render it directly instead — they are a fixed bar
+  // rather than a bubble that follows the text — and there the caret often lands
+  // after the first render: the outline bridge moves it in an effect, and a node's
+  // own editor places it a frame after mounting. Without this the bar read a stale
+  // block and, when that block was the document title, showed nothing at all.
+  const [, setCaretVersion] = useState(0);
+  useEffect(
+    () => editor.onSelectionChange(() => setCaretVersion((version) => version + 1)),
+    [editor],
+  );
   const activeBlock = editor.getSelection()?.blocks[0] ?? editor.getTextCursorPosition().block;
 
   const blockTypes = useMemo(
@@ -149,30 +161,16 @@ function InsertImageButton() {
         multiple
         onChange={async (event) => {
           const files = Array.from(event.target.files ?? []);
+          event.target.value = "";
           if (files.length === 0) {
             return;
           }
-          const assets = await Promise.all(
-            files.map(async (file) => ({ file, url: (await saveImageAsset(file)).url })),
+          await insertImageBlocks(
+            editor,
+            editor.getTextCursorPosition().block.id,
+            files,
+            saveImageAsset,
           );
-          const block = editor.getTextCursorPosition().block;
-          const validAssets = assets.filter((asset) => asset.url);
-          if (validAssets.length > 0) {
-            insertNodeAttachmentBlocks(
-              editor,
-              block.id,
-              validAssets.map(({ file, url }) => ({
-                type: "image" as const,
-                props: {
-                  url,
-                  name: file.name,
-                  previewWidth: 480,
-                  showPreview: true,
-                },
-              })),
-            );
-          }
-          event.target.value = "";
         }}
       />
     </>

@@ -1,4 +1,28 @@
 :root {
+  /* One document seen two ways, so ink and paper are stated once here rather than
+     per view: BlockNote's own defaults (#3f3f3f text, #7d797a quotes) and
+     mind-elixir's are different greys, and a node that changes colour by being
+     looked at in the other view reads as two documents. `mindMapTheme.ts` hands
+     these to mind-elixir, and the outline hands them to BlockNote through
+     `--bn-colors-editor-*` below. */
+  --zhijian-ink: #273142;
+  --zhijian-canvas: #ffffff;
+  --zhijian-quote-ink: #6b7280;
+  /* The hint shown in an empty node or quote, in both views. */
+  --zhijian-hint: #b6bcc4;
+  /* The ring a row's marker wears while its children are collapsed — the outline's
+     counterpart to the child count on the map's collapse handle. */
+  --zhijian-collapsed-ring: rgba(104, 105, 112, 0.24);
+  /* The two controls in the outline gutter (add block, collapse) read as one pair,
+     so they share a tone: BlockNote's own #cfcfcf for the add button next to a
+     #9298a2 chevron looked like two widgets of different importance. */
+  --zhijian-gutter-icon: #c2c7ce;
+  --zhijian-gutter-icon-hover: #6b7280;
+  /* Notion's reading column: the outline text stops at a comfortable measure and a
+     wider window widens the margins rather than the line. BlockNote reserves 54px
+     inside the container on each side — the left one being the gutter — so the
+     column is this width plus those two. */
+  --outline-text-width: 720px;
   color: #1d2430;
   background: #f5f7f8;
   font-family:
@@ -31,6 +55,14 @@ textarea {
   flex-direction: column;
 }
 
+.app-shell.is-embedded {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  color: #37352f;
+  background: #ffffff;
+}
+
 .topbar {
   min-height: 72px;
   padding: 14px 18px;
@@ -56,38 +88,515 @@ textarea {
 
 .toolbar {
   display: flex;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
 
-.view-switch {
-  display: flex;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid #cbd5da;
-  border-radius: 7px;
-  background: #eef2f4;
+.toolbar .view-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  font-size: 14px;
 }
 
-.toolbar .view-switch button {
+.toolbar .view-toggle-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.toolbar .view-toggle-button:hover {
+  background: rgba(55, 53, 47, 0.07);
+}
+
+.document-header-actions .editor-navigation-toolbar {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+
+.document-header-actions .toolbar .view-toggle-button {
+  height: 30px;
+  padding: 0 9px;
   border: 0;
+}
+
+.toolbar-more-wrap {
+  position: relative;
+}
+
+.toolbar .toolbar-more-button {
+  border-color: transparent;
   background: transparent;
 }
 
-.toolbar .view-switch button.active {
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(29, 36, 48, 0.12);
+.toolbar .toolbar-more-button:hover:not(:disabled),
+.toolbar .toolbar-more-button[aria-expanded="true"] {
+  background: rgba(55, 53, 47, 0.08);
+}
+
+.toolbar-more-menu {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 5px);
+  right: 0;
+  width: 190px;
+  padding: 6px;
+  border: 1px solid rgba(55, 53, 47, 0.12);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 14px;
+  box-shadow: 0 8px 24px rgba(15, 15, 15, 0.14), 0 2px 5px rgba(15, 15, 15, 0.08);
+}
+
+.toolbar .toolbar-more-menu button {
+  width: 100%;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 14px;
+  text-align: left;
+}
+
+.toolbar .toolbar-more-menu button:hover {
+  background: rgba(55, 53, 47, 0.07);
+}
+
+.toolbar-more-menu svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+.toolbar-menu-title {
+  padding: 5px 8px 7px;
+  color: #8b8a85;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.collapse-menu {
+  width: 180px;
+}
+
+.collapse-menu button {
+  justify-content: space-between;
+}
+
+.collapse-menu kbd {
+  margin-left: auto;
+  color: #b0afab;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.search-replace-panel {
+  position: fixed;
+  z-index: 110;
+  top: 45px;
+  right: 92px;
+  width: 366px;
+  padding: 6px 8px;
+  border: 1px solid rgba(55, 53, 47, 0.12);
+  border-radius: 8px;
+  background: #fff;
+  color: #37352f;
+  box-shadow: 0 16px 42px rgba(15, 15, 15, 0.16), 0 2px 6px rgba(15, 15, 15, 0.08);
+}
+
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-replace-panel.is-replace-open .search-row {
+  margin-bottom: 9px;
+}
+
+.search-row input {
+  min-width: 0;
+  height: 32px;
+  flex: 1;
+  padding: 0 9px;
+  border: 1px solid rgba(55, 53, 47, 0.16);
+  border-radius: 5px;
+  outline: none;
+  background: #fff;
+  color: #37352f;
+  font-size: 14px;
+}
+
+.search-row input:focus {
+  border-color: #5b52d6;
+  box-shadow: 0 0 0 1px #5b52d6;
+}
+
+.search-mode-button {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 1px solid rgba(55, 53, 47, 0.14);
+  border-radius: 5px;
+  background: #fff;
+  color: #37352f;
+  font-size: 14px;
+}
+
+.search-mode-button svg {
+  width: 13px;
+  height: 13px;
+}
+
+.search-close {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: #55534e;
+  font-size: 18px;
+}
+
+.search-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: center;
+  gap: 10px;
+}
+
+.search-actions button {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(55, 53, 47, 0.14);
+  border-radius: 4px;
+  background: #fff;
+  color: #37352f;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.search-actions button:hover {
+  background: #f5f5f3;
+}
+
+.search-actions button.primary {
+  border-color: #111;
+  background: #111;
+  color: #fff;
+}
+
+.zhijian-search-mark {
+  background: #f6c76b;
+  color: inherit;
+  padding: 0 1px;
+}
+
+::highlight(zhijian-outline-search) {
+  background: #f6c76b;
+  color: inherit;
+}
+
+.zhijian-dialog-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 15, 15, 0.44);
+}
+
+.zhijian-confirm-dialog {
+  width: min(420px, 100%);
+  padding: 24px;
+  border: 1px solid rgba(55, 53, 47, 0.1);
+  border-radius: 8px;
+  background: #fff;
+  color: #37352f;
+  box-shadow: 0 20px 60px rgba(15, 15, 15, 0.24), 0 2px 8px rgba(15, 15, 15, 0.08);
+}
+
+.zhijian-confirm-dialog h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.3;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.zhijian-confirm-dialog p {
+  margin: 12px 0 0;
+  color: #787774;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.zhijian-confirm-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.zhijian-confirm-dialog button {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(55, 53, 47, 0.14);
+  border-radius: 5px;
+  background: #fff;
+  color: #37352f;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.zhijian-confirm-dialog button:hover {
+  background: #f5f5f3;
+}
+
+.zhijian-confirm-dialog button.primary {
+  border-color: #2383e2;
+  background: #2383e2;
+  color: #fff;
+}
+
+.zhijian-confirm-dialog button.primary:hover {
+  background: #1d75c9;
+}
+
+.zhijian-confirm-dialog button:disabled {
+  border-color: rgba(55, 53, 47, 0.09);
+  background: rgba(55, 53, 47, 0.06);
+  color: rgba(55, 53, 47, 0.35);
+  cursor: default;
+}
+
+.zhijian-link-dialog label {
+  display: block;
+  margin-top: 16px;
+}
+
+.zhijian-link-dialog label span {
+  display: block;
+  margin-bottom: 6px;
+  color: #787774;
+  font-size: 12px;
+}
+
+.zhijian-link-dialog input {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgba(55, 53, 47, 0.16);
+  border-radius: 5px;
+  background: #fff;
+  color: #37352f;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.zhijian-link-dialog input:focus {
+  border-color: #2383e2;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(35, 131, 226, 0.18);
+}
+
+/* 打开快捷键帮助 (Ctrl /). Two columns of sections, because the table is long enough
+   that one column would scroll past the height of any window. */
+.zhijian-shortcut-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(720px, 100%);
+  max-height: min(680px, 100%);
+  border: 1px solid rgba(55, 53, 47, 0.1);
+  border-radius: 8px;
+  background: #fff;
+  color: #37352f;
+  box-shadow: 0 20px 60px rgba(15, 15, 15, 0.24), 0 2px 8px rgba(15, 15, 15, 0.08);
+}
+
+.zhijian-shortcut-dialog > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 12px;
+}
+
+.zhijian-shortcut-dialog > header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.zhijian-shortcut-sections {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 24px 4px;
+  column-count: 2;
+  column-gap: 28px;
+}
+
+.zhijian-shortcut-section {
+  /* A section that broke across the two columns read as two sections. */
+  break-inside: avoid;
+  margin-bottom: 18px;
+}
+
+.zhijian-shortcut-section h3 {
+  margin: 0 0 6px;
+  color: #787774;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.zhijian-shortcut-section dl {
+  margin: 0;
+}
+
+.zhijian-shortcut-section dl > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+}
+
+.zhijian-shortcut-section dt {
+  color: #37352f;
+  font-size: 13px;
+}
+
+.zhijian-shortcut-section dd {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.zhijian-shortcut-section dd span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.zhijian-shortcut-section dd em {
+  margin: 0 3px;
+  color: #9b9a97;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.zhijian-shortcut-section kbd {
+  min-width: 20px;
+  padding: 1px 5px;
+  border: 1px solid rgba(55, 53, 47, 0.14);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: #f7f7f5;
+  color: #5f5e5b;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.zhijian-shortcut-dialog > footer {
+  padding: 10px 24px 16px;
+  border-top: 1px solid rgba(55, 53, 47, 0.08);
+  color: #9b9a97;
+  font-size: 12px;
+}
+
+/* 进入当前主题: the path back out of a zoomed document, above both views. */
+.zoom-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 6px 24px;
+  border-bottom: 1px solid rgba(55, 53, 47, 0.07);
+  background: #fff;
+  font-size: 12px;
+}
+
+.zoom-breadcrumb button {
+  max-width: 220px;
+  padding: 2px 6px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: #787774;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zoom-breadcrumb button:hover:not(:disabled) {
+  background: rgba(55, 53, 47, 0.06);
+  color: #37352f;
+}
+
+.zoom-breadcrumb button:disabled {
+  color: #37352f;
+  font-weight: 600;
+  cursor: default;
+}
+
+.zoom-breadcrumb .zoom-breadcrumb-exit {
+  color: #2383e2;
+}
+
+.zoom-breadcrumb span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.zoom-breadcrumb i {
+  color: #c8c7c4;
+  font-style: normal;
 }
 
 .toolbar button {
   height: 32px;
-  border: 1px solid #cbd5da;
-  border-radius: 6px;
+  border: 1px solid rgba(55, 53, 47, 0.13);
+  border-radius: 5px;
   background: #ffffff;
-  color: #1d2430;
+  color: #4f4e49;
   padding: 0 12px;
   cursor: pointer;
+}
+
+.toolbar button:hover:not(:disabled) {
+  background: rgba(55, 53, 47, 0.07);
+}
+
+.toolbar .toolbar-icon-button {
+  width: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.toolbar .toolbar-icon-button svg {
+  width: 16px;
+  height: 16px;
 }
 
 .toolbar button:disabled {
@@ -101,6 +610,14 @@ textarea {
   min-height: 0;
   display: flex;
   background: #ffffff;
+}
+
+.is-embedded .workspace {
+  min-height: 0;
+}
+
+.is-embedded .pane-title {
+  display: none;
 }
 
 .pane,
@@ -148,6 +665,13 @@ textarea {
 
 .outline-panel .bn-container {
   min-height: 100%;
+  max-width: calc(var(--outline-text-width) + 108px);
+  margin-inline: auto;
+  /* Set on the container rather than `.bn-root`, which is where BlockNote declares
+     its own values — same element, one class more specific, so these win without
+     `!important`. */
+  --bn-colors-editor-text: var(--zhijian-ink);
+  --bn-colors-editor-background: var(--zhijian-canvas);
 }
 
 /* Match the outline scale: fixed document title, normal body text, and
@@ -184,9 +708,16 @@ textarea {
   line-height: 1.5;
 }
 
+/* `.bn-block-content` is a flex row and BlockNote's `min-width: 2px` rule covers
+   only p/h/li, so an empty blockquote measured zero pixels wide: there was nothing
+   to click and no caret to place. Filling the row gives the quote a line of its
+   own that can be clicked anywhere along it, and the `quote` placeholder in
+   `zhijianDictionary` says what the line is for. */
 .outline-panel .bn-block-content[data-content-type="quote"] blockquote {
+  flex: 1;
   border-left: 0;
   padding-left: 0;
+  color: var(--zhijian-quote-ink);
 }
 
 .outline-panel
@@ -205,6 +736,14 @@ textarea {
   > .bn-block
   > .bn-block-content:has(.ProseMirror-trailingBreak:only-child)::after {
   content: "无标题" !important;
+}
+
+/* One grey for every hint, in both views: BlockNote colours its placeholders from
+   `--bn-colors-side-menu`, which also tints the side-menu icons, so the colour is
+   set on the hint itself rather than on the variable. Matches
+   `.mindmap-node-rich-text.is-empty::after`. */
+.outline-panel .bn-block-content:has(.ProseMirror-trailingBreak:only-child)::after {
+  color: var(--zhijian-hint);
 }
 
 /* The persistent node marker replaces BlockNote's drag handle. */
@@ -229,14 +768,30 @@ textarea {
   > .bn-block
   > .bn-block-content[data-content-type="table"]::before {
   content: "";
-  align-self: center;
+  /* Centred on the block's *first line*, which is where BlockNote centres its
+     30px side menu (measured: menu top == block top for a 24px line). Centring on
+     the block instead drifted the two apart on every row taller than one line —
+     by 24px on a three-row table. `1lh` rather than a constant because a heading's
+     line box is 48px or 72px, not 24px, and the handle follows it there. */
+  align-self: flex-start;
   flex: 0 0 6px;
   width: 6px;
   height: 6px;
-  margin: 0 14px 0 0;
+  margin: calc((1lh - 6px) / 2) 14px 0 0;
   border-radius: 50%;
   background: #686970;
   pointer-events: none;
+}
+
+/* A table is the one case where the first line is not a line of text: BlockNote
+   centres the menu on the first table row, 9px of row-handle gutter below the
+   block top. 24px lands the marker on that row's centre. */
+.outline-panel
+  .bn-block-group
+  .bn-block-outer
+  > .bn-block
+  > .bn-block-content[data-content-type="table"]::before {
+  margin-top: 24px;
 }
 
 .outline-panel
@@ -271,9 +826,73 @@ textarea {
 
 /* Keep BlockNote's native drag events, but place its transparent hit area on
    top of the persistent node marker. */
+/* Packed to the right, 10px of padding past the last 20px slot: that lands the
+   last control's centre on `row left - 20px`, which is exactly where BlockNote
+   draws the indent guide descending from the parent. So the collapse chevron sits
+   *on* the line it belongs to, and on a leaf — where no chevron mounts — the add
+   button slides right into the vacated slot instead of leaving a hole. The width
+   stays 48px (border-box), so the absolutely positioned drag handle does not
+   move. */
 .outline-panel .bn-side-menu {
   position: relative;
   min-width: 48px;
+  padding-right: 10px;
+  gap: 1px;
+  justify-content: flex-end;
+}
+
+/* The two controls that sit in the gutter flow — add block, then collapse — share
+   one 20px slot, one 16px glyph and one tone, which puts their centres 21px apart
+   and 20px from the marker: an even add · collapse · bullet rhythm rather than a
+   22px icon crowding a 16px chevron. The drag handle is excluded because it is
+   absolutely positioned over the marker with a 24px hit area of its own. */
+.outline-panel .bn-side-menu > .bn-button:not([draggable="true"]) {
+  position: relative;
+  width: 20px;
+  min-width: 20px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--zhijian-gutter-icon);
+}
+
+/* The indent guide runs straight through the chevron's slot, so each gutter control
+   carries a 20px disc of its own — the same idea as the marker's halo, page-white so
+   the line cannot cross the glyph. It only shows with the menu, which is to say on
+   row hover, and turns grey under the pointer. Opaque grey rather than a translucent
+   wash, because a wash would let the line back through. */
+.outline-panel .bn-side-menu > .bn-button:not([draggable="true"])::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  pointer-events: none;
+}
+
+/* BlockNote colours the add button's icon on the `svg` itself, from
+   `--bn-colors-side-menu`, so the tone has to be set there rather than inherited
+   from the button. Positioned so it paints above the disc: the disc is an absolutely
+   positioned pseudo-element, which would otherwise sit on top of in-flow content. */
+.outline-panel .bn-side-menu > .bn-button:not([draggable="true"]) svg {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  color: var(--zhijian-gutter-icon);
+}
+
+.outline-panel .bn-side-menu > .bn-button:not([draggable="true"]):hover,
+.outline-panel .bn-side-menu > .bn-button:not([draggable="true"]):hover svg {
+  color: var(--zhijian-gutter-icon-hover);
+}
+
+.outline-panel .bn-side-menu > .bn-button:not([draggable="true"]):hover::before {
+  background: rgb(240, 240, 241);
 }
 
 .outline-panel .bn-side-menu [draggable="true"] {
@@ -294,6 +913,16 @@ textarea {
   display: none;
 }
 
+/* The collapse toggle sits in the gutter's second slot, between the add button and
+   the marker; size, tone and hover come from the shared gutter-control rule above.
+   Only rows with children mount it, so the slot is empty — not blank-but-clickable
+   — on a leaf. */
+.outline-panel .bn-side-menu .outline-collapse-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .outline-panel .bn-side-menu [draggable="true"]::before {
   content: "";
   display: block;
@@ -306,11 +935,17 @@ textarea {
   transition: box-shadow 120ms ease;
 }
 
+/* The marker's halo while the pointer is on the drag handle, and while it is being
+   dragged. A 3px ring on a 6px dot was almost impossible to see against the page, so
+   the glow reaches the full 24px of the hit area it belongs to: a 7px ring makes the
+   dot read as a 20px target, with a wide soft shadow behind it saying it can be
+   picked up. `:active` keeps it lit through the drag itself. */
 .outline-panel .bn-side-menu [draggable="true"]:hover::before,
-.outline-panel .bn-side-menu [draggable="true"]:focus-visible::before {
+.outline-panel .bn-side-menu [draggable="true"]:focus-visible::before,
+.outline-panel .bn-side-menu [draggable="true"]:active::before {
   box-shadow:
-    0 0 0 3px rgba(104, 105, 112, 0.16),
-    0 0 8px rgba(66, 68, 75, 0.28);
+    0 0 0 7px rgba(104, 105, 112, 0.2),
+    0 0 14px 4px rgba(66, 68, 75, 0.32);
 }
 
 .outline-panel .bn-side-menu [draggable="true"]:active {
@@ -331,6 +966,93 @@ textarea {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+/* A run of coloured text and a coloured table cell keep BlockNote's own name for
+   the colour ("blue", "yellow"), and BlockNote paints those names document-wide
+   from variables it only defines on `.bn-root` — which the in-node editors have and
+   the display layer, being plain HTML, does not. Borrowing the class here is what
+   lets one palette serve both, so a colour set in the outline or in a node's editor
+   looks the same on the canvas at rest. Its font-family comes back out: the canvas
+   already agrees with the app's stack, two rules below. */
+.mindmap-canvas.bn-root {
+  font-family: inherit;
+}
+
+/* mind-elixir ships its own `-apple-system, …, PingFang SC` stack on the canvas,
+   which put a node's resting text in one typeface and the BlockNote editor that
+   covers it — Inter, from `.bn-default-styles` — in another. Inheriting the app's
+   stack makes the two the same, and matches the outline showing the same text. */
+.mindmap-canvas .map-container {
+  font-family: inherit;
+  /* Top and bottom of `me-parent`'s own padding, trimmed from mind-elixir's 6px:
+     with the theme's `--node-gap-y` it makes up the gap between two rows, and it
+     is also where an edited node's box has to be pinned (see
+     `.is-mindmap-floating > me-tpc`), so both read it from here. */
+  --mindmap-row-pad-y: 2px;
+}
+
+.mindmap-canvas .map-container .context-menu {
+  z-index: 120;
+}
+
+.mindmap-canvas .map-container .context-menu .menu-list {
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid rgba(55, 53, 47, 0.12);
+  border-radius: 6px;
+  background: #fff;
+  color: #37352f;
+  font-size: 14px;
+  line-height: 1.2;
+  list-style: none;
+  overflow: hidden;
+  box-shadow:
+    0 8px 24px rgba(15, 15, 15, 0.12),
+    0 2px 5px rgba(15, 15, 15, 0.08);
+}
+
+.mindmap-canvas .map-container .context-menu .menu-list li {
+  min-width: 178px;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #37352f;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.mindmap-canvas .map-container .context-menu .menu-list li:hover {
+  background: rgba(55, 53, 47, 0.07);
+  filter: none;
+}
+
+.mindmap-canvas .map-container .context-menu .menu-list li span {
+  line-height: 20px;
+}
+
+.mindmap-canvas .map-container .context-menu .menu-list li span:first-child {
+  min-width: 0;
+  flex: 1;
+}
+
+.mindmap-canvas .map-container .context-menu .menu-list li span:last-child {
+  margin-left: auto;
+  float: none;
+}
+
+.mindmap-canvas .map-container .context-menu .key {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(55, 53, 47, 0.06);
+  color: #9b9a97;
+  font-family: inherit;
+  font-size: 11px;
 }
 
 .node-content-editor {
@@ -380,7 +1102,7 @@ textarea {
 }
 
 .mindmap-node-shell {
-  color: var(--mindmap-color, #273142);
+  color: var(--mindmap-color, var(--zhijian-ink));
   background: var(--mindmap-background, transparent);
   font-size: var(--mindmap-font-size, 16px);
   font-style: var(--mindmap-font-style, normal);
@@ -403,16 +1125,187 @@ textarea {
   display: block;
 }
 
+/* mind-elixir positions nothing: every `me-tpc` sits in normal flow, so a node
+   that grows while being typed into pushes its own subtree and every later
+   sibling, and each step costs a full connector relink. While editing, the frame
+   holds the size it already had (pinned inline by `MindMapEditor`) and `me-tpc`
+   leaves the flow — the box floats above the map and follows the text while the
+   layout stays put until the edit ends. `me-tpc` still carries its own frame, so
+   a floating node looks exactly like the node it stands in for. mind-elixir parks
+   every node frame at `z-index: 10`, its connector and summary layers at 20 and
+   its label container at 21, so 25 makes the edited box the topmost thing in the
+   map — a box that has grown wide is drawn over a neighbouring branch's line
+   rather than under it — while staying below the link handles (50), the context
+   menu (99) and the drag ghost. */
+.map-container .is-mindmap-floating {
+  position: relative;
+  z-index: 25;
+}
+
+/* Pinned to the frame's top edge, so the box only ever grows downwards and the
+   first line — with the caret in it — stays exactly where it was. A centred
+   anchor grows both ways, which reads as the whole map drifting up and down while
+   you type, and it also lies to mind-elixir: it derives a connector from
+   `offsetTop`, which cannot see a `transform`, so any relink would put the line
+   half a box away from where the box is drawn.
+
+   The offsets repeat `me-parent`'s own padding rather than being zero: an
+   absolutely positioned box is placed against its frame's *padding* box while a
+   box in flow sits against the *content* box, so `0` would jog the node up and to
+   the near side by the padding the moment editing started. */
+.map-container .is-mindmap-floating > me-tpc {
+  position: absolute;
+  top: var(--mindmap-row-pad-y);
+  left: var(--node-gap-x);
+  width: max-content;
+}
+
+/* The root and the first level pad nothing — they are spaced by margins — so their
+   frame's padding box and content box are the same place. */
+.map-container me-root.is-mindmap-floating > me-tpc,
+.map-container me-main > me-wrapper > .is-mindmap-floating > me-tpc {
+  top: 0;
+  left: 0;
+}
+
+/* A left-hand node is joined to its parent on the right edge, so it grows left. */
+.map-container me-main.lhs .is-mindmap-floating > me-tpc {
+  right: var(--node-gap-x);
+  left: auto;
+}
+
+.map-container me-main.lhs > me-wrapper > .is-mindmap-floating > me-tpc {
+  right: 0;
+}
+
 .mindmap-node-renderer {
   overflow-wrap: anywhere;
 }
 
-.map-container me-tpc:has(> .mindmap-node-shell .mindmap-node-images),
-.map-container me-tpc:has(> .mindmap-node-shell .mindmap-node-quote) {
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
+/* No node chrome below the root: the ink is the node. mind-elixir hardcodes a
+   frame on the first level, and the theme can only reach its colours, not its
+   padding, so it is flattened here to the same `--topic-padding` every deeper node
+   already uses. Every node below the root now measures its box the same way,
+   whatever its depth and whether or not it holds a quote. */
+.map-container me-main > me-wrapper > me-parent > me-tpc {
+  padding: var(--topic-padding);
+  border-width: 0;
+  font-size: inherit;
+}
+
+/* The root is the one node that keeps its frame — the theme gives it the branch ink
+   and the rounding — but not mind-elixir's hardcoded 25px, which would also scale
+   the 35em width cap `me-tpc` puts on every node. The size comes from
+   `--mindmap-font-size`, like every other node's. */
+.map-container me-root me-tpc {
+  font-size: inherit;
+}
+
+/* Every node paints the canvas colour behind its own text. The node being edited
+   floats above the map (see `.is-mindmap-floating`), and a transparent box would
+   let the branches and neighbours underneath show through the line being typed.
+   The root and the first level get theirs from `--root-bgcolor`/`--main-bgcolor`,
+   which mind-elixir applies at a higher specificity than this. */
+.map-container me-tpc {
+  background-color: var(--bgcolor);
+}
+
+/* Thinner than mind-elixir's 3px main branch and 2px sub branch, and one weight
+   for both: CSS wins over the `stroke-width` it sets as a presentation
+   attribute. The colour is left to the theme's one-entry palette. */
+.map-container .lines path,
+.map-container .subLines path {
+  stroke-width: 1.6;
+}
+
+/* mind-elixir stacks nodes with a top margin alone, and an inline-block is centred
+   against its siblings by its *margin* box: a child row therefore hangs half a gap
+   below the node it belongs to. With several children the trunk only looks a touch
+   low, but a lone child sits visibly off its parent's centre line, and its
+   connector leaves as a step instead of a straight run. Splitting the same gap
+   across both edges leaves the distance between two siblings unchanged — half from
+   each — and puts every child row back on its parent's centre.
+
+   The padding is mind-elixir's own 6px taken in to `--mindmap-row-pad-y`: 6px above
+   and below every row is most of what set the map's rows a whole line further apart
+   than the reference, and it is dead space — the node's own breathing room comes
+   from `--topic-padding`. Together with `--node-gap-y` this is the gap between two
+   rows, and it stays even so the centre lines above hold. */
+.map-container me-nodes me-parent {
+  margin-top: calc(var(--node-gap-y) / 2);
+  margin-bottom: calc(var(--node-gap-y) / 2);
+  padding-top: var(--mindmap-row-pad-y);
+  padding-bottom: var(--mindmap-row-pad-y);
+}
+
+/* The first level is spaced by margins and carries no padding of its own, so its
+   margin has to stand in for both halves to land on the same rhythm as every
+   deeper row. mind-elixir's own 10px is what it replaces. */
+.map-container me-nodes me-main > me-wrapper > me-parent {
+  margin-top: calc(var(--node-gap-y) / 2 + var(--mindmap-row-pad-y));
+  margin-bottom: calc(var(--node-gap-y) / 2 + var(--mindmap-row-pad-y));
+}
+
+/* How far a frame's own padding holds its node in from the right edge, which is
+   where mind-elixir anchors the collapse handle. Every level below the first is
+   padded by the trunk gap; the first level is spaced by margins instead, so its
+   frame ends exactly where the node does. */
+.map-container me-nodes me-parent {
+  --epd-inset: var(--node-gap-x);
+}
+
+.map-container me-nodes me-main > me-wrapper > me-parent {
+  --epd-inset: 0px;
+}
+
+/* The one way to collapse a node, mind-elixir's own handle: a filled disc while the
+   children are showing, a pill carrying the number of nodes it hides once they are
+   not (`MindMapEditor` writes that number into `data-count`). mind-elixir draws
+   both states as a background image and parks the handle under the node, where its
+   own underline-style branch used to run; ours meets the node at the vertical
+   centre, so the handle moves there too, and 6px clear of the node's right edge —
+   on the stub that runs to the trunk — rather than 10px past the frame, which on a
+   first-level node lands on the text. Anchoring on `left` also lets a two-digit
+   count grow away from the node instead of into it. `me-nodes` is in each selector
+   only to outweigh mind-elixir's own — including its `!important` background image,
+   whose `.minus` variant carries a class of its own and so needs the second
+   selector below to lose to us. */
+.map-container me-nodes me-parent > me-epd,
+.map-container me-nodes me-parent > me-epd.minus {
+  display: flex;
+  box-sizing: border-box;
+  min-width: 18px;
+  width: auto;
+  height: 18px;
+  top: calc(50% - 9px);
+  right: auto;
+  left: calc(100% - var(--epd-inset) + 6px);
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border-radius: 9px;
+  background-color: #b6bcc4;
+  background-image: none !important;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* `.minus` is mind-elixir's class for "children are showing", where it also fades
+   the handle out until the pointer is over it. */
+.map-container me-nodes me-parent > me-epd.minus::after {
+  content: "‹";
+  margin-top: -1px;
+  font-size: 14px;
+}
+
+.map-container me-nodes .lhs me-parent > me-epd.minus::after {
+  content: "›";
+}
+
+.map-container me-nodes me-parent > me-epd:not(.minus)::after {
+  content: attr(data-count);
 }
 
 .mindmap-node-shell:has(.mindmap-node-table),
@@ -422,19 +1315,50 @@ textarea {
   max-width: none;
 }
 
+/* Display and editor swap in place inside one node box, so their box metrics
+   have to agree exactly — otherwise every node resizes on entering or leaving
+   edit mode and mind-elixir relinks the whole canvas around it. The editor side
+   gets its spacing from `.bn-block-content { padding: 0.08em 0 }`, so the
+   display side carries the same padding per row and no flex gap on top. */
 .mindmap-node-body {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 0.35em;
+  gap: 0;
 }
 
 .mindmap-node-primary {
   min-width: 0;
+  padding: 0.08em 0;
 }
 
 .mindmap-node-rich-text {
   white-space: pre-wrap;
+}
+
+/* A node holds one line box even with no text, so a freshly created node — or one
+   whose last character was just deleted — does not grow by a whole line the moment
+   the editor's empty paragraph takes over. `1lh` rather than a fixed height: the
+   root and the headings each carry their own line height. Same device as
+   `.mindmap-node-table td::before` below. */
+.mindmap-node-rich-text::before {
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 1lh;
+  vertical-align: top;
+}
+
+/* A node with nothing in it says what it is for. Two pseudo-elements carry the
+   hint — this one on the display layer, BlockNote's own placeholder on the editor
+   layer further down — and they have to agree on text, colour and box, so that the
+   node keeps its width when editing starts. BlockNote pulls its placeholder 2px
+   into the margin on each side; that is cancelled there rather than copied here,
+   because a negative inline margin makes the box wider than the `max-content`
+   width it reports, and the hint then wrapped and grew the node by a line. */
+.mindmap-node-rich-text.is-empty::after {
+  content: "输入文字";
+  color: var(--zhijian-hint);
 }
 
 .mindmap-node-todo {
@@ -471,64 +1395,43 @@ textarea {
   text-decoration: line-through;
 }
 
+/* Mirrors `.mindmap-node-editor [data-content-type="quote"] blockquote` below,
+   declaration for declaration, so a quote occupies the same box either way. */
 .mindmap-node-quote {
   display: block;
   width: max-content;
   max-width: 100%;
   box-sizing: border-box;
   margin: 0.2em 0;
-  padding-left: 0.7em;
-  border-left: 3px solid #b5b5b5;
-  color: #6b7280;
+  padding-left: 0.55em;
+  border-left: 2px solid #9aa0a6;
+  color: var(--zhijian-quote-ink);
   font-size: 14px;
   line-height: 1.45;
   white-space: pre-wrap;
 }
 
+/* An image keeps its own proportions: the renderer writes the stored preview width
+   inline — the same number BlockNote's resize handles read and write — and the
+   height follows from the picture. This mirrors the editor's image rules at the
+   bottom of this file, where BlockNote puts that width on
+   `.bn-file-block-content-wrapper` inside an inline-block `.bn-block-outer`. */
 .mindmap-node-images {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.35em;
   max-width: 28em;
 }
 
 .mindmap-node-image {
-  display: flex;
-  width: 8em;
-  height: 8em;
+  display: inline-block;
   max-width: 100%;
-  align-items: center;
-  justify-content: center;
+  margin: 0 0.35em 0.35em 0;
+  vertical-align: top;
   overflow: hidden;
-  background: #f5f7fa;
-}
-
-.mindmap-node-images:has(> .mindmap-node-image:only-child) {
-  display: block;
-  width: 16em;
-  max-width: 16em;
-}
-
-.mindmap-node-images:has(> .mindmap-node-image:only-child) .mindmap-node-image {
-  width: 100%;
-  height: 16em;
-  min-height: 0;
-  max-height: 16em;
-  aspect-ratio: 1;
-  border-radius: 4px;
-}
-
-.mindmap-node-images:has(> .mindmap-node-image:only-child) .mindmap-node-image img {
-  width: 100%;
-  height: 100%;
-  max-height: none;
-  object-fit: contain;
 }
 
 .mindmap-node-image img {
+  display: block;
   width: 100%;
-  height: 100%;
-  object-fit: contain;
+  height: auto;
 }
 
 .mindmap-node-table {
@@ -548,6 +1451,20 @@ textarea {
   min-width: 4em;
   padding: 0.3em 0.45em;
   border: 1px solid #cfd5dc;
+  vertical-align: top;
+}
+
+/* BlockNote gives every cell's paragraph a 1.5rem floor (core editor.css), so an
+   empty cell still occupies a full line while editing. The display layer has no
+   paragraph to carry that, so a table with no text collapsed to a third of its
+   height and grew 48px the moment editing began. A zero-width strut restores the
+   line box without touching a cell that does have text — its own line is already
+   at least as tall. */
+.mindmap-node-table td::before {
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 1.5rem;
   vertical-align: top;
 }
 
@@ -603,6 +1520,32 @@ textarea {
   content: none !important;
 }
 
+/* …except on the node's own first row, which keeps a placeholder so an empty node
+   reads the same being edited as it does at rest. Mirrors
+   `.mindmap-node-rich-text.is-empty::after` above; `font-style` is reset because
+   BlockNote italicises every placeholder, `margin-inline` and `max-width` because
+   its own placeholder rule pulls the hint 2px into the margin and clamps it to the
+   row, which together wrap the text and grow the node by a line. Every one of them
+   needs `!important` to outrank the blanket rule right above and BlockNote's own
+   late stylesheet.
+
+   A table is excluded because `:has()` looks at descendants: the node's only row is
+   the table itself, and any empty cell in it carries a trailing break — so the hint
+   for an empty *node* appeared over a table that simply had an empty cell. A table
+   node has no text row of its own to prompt for. */
+.mindmap-node-editor
+  .bn-editor
+  > .bn-block-group
+  > .bn-block-outer:first-child
+  > .bn-block
+  > .bn-block-content:not([data-content-type="table"]):has(.ProseMirror-trailingBreak:only-child)::after {
+  content: "输入文字" !important;
+  margin-inline: 0 !important;
+  max-width: none !important;
+  color: var(--zhijian-hint);
+  font-style: normal !important;
+}
+
 .mindmap-node-editor .bn-trailing-block {
   display: none;
 }
@@ -611,13 +1554,24 @@ textarea {
   margin-left: 0;
 }
 
+/* A quote row is spaced by the blockquote's own margin, mirroring
+   `.mindmap-node-quote`, so the block wrapper drops the padding every other row
+   uses. The `!important` on the two font declarations is what makes the mirror
+   hold: BlockNote puts `bn-inline-content` on the blockquote itself, and that
+   class carries the node font size with `!important` further up this file. */
+.mindmap-node-editor .bn-block-content[data-content-type="quote"] {
+  padding: 0;
+}
+
 .mindmap-node-editor [data-content-type="quote"] blockquote {
-  margin: 0.12em 0;
+  width: max-content;
+  max-width: 100%;
+  margin: 0.2em 0;
   padding-left: 0.55em;
   border-left: 2px solid #9aa0a6;
-  color: #6b7280;
-  font-size: 14px;
-  line-height: 1.45;
+  color: var(--zhijian-quote-ink);
+  font-size: 14px !important;
+  line-height: 1.45 !important;
 }
 
 .mindmap-node-shell:has(.mindmap-node-table) .mindmap-node-editor,
@@ -633,13 +1587,61 @@ textarea {
   overflow: visible !important;
 }
 
+/* BlockNote reserves a gutter around a table for its row and column widgets
+   (`--bn-table-*-size`) and gives every column a 120px `--default-cell-min-width`
+   (both in core editor.css). Neither exists in the display layer, so a table node
+   grew 31px in each direction and its columns nearly doubled the moment editing
+   began. Retuning the variables leaves BlockNote's own rules in charge — widget
+   placement and column resizing keep working — and only changes the metrics. */
+.mindmap-node-editor [data-content-type="table"] .tableWrapper {
+  --bn-table-widget-size: 0px;
+  --bn-table-handle-size: 0px;
+}
+
+.mindmap-node-editor [data-content-type="table"] table {
+  /* prosemirror-tables writes `min-width: <column count * 120>px` inline. */
+  min-width: 0 !important;
+}
+
+.mindmap-node-editor [data-content-type="table"] td,
+.mindmap-node-editor [data-content-type="table"] th {
+  /* Feeds BlockNote's own `min-width: var(--default-cell-min-width) !important`,
+     which is why this matches `.mindmap-node-table td` instead of fighting it. */
+  --default-cell-min-width: 4em;
+  padding: 0.3em 0.45em;
+  border-color: #cfd5dc;
+}
+
+/* BlockNote draws an indent guide 20px to the left of every nested block
+   (@blocknote/react styles.css). A mindmap node keeps its description, quotes and
+   images as nested blocks, so the guide showed up as a stray vertical rule with
+   nothing to guide and no counterpart on the display side. */
+.mindmap-node-editor .bn-block-group .bn-block-group > .bn-block-outer::before {
+  content: none !important;
+}
+
+/* Selecting an image is how it gets resized or replaced, so the selection itself
+   stays. BlockNote paints it as a 4px translucent frame plus a blue wash over the
+   block (core Block.css), which read as a second border around the picture — and
+   mind-elixir already outlines the node to show it is active. */
+.mindmap-node-editor .ProseMirror-selectednode::after,
+.mindmap-node-editor .ProseMirror-selectednode > *::after,
+.mindmap-node-editor .ProseMirror-selectednode > .bn-block-content > *::after {
+  content: none !important;
+}
+
+/* Mirrors `.mindmap-node-image` above. Nothing here states a width: BlockNote
+   writes the block's `previewWidth` inline on `.bn-file-block-content-wrapper`, and
+   that is the property its resize handles drag. Forcing a width here used to square
+   every picture off — the node box ignored the image's proportions and the handles
+   had nothing left to change — so the box is left to the picture and only capped at
+   the node's own maximum. */
 .mindmap-node-editor
   .bn-block-outer:has(
     > .bn-block > .bn-block-content[data-content-type="image"]
   ) {
   display: inline-block;
-  width: 8em;
-  max-width: 8em;
+  max-width: 100%;
   margin: 0 0.35em 0.35em 0;
   vertical-align: top;
 }
@@ -648,26 +1650,9 @@ textarea {
   .bn-block-outer:has(
     > .bn-block > .bn-block-content[data-content-type="image"]
   )
-  .bn-block-content,
-.mindmap-node-editor
-  .bn-block-outer:has(
-    > .bn-block > .bn-block-content[data-content-type="image"]
-  )
-  [data-file-block],
-.mindmap-node-editor
-  .bn-block-outer:has(
-    > .bn-block > .bn-block-content[data-content-type="image"]
-  )
-  .bn-file-block-content-wrapper,
-.mindmap-node-editor
-  .bn-block-outer:has(
-    > .bn-block > .bn-block-content[data-content-type="image"]
-  )
-  .bn-visual-media-wrapper {
-  width: 8em !important;
-  height: 8em;
-  min-height: 0;
-  max-width: 8em;
+  .bn-block-content {
+  /* Spaced by the 0.35em margin above, the way the display layer is, so the row
+     padding every text block carries would be 2.6px the picture does not have. */
   padding: 0;
 }
 
@@ -675,12 +1660,35 @@ textarea {
   .bn-block-outer:has(
     > .bn-block > .bn-block-content[data-content-type="image"]
   )
+  .bn-file-block-content-wrapper {
+  max-width: 100%;
+}
+
+.mindmap-node-editor
+  .bn-block-outer:has(
+    > .bn-block > .bn-block-content[data-content-type="image"]
+  )
   img {
-  width: 100% !important;
-  height: 100% !important;
+  display: block;
+  width: 100%;
+  height: auto;
   max-width: none;
   max-height: none;
-  object-fit: contain;
+}
+
+/* BlockNote ships a 12x24px checklist input with 4px/8px side margins. The
+   display layer draws its box at 0.85em of `.mindmap-node-checkbox`'s own 0.9em
+   font — 0.765em of the row — and takes the 0.45em gap from the row instead. Both
+   are stated on the row's basis here so the text lands in the same place and the
+   row keeps its height when editing begins. */
+.mindmap-node-editor .bn-block-content[data-content-type="checkListItem"] > div:has(> input) {
+  height: auto;
+}
+
+.mindmap-node-editor .bn-block-content[data-content-type="checkListItem"] > div > input {
+  width: 0.765em;
+  height: 0.765em;
+  margin: 0 0.45em 0 0;
 }
 
 

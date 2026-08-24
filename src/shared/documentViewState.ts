@@ -1,0 +1,11 @@
+export interface MindMapViewportState {
+  x: number;
+  y: number;
+  scale: number;
+}
+
+export interface DocumentViewState {
+  activeView?: "outline" | "mindmap";
+  outlineScrollTop?: number;
+  mindMapViewport?: MindMapViewportState;
+}

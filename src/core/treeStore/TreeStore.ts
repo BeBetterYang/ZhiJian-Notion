@@ -4,6 +4,7 @@ import type {
   ZhiJianNode,
   ZhiJianNodeBlock,
   ZhiJianNodeType,
+  ZhiJianTableData,
   ZhiJianTree,
 } from "../tree";
 import type { NodeVisualStyle } from "../tree/style";
@@ -33,6 +34,25 @@ export class TreeStore {
   private listeners = new Set<TreeListener>();
   private undoStack: ZhiJianTree[] = [];
   private redoStack: ZhiJianTree[] = [];
+  /**
+   * Whether the commits arriving now fold into a single undo step.
+   *
+   * An IME turns one Chinese character into a run of document changes — "n",
+   * "ni", "nih", then 你 — and each one reached `commit` as a snapshot of its own,
+   * so undo walked back through pinyin the user never wrote. Every change while a
+   * composition is open belongs to the same character, and the only state worth
+   * returning to is the one it started from.
+   *
+   * "closing" is the window after `compositionend`: the editor flushes the
+   * finished character as one more change a moment later, and that change has to
+   * join the group rather than record the pinyin behind it as the state to return
+   * to. It closes on the next commit whatever that commit turns out to be — an
+   * unrelated edit arriving first is folded in as well, which costs one step of
+   * granularity and never loses text.
+   */
+  private coalescing: "off" | "open" | "closing" = "off";
+  /** Whether the open group has already put its starting state on the stack. */
+  private groupOnUndoStack = false;
 
   constructor(initialTree: ZhiJianTree) {
     this.tree = cloneTree(initialTree);
@@ -85,7 +105,12 @@ export class TreeStore {
     });
   }
 
-  updateType(id: string, type: ZhiJianNodeType) {
+  /**
+   * `extraProps` is applied last, so a caller that changes a node's type and one of
+   * that type's own props — the heading shortcuts, which set 标题 and its level
+   * together — commits both as one change and undoes them as one step.
+   */
+  updateType(id: string, type: ZhiJianNodeType, extraProps?: NonNullable<ZhiJianNode["props"]>) {
     if (id === this.tree.rootId) {
       return;
     }
@@ -101,6 +126,7 @@ export class TreeStore {
         ...(type === "todo" ? { checked: checked ?? false } : undefined),
         ...(type === "heading" ? { headingLevel: headingLevel ?? 1 } : undefined),
         ...(type === "table" ? { table: table ?? createDefaultTable() } : undefined),
+        ...extraProps,
       };
       if (type === "table") {
         node.content = plainTextContent("");
@@ -148,6 +174,7 @@ export class TreeStore {
     content: string | RichTextContent,
     blocks: ZhiJianNodeBlock[],
     description?: string | RichTextContent,
+    table?: ZhiJianTableData,
   ) {
     this.commit((draft) => {
       const node = this.requireDraftNode(draft, id);
@@ -156,6 +183,9 @@ export class TreeStore {
       if (nextDescription?.text.trim()) node.description = nextDescription;
       else delete node.description;
       node.blocks = node.type === "table" ? undefined : cloneBlocks(blocks);
+      // A table node keeps its cells in props, so an editor round trip has to be
+      // able to write them back through the same commit as the rest of the node.
+      if (node.type === "table" && table) node.props = { ...node.props, table };
       draft.nodes[id] = touchNode(node);
     });
   }
@@ -384,11 +414,26 @@ export class TreeStore {
     return newRootId;
   }
 
+  /** Starts a run of commits that undo steps over as one. Idempotent. */
+  beginHistoryCoalescing() {
+    this.coalescing = "open";
+  }
+
+  /** Ends that run, with room for one last commit — see `coalescing`. */
+  endHistoryCoalescing() {
+    if (this.coalescing === "open") {
+      this.coalescing = "closing";
+    }
+  }
+
   undo() {
     const previous = this.undoStack.pop();
     if (!previous) {
       return;
     }
+    // Stepping through history is a boundary: whatever run of commits was being
+    // folded together ends here rather than absorbing what comes after it.
+    this.closeHistoryCoalescing();
     this.redoStack.push(cloneTree(this.tree));
     this.tree = cloneTree(previous);
     this.emit();
@@ -399,9 +444,15 @@ export class TreeStore {
     if (!next) {
       return;
     }
+    this.closeHistoryCoalescing();
     this.undoStack.push(cloneTree(this.tree));
     this.tree = cloneTree(next);
     this.emit();
+  }
+
+  private closeHistoryCoalescing() {
+    this.coalescing = "off";
+    this.groupOnUndoStack = false;
   }
 
   private commit(mutator: (draft: ZhiJianTree) => void) {
@@ -409,7 +460,13 @@ export class TreeStore {
     const draft = cloneTree(this.tree);
     mutator(draft);
     this.tree = draft;
-    this.undoStack.push(previous);
+    if (!this.groupOnUndoStack) {
+      this.undoStack.push(previous);
+      this.groupOnUndoStack = this.coalescing !== "off";
+    }
+    if (this.coalescing === "closing") {
+      this.closeHistoryCoalescing();
+    }
     this.redoStack = [];
     this.emit();
   }

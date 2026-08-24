@@ -1,19 +1,85 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { createInitialTree } from "./core/tree";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import {
+  FiChevronDown,
+  FiDownload,
+  FiGitBranch,
+  FiList,
+  FiMoreHorizontal,
+  FiSearch,
+  FiUpload,
+} from "react-icons/fi";
+import { markdownFileName, markdownToTree, treeToMarkdown } from "./core/markdown/markdownDocument";
+import { createInitialTree, richTextToPlainText } from "./core/tree";
 import { TreeStore, attachTreePersistence, loadPersistedTree } from "./core/treeStore";
 import { useTree } from "./core/treeStore/useTree";
 import { MindMapEditor } from "./mindmap/MindMapEditor";
 import type { MindMapTextSelection } from "./mindmap/MindMapEditor";
 import { OutlineEditor } from "./outline/OutlineEditor";
+import { zoomPath } from "./outline/outlineZoom";
+import type { DocumentViewState, MindMapViewportState } from "./shared/documentViewState";
+import { matchingNodeIds, replaceSearchMatch, searchVisibleNodeIds } from "./shared/treeSearch";
+import {
+  isAppShortcut,
+  resolveShortcut,
+  zoomInTargetId,
+  zoomOutTargetId,
+} from "./shared/shortcuts";
+import { ShortcutHelpDialog } from "./shared/shortcuts/ShortcutHelpDialog";
 import "./styles.css";
 
-export default function App() {
-  const store = useMemo(() => new TreeStore(loadPersistedTree() ?? createInitialTree()), []);
-  useEffect(() => attachTreePersistence(store), [store]);
+interface AppProps {
+  embedded?: boolean;
+  store?: TreeStore;
+  toolbarTarget?: HTMLElement | null;
+  viewStateStorageKey?: string;
+  focusNodeRequest?: {
+    nodeId: string;
+    query: string;
+    requestId: number;
+  } | null;
+}
+
+const DEFAULT_VIEW_STATE_STORAGE_KEY = "zhijian.editor.view-state.v1";
+
+export default function App({ embedded = false, store: providedStore, toolbarTarget = null, viewStateStorageKey, focusNodeRequest = null }: AppProps) {
+  const viewStateKey = viewStateStorageKey ?? DEFAULT_VIEW_STATE_STORAGE_KEY;
+  const [initialViewState] = useState(() => loadDocumentViewState(viewStateKey));
+  const internalStore = useMemo(
+    () => new TreeStore(loadPersistedTree() ?? createInitialTree()),
+    [],
+  );
+  const store = providedStore ?? internalStore;
+  useEffect(
+    () => providedStore ? undefined : attachTreePersistence(internalStore),
+    [internalStore, providedStore],
+  );
   const tree = useTree(store);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectionActive, setSelectionActive] = useState(false);
-  const [activeView, setActiveView] = useState<"outline" | "mindmap">("outline");
+  const [activeView, setActiveView] = useState<"outline" | "mindmap">(initialViewState?.activeView ?? "outline");
+  // Set while the node being edited in the map is formatting one of its own quote or
+  // picture blocks, which it does through its own toolbar in the shared host.
+  const [mindMapNodeToolbarActive, setMindMapNodeToolbarActive] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const toolbarMoreRef = useRef<HTMLDivElement>(null);
+  const collapseMenuRef = useRef<HTMLDivElement>(null);
+  const [toolbarMoreOpen, setToolbarMoreOpen] = useState(false);
+  const [collapseMenuOpen, setCollapseMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchFocusSignal, setSearchFocusSignal] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [replaceText, setReplaceText] = useState("");
+  const [activeMatchIndex, setActiveMatchIndex] = useState(0);
+  const [activeSearchNodeId, setActiveSearchNodeId] = useState<string | null>(null);
+  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  // 进入当前主题: which node the views are showing as though it were the document.
+  const [zoomedNodeId, setZoomedNodeId] = useState<string | null>(null);
+  const [pendingImport, setPendingImport] = useState<{
+    fallbackTitle: string;
+    fileName: string;
+    markdown: string;
+  } | null>(null);
   const [mindMapToolbarTarget, setMindMapToolbarTarget] = useState<HTMLDivElement | null>(null);
   const [mindMapTextSelection, setMindMapTextSelection] =
     useState<MindMapTextSelection | null>(null);
@@ -22,9 +88,21 @@ export default function App() {
     focusBlockId: string;
     requestId: number;
   } | null>(null);
+  const [mindMapFocusNodeRequest, setMindMapFocusNodeRequest] = useState<{
+    nodeId: string;
+    requestId: number;
+  } | null>(null);
   const selectedNode = selectedNodeId ? store.getNode(selectedNodeId) : null;
+  const visibleSearchNodeIds = useMemo(() => searchVisibleNodeIds(tree, searchQuery), [searchQuery, tree]);
+  const matchedNodeIds = useMemo(() => matchingNodeIds(tree, searchQuery), [searchQuery, tree]);
+  // A table's cell colours come from BlockNote's own table handles, and the bridge
+  // below cannot select a table block's text to act on in the first place.
   const isMindMapMediaSelected = selectedNode?.type === "table";
-  const isMindMapGroupSelected = Boolean(selectedNode?.blocks?.length);
+
+  useEffect(() => {
+    setActiveMatchIndex(0);
+    setActiveSearchNodeId(null);
+  }, [searchQuery]);
 
   const handleOutlineSelect = useCallback(
     (nodeId: string) => {
@@ -36,71 +114,320 @@ export default function App() {
     [activeView],
   );
 
-  const createRootChild = () => {
-    const root = store.getNode(tree.rootId);
-    if (!root) return;
-    const newId = store.createNode({
-      parentId: root.id,
-      index: root.children.length,
-      content: "",
+  const persistViewStatePatch = useCallback((patch: DocumentViewState) => {
+    saveDocumentViewState(viewStateKey, patch);
+  }, [viewStateKey]);
+
+  const changeView = useCallback((view: "outline" | "mindmap") => {
+    setActiveView(view);
+    setSelectionActive(false);
+    setMindMapTextSelection(null);
+    persistViewStatePatch({ activeView: view });
+  }, [persistViewStatePatch]);
+
+  /**
+   * The shortcuts that belong to the app rather than to a node — 搜索, 缩放, 切换视图,
+   * 帮助 — claimed on the window in the capture phase, before either view sees the
+   * press. They work with the focus anywhere, including inside a node being edited,
+   * which is where the hands already are.
+   */
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing) return;
+      const id = resolveShortcut(event);
+      if (!id || !isAppShortcut(id)) return;
+
+      if (id === "find-in-document") {
+        setSearchOpen(true);
+        setSearchFocusSignal((signal) => signal + 1);
+      } else if (id === "zoom-in") {
+        const target = zoomInTargetId(store.getSnapshot(), selectedNodeId);
+        if (!target) return;
+        setZoomedNodeId(target);
+      } else if (id === "zoom-out") {
+        // Already at the top: the press has nothing to do, so it stays the
+        // browser's own — nothing is swallowed that was not answered.
+        if (!zoomedNodeId) return;
+        setZoomedNodeId(zoomOutTargetId(store.getSnapshot(), zoomedNodeId));
+      } else if (id === "toggle-view") {
+        changeView(activeView === "outline" ? "mindmap" : "outline");
+      } else if (id === "shortcut-help") {
+        setShortcutHelpOpen((open) => !open);
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [activeView, changeView, selectedNodeId, store, zoomedNodeId]);
+
+  // A zoomed node that has since been deleted would leave both views showing
+  // nothing, with no row left to press 返回上一级主题 on.
+  useEffect(() => {
+    if (zoomedNodeId && !tree.nodes[zoomedNodeId]) {
+      setZoomedNodeId(null);
+    }
+  }, [tree, zoomedNodeId]);
+
+  useEffect(() => {
+    if (!toolbarMoreOpen && !collapseMenuOpen) return;
+    const closeMenu = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!toolbarMoreRef.current?.contains(target)) setToolbarMoreOpen(false);
+      if (!collapseMenuRef.current?.contains(target)) setCollapseMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setToolbarMoreOpen(false);
+        setCollapseMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", closeMenu);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeMenu);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [collapseMenuOpen, toolbarMoreOpen]);
+
+  const updateMindMapViewport = useCallback((viewport: MindMapViewportState) => {
+    persistViewStatePatch({ mindMapViewport: viewport });
+  }, [persistViewStatePatch]);
+
+  const updateOutlineScroll = useCallback((scrollTop: number) => {
+    persistViewStatePatch({ outlineScrollTop: scrollTop });
+  }, [persistViewStatePatch]);
+
+  const toggleCollapse = (level: number | "all") => {
+    const targets = Object.values(tree.nodes).filter((node) => {
+      if (node.id === tree.rootId || node.children.length === 0) return false;
+      return level === "all" || nodeDepth(tree, node.id) === level;
     });
-    setSelectedNodeId(newId);
+    if (!targets.length) return;
+    const collapsed = targets.some((node) => node.props?.collapsed !== true);
+    store.updateNodes(targets.map((node) => ({ id: node.id, props: { collapsed } })));
+    setCollapseMenuOpen(false);
   };
 
+  const replaceCurrent = () => {
+    if (!searchQuery.trim()) return;
+    store.replaceTreeFromView(replaceSearchMatch(store.getSnapshot(), searchQuery, replaceText, "first"));
+  };
+
+  const replaceAll = () => {
+    if (!searchQuery.trim()) return;
+    store.replaceTreeFromView(replaceSearchMatch(store.getSnapshot(), searchQuery, replaceText, "all"));
+  };
+
+  const goToSearchMatch = (direction: -1 | 1) => {
+    if (!matchedNodeIds.length) return;
+    const nextIndex = (activeMatchIndex + direction + matchedNodeIds.length) % matchedNodeIds.length;
+    const nodeId = matchedNodeIds[nextIndex]!;
+    setActiveMatchIndex(nextIndex);
+    setActiveSearchNodeId(nodeId);
+    setSelectedNodeId(nodeId);
+    setSelectionActive(true);
+    window.requestAnimationFrame(() => {
+      const selector = activeView === "outline"
+        ? `.outline-panel .bn-block-outer[data-id="${cssEscape(nodeId)}"]`
+        : `.mindmap-canvas [data-node-id="${cssEscape(nodeId)}"]`;
+      document.querySelector(selector)?.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+    });
+  };
+
+  useEffect(() => {
+    if (!focusNodeRequest || !tree.nodes[focusNodeRequest.nodeId]) return;
+    const nodeId = focusNodeRequest.nodeId;
+    if (focusNodeRequest.query.trim()) {
+      setSearchQuery(focusNodeRequest.query);
+    }
+    setActiveSearchNodeId(nodeId);
+    setSelectedNodeId(nodeId);
+    setSelectionActive(true);
+    if (activeView === "mindmap") {
+      setMindMapFocusNodeRequest({ nodeId, requestId: focusNodeRequest.requestId });
+      return;
+    }
+    window.requestAnimationFrame(() => {
+      document
+        .querySelector(`.outline-panel .bn-block-outer[data-id="${cssEscape(nodeId)}"]`)
+        ?.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
+    });
+  }, [activeView, focusNodeRequest, tree.nodes]);
+
+  const exportMarkdown = () => {
+    const url = URL.createObjectURL(
+      new Blob([treeToMarkdown(tree)], { type: "text/markdown;charset=utf-8" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = markdownFileName(tree);
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
+  const importMarkdown = async (file: File) => {
+    const markdown = await file.text();
+    // The file name stands in for the title when the document has no `# ` line.
+    const fallbackTitle = file.name.replace(/\.(md|markdown|txt)$/i, "");
+    setPendingImport({ fallbackTitle, fileName: file.name, markdown });
+  };
+
+  const confirmImportMarkdown = () => {
+    if (!pendingImport) return;
+    store.replaceTreeFromView(markdownToTree(pendingImport.markdown, {
+      fallbackTitle: pendingImport.fallbackTitle,
+    }));
+    setSelectedNodeId(null);
+    setSelectionActive(false);
+    setMindMapTextSelection(null);
+    setPendingImport(null);
+  };
+
+  const editorToolbar = (
+    <div className="toolbar editor-navigation-toolbar">
+      <button
+        className="view-toggle-button"
+        type="button"
+        aria-label={activeView === "outline" ? "切换到思维导图" : "切换到大纲笔记"}
+        title={activeView === "outline" ? "切换到思维导图" : "切换到大纲笔记"}
+        onClick={() => {
+          changeView(activeView === "outline" ? "mindmap" : "outline");
+          setToolbarMoreOpen(false);
+        }}
+      >
+        {activeView === "outline" ? <FiGitBranch /> : <FiList />}
+        <span>{activeView === "outline" ? "思维导图" : "大纲笔记"}</span>
+      </button>
+      <div className="toolbar-more-wrap" ref={collapseMenuRef}>
+        <button
+          className="toolbar-icon-button toolbar-more-button"
+          type="button"
+          aria-label="展开/折叠主题"
+          title="展开/折叠主题"
+          aria-expanded={collapseMenuOpen}
+          onClick={() => {
+            setCollapseMenuOpen((open) => !open);
+            setToolbarMoreOpen(false);
+          }}
+        >
+          <ExpandCollapseIcon />
+        </button>
+        {collapseMenuOpen ? (
+          <div className="toolbar-more-menu collapse-menu" role="menu">
+            <div className="toolbar-menu-title">展开/折叠主题</div>
+            <button type="button" role="menuitem" onClick={() => toggleCollapse("all")}>
+              <span>全部主题</span>
+              <kbd>Ctrl+Alt+Shift+.</kbd>
+            </button>
+            <button type="button" role="menuitem" onClick={() => toggleCollapse(1)}>
+              <span>1 级主题</span>
+              <kbd>Ctrl+Alt+1</kbd>
+            </button>
+            <button type="button" role="menuitem" onClick={() => toggleCollapse(2)}>
+              <span>2 级主题</span>
+              <kbd>Ctrl+Alt+2</kbd>
+            </button>
+            <button type="button" role="menuitem" onClick={() => toggleCollapse(3)}>
+              <span>3 级主题</span>
+              <kbd>Ctrl+Alt+3</kbd>
+            </button>
+          </div>
+        ) : null}
+      </div>
+      <button
+        className="toolbar-icon-button toolbar-more-button"
+        type="button"
+        aria-label="查找替换"
+        title="查找替换"
+        aria-expanded={searchOpen}
+        onClick={() => setSearchOpen((open) => !open)}
+      >
+        <FiSearch />
+      </button>
+      <div className="toolbar-more-wrap" ref={toolbarMoreRef}>
+        <button
+          className="toolbar-icon-button toolbar-more-button"
+          type="button"
+          aria-label="更多"
+          title="更多"
+          aria-expanded={toolbarMoreOpen}
+          onClick={() => setToolbarMoreOpen((open) => !open)}
+        >
+          <FiMoreHorizontal />
+        </button>
+        {toolbarMoreOpen ? (
+          <div className="toolbar-more-menu" role="menu">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setToolbarMoreOpen(false);
+                importInputRef.current?.click();
+              }}
+            >
+              <FiUpload />
+              <span>导入 Markdown</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setToolbarMoreOpen(false);
+                exportMarkdown();
+              }}
+            >
+              <FiDownload />
+              <span>导出 Markdown</span>
+            </button>
+          </div>
+        ) : null}
+      </div>
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".md,.markdown,.txt,text/markdown"
+        hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) void importMarkdown(file);
+        }}
+      />
+    </div>
+  );
+
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div>
+    <main className={`app-shell ${embedded ? "is-embedded" : ""}`}>
+      {!embedded ? <header className="topbar">
+        <div className="product-heading">
           <h1>枝间 V2</h1>
           <p>ZhiJianTree 驱动的大纲与思维导图编辑器</p>
         </div>
-        <div className="toolbar">
-          <div className="view-switch" role="tablist" aria-label="视图切换">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeView === "outline"}
-              className={activeView === "outline" ? "active" : ""}
-              onClick={() => {
-                setActiveView("outline");
-                setSelectionActive(false);
-                setMindMapTextSelection(null);
-              }}
-            >
-              大纲
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={activeView === "mindmap"}
-              className={activeView === "mindmap" ? "active" : ""}
-              onClick={() => {
-                setActiveView("mindmap");
-                setSelectionActive(false);
-                setMindMapTextSelection(null);
-              }}
-            >
-              思维导图
-            </button>
-          </div>
-          <button type="button" onClick={() => store.undo()}>
-            撤销
+        {editorToolbar}
+      </header> : toolbarTarget ? createPortal(editorToolbar, toolbarTarget) : null}
+      {zoomedNodeId ? (
+        <nav className="zoom-breadcrumb" aria-label="当前主题">
+          <button type="button" className="zoom-breadcrumb-exit" onClick={() => setZoomedNodeId(null)}>
+            返回全文
           </button>
-          <button type="button" onClick={() => store.redo()}>
-            重做
-          </button>
-          <button type="button" onClick={createRootChild}>
-            新建
-          </button>
-          <button
-            type="button"
-            onClick={() => selectedNode && store.deleteNode(selectedNode.id)}
-            disabled={!selectedNode || selectedNode.id === tree.rootId}
-          >
-            删除
-          </button>
-        </div>
-      </header>
+          {zoomPath(tree, zoomedNodeId).map((nodeId, index, path) => (
+            <span key={nodeId}>
+              <i aria-hidden="true">/</i>
+              <button
+                type="button"
+                disabled={index === path.length - 1}
+                onClick={() => setZoomedNodeId(nodeId === tree.rootId ? null : nodeId)}
+              >
+                {richTextToPlainText(tree.nodes[nodeId]?.content ?? { text: "" }) || "未命名"}
+              </button>
+            </span>
+          ))}
+        </nav>
+      ) : null}
       <div className="workspace">
         <section
           className={`pane editor-view ${activeView === "outline" ? "is-active" : "is-inactive"}`}
@@ -118,8 +445,14 @@ export default function App() {
               selectionActive &&
               Boolean(selectedNode) &&
               !isMindMapMediaSelected &&
-              !isMindMapGroupSelected
+              !mindMapNodeToolbarActive
             }
+            searchQuery={searchQuery}
+            visibleNodeIds={visibleSearchNodeIds}
+            activeSearchNodeId={activeSearchNodeId}
+            zoomedNodeId={zoomedNodeId}
+            initialScrollTop={initialViewState?.outlineScrollTop}
+            onScrollPositionChange={updateOutlineScroll}
             onMindMapInsertQuote={(nodeId, focusBlockId) => {
               setSelectedNodeId(nodeId);
               setSelectionActive(true);
@@ -146,9 +479,16 @@ export default function App() {
                 }}
                 onSelectionActiveChange={setSelectionActive}
                 onTextSelectionChange={setMindMapTextSelection}
+                onNodeToolbarActiveChange={setMindMapNodeToolbarActive}
                 selectedNodeId={selectedNodeId}
                 toolbarTarget={mindMapToolbarTarget}
                 focusRequest={mindMapFocusRequest}
+                focusNodeRequest={mindMapFocusNodeRequest}
+                searchQuery={searchQuery}
+                visibleNodeIds={visibleSearchNodeIds}
+                zoomedNodeId={zoomedNodeId}
+                initialViewport={initialViewState?.mindMapViewport}
+                onViewportChange={updateMindMapViewport}
                 onFocusRequestHandled={(requestId) => {
                   setMindMapFocusRequest((current) =>
                     current?.requestId === requestId ? null : current,
@@ -169,6 +509,150 @@ export default function App() {
           </div>
         </section>
       </div>
+      {searchOpen ? (
+        <SearchPanel
+          query={searchQuery}
+          replacement={replaceText}
+          focusSignal={searchFocusSignal}
+          onQueryChange={setSearchQuery}
+          onReplacementChange={setReplaceText}
+          onClose={() => setSearchOpen(false)}
+          onPrevious={() => goToSearchMatch(-1)}
+          onNext={() => goToSearchMatch(1)}
+          onReplace={replaceCurrent}
+          onReplaceAll={replaceAll}
+        />
+      ) : null}
+      {shortcutHelpOpen ? <ShortcutHelpDialog onClose={() => setShortcutHelpOpen(false)} /> : null}
+      {pendingImport ? (
+        <div
+          className="zhijian-dialog-layer"
+          role="presentation"
+          onMouseDown={(event) => event.target === event.currentTarget && setPendingImport(null)}
+        >
+          <section className="zhijian-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="import-confirm-title">
+            <h2 id="import-confirm-title">导入 Markdown</h2>
+            <p>导入「{pendingImport.fileName}」会替换当前文档的全部内容，可用撤销恢复。</p>
+            <footer>
+              <button type="button" onClick={() => setPendingImport(null)}>取消</button>
+              <button type="button" className="primary" onClick={confirmImportMarkdown}>确认导入</button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
     </main>
+  );
+}
+
+function nodeDepth(tree: ReturnType<TreeStore["getSnapshot"]>, nodeId: string) {
+  let depth = 0;
+  let current = tree.nodes[nodeId];
+  while (current?.parentId) {
+    depth += 1;
+    current = tree.nodes[current.parentId];
+  }
+  return depth;
+}
+
+function cssEscape(value: string) {
+  return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+}
+
+function loadDocumentViewState(key: string): DocumentViewState {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return {};
+    const value = parsed as DocumentViewState;
+    return {
+      activeView: value.activeView === "outline" || value.activeView === "mindmap" ? value.activeView : undefined,
+      outlineScrollTop: typeof value.outlineScrollTop === "number" ? value.outlineScrollTop : undefined,
+      mindMapViewport: isMindMapViewportState(value.mindMapViewport) ? value.mindMapViewport : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function saveDocumentViewState(key: string, patch: DocumentViewState) {
+  if (typeof window === "undefined") return;
+  const current = loadDocumentViewState(key);
+  window.localStorage.setItem(key, JSON.stringify({ ...current, ...patch }));
+}
+
+function isMindMapViewportState(value: unknown): value is MindMapViewportState {
+  if (!value || typeof value !== "object") return false;
+  const viewport = value as Record<string, unknown>;
+  return typeof viewport.x === "number" &&
+    typeof viewport.y === "number" &&
+    typeof viewport.scale === "number";
+}
+
+function ExpandCollapseIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M10 12L12 10L14 12" stroke="#535353" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M10 4L12 6L14 4" stroke="#535353" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 8H7.33333" stroke="#535353" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 12H7.33333" stroke="#535353" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 4H7.33333" stroke="#535353" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function SearchPanel({ query, replacement, focusSignal, onQueryChange, onReplacementChange, onClose, onPrevious, onNext, onReplace, onReplaceAll }: {
+  query: string;
+  replacement: string;
+  /** Bumped by every 文档内搜索 (Ctrl F), including one pressed while this is open. */
+  focusSignal: number;
+  onQueryChange: (value: string) => void;
+  onReplacementChange: (value: string) => void;
+  onClose: () => void;
+  onPrevious: () => void;
+  onNext: () => void;
+  onReplace: () => void;
+  onReplaceAll: () => void;
+}) {
+  const [replaceOpen, setReplaceOpen] = useState(false);
+  const queryRef = useRef<HTMLInputElement>(null);
+
+  // Pressing the keys again means "search for something else", so the term that is
+  // there is selected rather than appended to.
+  useEffect(() => {
+    queryRef.current?.focus();
+    queryRef.current?.select();
+  }, [focusSignal]);
+
+  return (
+    <section className={`search-replace-panel ${replaceOpen ? "is-replace-open" : ""}`} role="dialog" aria-label="查找替换">
+      <div className="search-row">
+        <button
+          type="button"
+          className="search-mode-button"
+          aria-expanded={replaceOpen}
+          onClick={() => setReplaceOpen((open) => !open)}
+        >
+          查找 <FiChevronDown />
+        </button>
+        <input ref={queryRef} value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索关键词" />
+        <button type="button" className="search-close icon-button" aria-label="关闭查找" onClick={onClose}>×</button>
+      </div>
+      {replaceOpen ? (
+        <>
+          <div className="search-row">
+            <button type="button" className="search-mode-button">替换为</button>
+            <input value={replacement} onChange={(event) => onReplacementChange(event.target.value)} placeholder="替换文字" />
+          </div>
+          <div className="search-actions">
+            <button type="button" onClick={onPrevious}>上一处</button>
+            <button type="button" onClick={onNext}>下一处</button>
+            <button type="button" className="primary" onClick={onReplace}>替换</button>
+            <button type="button" className="primary" onClick={onReplaceAll}>全部替换</button>
+          </div>
+        </>
+      ) : null}
+    </section>
   );
 }

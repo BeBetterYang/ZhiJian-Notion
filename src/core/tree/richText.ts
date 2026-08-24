@@ -104,6 +104,53 @@ export function replaceRichTextPlainText(
   };
 }
 
+/**
+ * Lays a mark change over every span of a node's text. On the map a node is
+ * selected as a whole and there is no text selection to paint, so a colour keyed
+ * there applies to all of it; `null` takes the mark off instead of putting it on.
+ */
+export function withRichTextMarks(
+  content: string | RichTextContent,
+  patch: { [K in keyof RichTextMarks]?: RichTextMarks[K] | null },
+): RichTextContent {
+  const current = normalizeRichText(content);
+  if (current.spans?.length) {
+    return {
+      text: current.text,
+      marks: patchMarks(current.marks, patch),
+      spans: current.spans.map((span) => ({ text: span.text, marks: patchMarks(span.marks, patch) })),
+    };
+  }
+  return { text: current.text, marks: patchMarks(current.marks, patch) };
+}
+
+/** Whether every span of a node's text already carries this mark value. */
+export function everySpanHasMark<K extends keyof RichTextMarks>(
+  content: string | RichTextContent,
+  mark: K,
+  value: RichTextMarks[K],
+) {
+  const current = normalizeRichText(content);
+  const spans = current.spans?.length ? current.spans : [{ text: current.text, marks: current.marks }];
+  return spans.every((span) => span.marks?.[mark] === value);
+}
+
+function patchMarks(
+  marks: RichTextMarks | undefined,
+  patch: { [K in keyof RichTextMarks]?: RichTextMarks[K] | null },
+): RichTextMarks | undefined {
+  const next: RichTextMarks = { ...marks };
+  for (const key of Object.keys(patch) as (keyof RichTextMarks)[]) {
+    const value = patch[key];
+    if (value === null || value === undefined) {
+      delete next[key];
+    } else {
+      Object.assign(next, { [key]: value });
+    }
+  }
+  return Object.keys(next).length ? next : undefined;
+}
+
 function sameMarks(left: RichTextMarks | undefined, right: RichTextMarks | undefined) {
   return JSON.stringify(left ?? {}) === JSON.stringify(right ?? {});
 }

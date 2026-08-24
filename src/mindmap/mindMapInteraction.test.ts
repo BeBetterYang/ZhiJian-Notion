@@ -1,11 +1,35 @@
+import type { Block } from "@blocknote/core";
 import { describe, expect, it } from "vitest";
-import { createInitialTree } from "../core/tree";
-import { displayClickAction, mindMapUpdateMode, resolveMindMapFocusBlockId, shouldExitEditing } from "./mindMapInteraction";
+import { createInitialTree, type ZhiJianNode, type ZhiJianTree } from "../core/tree";
+import { blockNoteToTree, treeToBlockNote } from "../outline/blockNoteAdapter";
+import {
+  displayClickAction,
+  hiddenDescendantCount,
+  isBlankMindMapSurface,
+  mindMapEditingLayout,
+  mindMapUpdateMode,
+  nodeDocumentSignature,
+  resolveMindMapFocusBlockId,
+  sameEditingTarget,
+  shouldExitEditing,
+  suppressMindMapEnter,
+} from "./mindMapInteraction";
 
 describe("MindMap interaction state", () => {
   it("selects on first click and edits on a second click", () => {
     expect(displayClickAction(null, null, "web", false)).toBe("select");
     expect(displayClickAction("web", null, "web", false)).toBe("edit");
+  });
+
+  it("edits a selected node on a single click even when the browser reports a repeat click", () => {
+    // Selecting and then clicking the text is a fast sequence, so the second
+    // click arrives with `detail === 2`. It still has to enter editing.
+    expect(displayClickAction("web", null, "web", false, 2)).toBe("edit");
+    expect(displayClickAction("web", null, "web", false, 1)).toBe("edit");
+  });
+
+  it("leaves the second click on a still-unselected node to the dblclick handler", () => {
+    expect(displayClickAction(null, null, "web", false, 2)).toBe("ignore");
   });
 
   it("keeps editor interaction active and only exits for another node", () => {
@@ -34,3 +58,221 @@ describe("MindMap interaction state", () => {
     expect(resolveMindMapFocusBlockId(node.id, blockIds, "missing")).toBe(node.id);
   });
 });
+
+describe("isBlankMindMapSurface", () => {
+  const inCanvas = (html: string) => {
+    const canvas = document.createElement("div");
+    canvas.className = "map-container";
+    canvas.innerHTML = html;
+    return canvas;
+  };
+
+  it("treats the canvas and its layout containers as empty surface", () => {
+    const canvas = inCanvas("<me-main><me-wrapper></me-wrapper></me-main>");
+    expect(isBlankMindMapSurface(canvas)).toBe(true);
+    expect(isBlankMindMapSurface(canvas.querySelector("me-wrapper"))).toBe(true);
+  });
+
+  it("never treats a node or its injected content as empty surface", () => {
+    const canvas = inCanvas(
+      `<me-tpc><div class="mindmap-node-shell" data-node-id="web">
+         <div class="mindmap-node-display"><span class="mindmap-node-rich-text">正文</span></div>
+       </div></me-tpc>`,
+    );
+    expect(isBlankMindMapSurface(canvas.querySelector("me-tpc"))).toBe(false);
+    // The text a click actually lands on is several levels below the node.
+    expect(isBlankMindMapSurface(canvas.querySelector(".mindmap-node-rich-text"))).toBe(false);
+  });
+
+  it("never treats mind-elixir's own chrome as empty surface", () => {
+    const canvas = inCanvas(
+      `<me-epd></me-epd>
+       <div class="mind-elixir-toolbar rb"><span class="icon"></span></div>
+       <div class="context-menu"><ul class="menu-list"><li>添加</li></ul></div>
+       <div id="input-box"></div><div class="circle"></div><div class="selection-area"></div>`,
+    );
+    for (const selector of ["me-epd", ".mind-elixir-toolbar .icon", ".context-menu li", "#input-box", ".circle", ".selection-area"]) {
+      expect(isBlankMindMapSurface(canvas.querySelector(selector)), selector).toBe(false);
+    }
+  });
+
+  it("ignores anything that is not an element", () => {
+    expect(isBlankMindMapSurface(null)).toBe(false);
+    expect(isBlankMindMapSurface(document)).toBe(false);
+  });
+});
+
+describe("sameEditingTarget", () => {
+  it("treats an equal target as unchanged so re-entering an edit does not remount", () => {
+    expect(sameEditingTarget(null, null)).toBe(true);
+    expect(sameEditingTarget({ nodeId: "web" }, { nodeId: "web" })).toBe(true);
+    expect(
+      sameEditingTarget(
+        { nodeId: "web", focusBlockId: "quote", focusPoint: { x: 12, y: 34 } },
+        { nodeId: "web", focusBlockId: "quote", focusPoint: { x: 12, y: 34 } },
+      ),
+    ).toBe(true);
+  });
+
+  it("distinguishes a different node, block, or caret point", () => {
+    expect(sameEditingTarget({ nodeId: "web" }, { nodeId: "app" })).toBe(false);
+    expect(sameEditingTarget({ nodeId: "web" }, null)).toBe(false);
+    expect(sameEditingTarget({ nodeId: "web" }, { nodeId: "web", focusBlockId: "quote" })).toBe(false);
+    expect(
+      sameEditingTarget(
+        { nodeId: "web", focusPoint: { x: 12, y: 34 } },
+        { nodeId: "web", focusPoint: { x: 12, y: 35 } },
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("nodeDocumentSignature", () => {
+  // The editor compares the store node against the node parsed back out of
+  // BlockNote. Any field the projection normalizes has to survive that trip with
+  // an equal signature, or the node reprojects on every keystroke.
+  const roundTrip = (node: ZhiJianNode) => {
+    const single: ZhiJianTree = { rootId: node.id, nodes: { [node.id]: { ...node, children: [] } } };
+    const projected = treeToBlockNote(single) as unknown as Block[];
+    return blockNoteToTree(projected, single)!.nodes[node.id];
+  };
+  const baseNode = (overrides: Partial<ZhiJianNode> = {}): ZhiJianNode => ({
+    id: "web", parentId: null, children: [], type: "text", content: { text: "正文" }, ...overrides,
+  });
+
+  it("survives a projection round trip for text, description, quotes and images", () => {
+    const node = baseNode({
+      description: { text: "描述" },
+      blocks: [
+        { id: "quote", type: "quote", content: { text: "引用" } },
+        { id: "image", type: "image", image: { url: "asset:image" } },
+      ],
+    });
+    expect(nodeDocumentSignature(roundTrip(node))).toBe(nodeDocumentSignature(node));
+  });
+
+  it("survives a projection round trip for a table node", () => {
+    const node = baseNode({
+      type: "table",
+      content: { text: "" },
+      props: { table: { rows: [[{ content: { text: "甲" } }, { content: { text: "乙" } }]] } },
+    });
+    expect(nodeDocumentSignature(roundTrip(node))).toBe(nodeDocumentSignature(node));
+  });
+
+  it("survives a projection round trip for marked-up rich text", () => {
+    const node = baseNode({
+      content: { text: "粗体", spans: [{ text: "粗体", marks: { bold: true, textColor: "#dc2626" } }] },
+    });
+    expect(nodeDocumentSignature(roundTrip(node))).toBe(nodeDocumentSignature(node));
+  });
+
+  it("equates plain text with its single-span form and a blank description with none", () => {
+    expect(nodeDocumentSignature(baseNode({ content: { text: "正文" } }))).toBe(
+      nodeDocumentSignature(baseNode({ content: { text: "正文", spans: [{ text: "正文" }] } })),
+    );
+    expect(nodeDocumentSignature(baseNode({ description: { text: "  " } }))).toBe(
+      nodeDocumentSignature(baseNode()),
+    );
+  });
+
+  it("equates an omitted image field with the default BlockNote materializes", () => {
+    const stored = baseNode({ blocks: [{ id: "image", type: "image", image: { url: "asset:image" } }] });
+    const materialized = baseNode({
+      blocks: [{ id: "image", type: "image", image: { url: "asset:image", name: "图片", caption: "", previewWidth: 480, showPreview: true } }],
+    });
+    expect(nodeDocumentSignature(stored)).toBe(nodeDocumentSignature(materialized));
+  });
+
+  it("still reports a real edit as a difference", () => {
+    const node = baseNode({ blocks: [{ id: "quote", type: "quote", content: { text: "引用" } }] });
+    expect(nodeDocumentSignature(baseNode({ content: { text: "改过的正文" } }))).not.toBe(nodeDocumentSignature(baseNode()));
+    expect(nodeDocumentSignature(baseNode({ description: { text: "描述" } }))).not.toBe(nodeDocumentSignature(baseNode()));
+    expect(nodeDocumentSignature(node)).not.toBe(nodeDocumentSignature(baseNode()));
+    expect(
+      nodeDocumentSignature(baseNode({ content: { text: "正文", spans: [{ text: "正文", marks: { bold: true } }] } })),
+    ).not.toBe(nodeDocumentSignature(baseNode()));
+  });
+
+  it("reports a table cell edit as a difference so it can be committed", () => {
+    const table = (text: string) => baseNode({
+      type: "table", content: { text: "" }, props: { table: { rows: [[{ content: { text } }]] } },
+    });
+    expect(nodeDocumentSignature(table("甲"))).not.toBe(nodeDocumentSignature(table("乙")));
+  });
+});
+
+
+describe("suppressMindMapEnter", () => {
+  const primary = { nodeId: "n1", blockId: "n1", blockType: "paragraph", shiftKey: false };
+
+  it("swallows a split of the primary block, which the single-node editor cannot represent", () => {
+    expect(suppressMindMapEnter(primary)).toBe(true);
+    expect(suppressMindMapEnter({ ...primary, blockType: "heading" })).toBe(true);
+    expect(suppressMindMapEnter({ ...primary, blockType: "checkListItem" })).toBe(true);
+  });
+
+  it("leaves a soft break, a table cell and the attachments alone", () => {
+    expect(suppressMindMapEnter({ ...primary, shiftKey: true })).toBe(false);
+    expect(suppressMindMapEnter({ ...primary, blockType: "table" })).toBe(false);
+    expect(suppressMindMapEnter({ ...primary, blockId: "n1::description", blockType: "quote" })).toBe(false);
+    expect(suppressMindMapEnter({ ...primary, blockId: "q1", blockType: "quote" })).toBe(false);
+  });
+});
+
+describe("mindMapEditingLayout", () => {
+  it("floats a text node so typing never reflows the map", () => {
+    expect(mindMapEditingLayout({ type: "text" })).toBe("float");
+    expect(mindMapEditingLayout({ type: "heading" })).toBe("float");
+    expect(mindMapEditingLayout({ type: "todo", blocks: [] })).toBe("float");
+    // A quote grows the box like text does, so it floats with it.
+    expect(mindMapEditingLayout({ type: "text", blocks: [{ id: "q1", type: "quote", content: { text: "引用" } }] })).toBe("float");
+  });
+
+  it("keeps tables and images laid out live, because the edit is their geometry", () => {
+    expect(mindMapEditingLayout({ type: "table" })).toBe("live");
+    expect(mindMapEditingLayout({ type: "text", blocks: [{ id: "i1", type: "image", image: { url: "asset:1" } }] })).toBe("live");
+  });
+
+  it("never floats a node it cannot see", () => {
+    expect(mindMapEditingLayout(undefined)).toBe("live");
+  });
+});
+
+describe("hiddenDescendantCount", () => {
+  // a → b → (c, d), plus e as a's second child.
+  const tree: ZhiJianTree = {
+    rootId: "a",
+    nodes: {
+      a: node("a", null, ["b", "e"]),
+      b: node("b", "a", ["c", "d"]),
+      c: node("c", "b", []),
+      d: node("d", "b", []),
+      e: node("e", "a", []),
+    },
+  };
+
+  it("counts the whole subtree, not just the row of children", () => {
+    expect(hiddenDescendantCount(tree, "a")).toBe(4);
+    expect(hiddenDescendantCount(tree, "b")).toBe(2);
+  });
+
+  it("counts nothing for a leaf, which has no handle to label", () => {
+    expect(hiddenDescendantCount(tree, "c")).toBe(0);
+  });
+
+  it("counts nothing for a node that is no longer in the tree", () => {
+    expect(hiddenDescendantCount(tree, "gone")).toBe(0);
+  });
+});
+
+function node(id: string, parentId: string | null, children: string[]): ZhiJianNode {
+  return {
+    id,
+    parentId,
+    children,
+    content: { text: id },
+    type: "text",
+    meta: { createdAt: 0, updatedAt: 0 },
+  };
+}

@@ -50,6 +50,31 @@ export function insertNodeAttachmentBlocks<BS extends BlockSchema, IS extends In
   return next.children.slice(0, blocks.length);
 }
 
+/**
+ * The pictures a node gets from either way of adding one — the toolbar's button or
+ * 添加图片 (Alt Enter) — so both land in the same place: attached to the owning node,
+ * above whatever it already had.
+ */
+export async function insertImageBlocks<BS extends BlockSchema, IS extends InlineContentSchema, SS extends StyleSchema>(
+  editor: Editor<BS, IS, SS>,
+  selectedBlockId: string,
+  files: File[],
+  upload: (file: File) => Promise<{ url?: string }>,
+) {
+  const assets = await Promise.all(files.map(async (file) => ({ file, url: (await upload(file)).url })));
+  const uploaded = assets.filter((asset) => asset.url);
+  if (!uploaded.length) return [];
+
+  return insertNodeAttachmentBlocks(
+    editor,
+    selectedBlockId,
+    uploaded.map(({ file, url }) => ({
+      type: "image" as const,
+      props: { url, name: file.name, previewWidth: 480, showPreview: true },
+    })) as unknown as Parameters<Editor<BS, IS, SS>["insertBlocks"]>[0],
+  );
+}
+
 // Compatibility wrappers for callers that only need the owning node id.
 export function imageInsertionReference<BS extends BlockSchema, IS extends InlineContentSchema, SS extends StyleSchema>(editor: Editor<BS, IS, SS>, selectedBlockId: string) {
   return nodeInsertionReference(editor, selectedBlockId)?.id ?? selectedBlockId;

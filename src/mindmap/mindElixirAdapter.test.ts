@@ -58,9 +58,38 @@ describe("mindElixirAdapter", () => {
     expect(createMindMapStructureSignature(tree)).not.toBe(initial);
   });
 
-  it("uses the same 20px visual token for the root display and editor shell", () => {
+  // The root carries the level-1 heading size, and the display layer and the
+  // in-node editor both read it off the same variable so a node cannot change size
+  // the moment it starts being edited.
+  it("uses one 20px visual token for the root display and editor shell", () => {
     const root = treeToMindElixir(createInitialTree()).nodeData;
     expect(root.style?.fontSize).toBe("20px");
     expect(root.dangerouslySetInnerHTML).toContain("--mindmap-font-size:20px");
+  });
+
+  it("draws the map from the zoomed node, keeping its own id", () => {
+    const tree = createInitialTree();
+    tree.nodes.web.children = ["web-child"];
+    tree.nodes["web-child"] = { id: "web-child", parentId: "web", children: [], type: "text", content: { text: "子" } };
+    const zoomed = treeToMindElixir(tree, { rootNodeId: "web" }).nodeData;
+    expect(zoomed.id).toBe("web");
+    expect((zoomed.children as NodeObj[]).map((child) => child.id)).toEqual(["web-child"]);
+    // Standing in as the root, it takes the root's own size and frame.
+    expect(zoomed.style?.fontSize).toBe("20px");
+  });
+
+  it("falls back to the document root when the zoomed node is gone", () => {
+    const tree = createInitialTree();
+    expect(treeToMindElixir(tree, { rootNodeId: "deleted" }).nodeData.id).toBe(tree.rootId);
+    expect(createMindMapStructureSignature(tree, null, "deleted")).toBe(createMindMapStructureSignature(tree));
+  });
+
+  it("signs only the zoomed subtree, so an edit above it forces no rebuild", () => {
+    const tree = createInitialTree();
+    const zoomedSignature = createMindMapStructureSignature(tree, null, "web");
+    expect(zoomedSignature).not.toBe(createMindMapStructureSignature(tree));
+    tree.nodes[tree.rootId].children = [...tree.nodes[tree.rootId].children, "outside"];
+    tree.nodes.outside = { id: "outside", parentId: tree.rootId, children: [], type: "text", content: { text: "外" } };
+    expect(createMindMapStructureSignature(tree, null, "web")).toBe(zoomedSignature);
   });
 });
