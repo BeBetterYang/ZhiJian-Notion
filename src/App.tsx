@@ -516,7 +516,11 @@ export default function App({ embedded = false, store: providedStore, toolbarTar
           focusSignal={searchFocusSignal}
           onQueryChange={setSearchQuery}
           onReplacementChange={setReplaceText}
-          onClose={() => setSearchOpen(false)}
+          onClose={() => {
+            setSearchQuery("");
+            setReplaceText("");
+            setSearchOpen(false);
+          }}
           onPrevious={() => goToSearchMatch(-1)}
           onNext={() => goToSearchMatch(1)}
           onReplace={replaceCurrent}
