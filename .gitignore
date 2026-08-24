@@ -7,3 +7,4 @@ dist
 !.env.example
 node_modules/.tmp
 .zhijian-server-data
+.vercel
