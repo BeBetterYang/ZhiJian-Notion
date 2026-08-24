@@ -80,8 +80,8 @@ interface UserProfile {
 }
 
 export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
-  const [userProfile, setUserProfile] = useState<UserProfile>({ name: session.name, email: session.email, avatarUrl: "" });
-  const [profileDraft, setProfileDraft] = useState<UserProfile>({ name: session.name, email: session.email, avatarUrl: "" });
+  const [userProfile, setUserProfile] = useState<UserProfile>(() => profileFromSession(session));
+  const [profileDraft, setProfileDraft] = useState<UserProfile>(() => profileFromSession(session));
   const [newPassword, setNewPassword] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsView, setSettingsView] = useState<SettingsView>("account");
@@ -157,7 +157,7 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
     void loadWorkspaceState(session)
       .then((state) => {
         if (canceled) return;
-        const nextProfile = state?.profile ?? { name: session.name, email: session.email, avatarUrl: "" };
+        const nextProfile = normalizeUserProfile(state?.profile, session);
         const nextNodes = state?.nodes?.length ? state.nodes : initialNodes;
         documentStores.current = new Map(
           Object.entries(state?.documents ?? {}).map(([fileId, tree]) => [fileId, new TreeStore(tree)]),
@@ -1155,4 +1155,30 @@ function NodeMenu({ node, nodes, moveOpen, onRename, onMoveToggle, onMove, onFav
 
 function errorMessage(error: unknown) {
   return error instanceof Error && error.message ? error.message : "未知错误";
+}
+
+function profileFromSession(session: WorkspaceSession): UserProfile {
+  return normalizeUserProfile(null, session);
+}
+
+function normalizeUserProfile(profile: UserProfile | null | undefined, session: WorkspaceSession): UserProfile {
+  const email = session.email;
+  const sessionName = displayName(session.name, email);
+  const profileName = profile?.name?.trim() ?? "";
+  return {
+    name: profileName && profileName.toLowerCase() !== email.toLowerCase() ? profileName : sessionName,
+    email: profile?.email?.trim() || email,
+    avatarUrl: profile?.avatarUrl ?? "",
+  };
+}
+
+function displayName(value: string | undefined, email: string) {
+  const name = value?.trim() ?? "";
+  if (!name || name.toLowerCase() === email.toLowerCase()) return displayNameFromEmail(email);
+  return name;
+}
+
+function displayNameFromEmail(email: string) {
+  const source = email.split("@")[0]?.replace(/[._-]+/g, " ").trim() || "用户";
+  return source.replace(/\b\w/g, (character) => character.toUpperCase());
 }
