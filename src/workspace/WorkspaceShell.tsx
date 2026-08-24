@@ -113,6 +113,7 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
   const [accountOpen, setAccountOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [menuNodeId, setMenuNodeId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<WorkspaceNode | null>(null);
   const [moveMenuOpen, setMoveMenuOpen] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -394,7 +395,14 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
     setRenamingId(null);
   };
 
-  const deleteNode = (node: WorkspaceNode) => {
+  const requestDeleteNode = (node: WorkspaceNode) => {
+    setDeleteTarget(node);
+    setMenuNodeId(null);
+  };
+
+  const confirmDeleteNode = () => {
+    const node = deleteTarget;
+    if (!node) return;
     const next = deleteWorkspaceNode(nodes, node.id);
     setNodes(next);
     if (node.id === selectedFolderId) {
@@ -410,6 +418,7 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
     if (node.type === "file") {
       documentStores.current.delete(node.id);
     }
+    setDeleteTarget(null);
   };
 
   const duplicateNode = (node: WorkspaceNode) => {
@@ -543,7 +552,7 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
               onFavorite={() => node.type === "file" && toggleFavorite(node.id)}
               onCopyLink={() => void copyNodeLink(node)}
               onDuplicate={() => duplicateNode(node)}
-              onDelete={() => deleteNode(node)}
+              onDelete={() => requestDeleteNode(node)}
               onOpen={() => window.open(nodeUrl(node), "_blank", "noopener,noreferrer")}
             />
           ) : null}
@@ -755,6 +764,26 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
                 </div>
               )}
             </div>
+          </section>
+        </div>
+      ) : null}
+      {deleteTarget ? (
+        <div
+          className="workspace-dialog-layer"
+          role="presentation"
+          onMouseDown={(event) => event.target === event.currentTarget && setDeleteTarget(null)}
+        >
+          <section className="workspace-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-confirm-title">
+            <button type="button" className="workspace-dialog-close icon-button" onClick={() => setDeleteTarget(null)} aria-label="关闭确认"><FiX /></button>
+            <h2 id="delete-confirm-title">删除{deleteTarget.type === "folder" ? "文件夹" : "文档"}？</h2>
+            <p>
+              确定要删除「{deleteTarget.title || "无标题"}」吗？
+              {deleteTarget.type === "folder" ? " 文件夹内的文档和子文件夹也会一起删除。" : " 删除后将无法在当前工作区继续访问这个文档。"}
+            </p>
+            <footer>
+              <button type="button" onClick={() => setDeleteTarget(null)}>取消</button>
+              <button type="button" className="danger" onClick={confirmDeleteNode}>删除</button>
+            </footer>
           </section>
         </div>
       ) : null}
