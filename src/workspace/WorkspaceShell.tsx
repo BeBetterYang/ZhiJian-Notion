@@ -45,7 +45,6 @@ import {
   deleteWorkspaceNode,
   duplicateWorkspaceNode,
   folderPath,
-  initialNodes,
   isWorkspaceFile,
   markFileOpened,
   moveWorkspaceNode,
@@ -161,7 +160,7 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
       .then((state) => {
         if (canceled) return;
         const nextProfile = normalizeUserProfile(state?.profile, session);
-        const nextNodes = state?.nodes?.length ? state.nodes : initialNodes;
+        const nextNodes = state?.nodes ?? [];
         documentStores.current = new Map(
           Object.entries(state?.documents ?? {}).map(([fileId, tree]) => [fileId, new TreeStore(tree)]),
         );
@@ -176,7 +175,7 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
           const currentId = current.split(":").at(-1);
           return currentId && nextNodes.some((node) => node.id === currentId)
             ? current
-            : `tree:${firstFile?.id ?? ""}`;
+            : firstFile ? `tree:${firstFile.id}` : "";
         });
         setExpandedFolders(new Set(nextNodes.filter((node) => node.type === "folder").map((node) => node.id)));
         setServerStatus("");
