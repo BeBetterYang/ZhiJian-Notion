@@ -9,6 +9,7 @@ import {
   mindMapEditingLayout,
   mindMapUpdateMode,
   nodeDocumentSignature,
+  nodeTextSelectionOffsets,
   resolveMindMapFocusBlockId,
   sameEditingTarget,
   shouldExitEditing,
@@ -56,6 +57,32 @@ describe("MindMap interaction state", () => {
     expect(resolveMindMapFocusBlockId(node.id, blockIds, "quote")).toBe("quote");
     expect(resolveMindMapFocusBlockId(node.id, blockIds, `${node.id}::description`)).toBe(`${node.id}::description`);
     expect(resolveMindMapFocusBlockId(node.id, blockIds, "missing")).toBe(node.id);
+  });
+});
+
+describe("nodeTextSelectionOffsets", () => {
+  // A node's own text runs from position 3 to 7 in its little document — the two
+  // numbers `blockTextRange` reports for the primary block.
+  const nodeText = { from: 3, to: 7 };
+
+  it("reports a partial selection as offsets from the start of the node's text", () => {
+    expect(nodeTextSelectionOffsets({ from: 4, to: 6 }, nodeText)).toEqual({ from: 1, to: 3 });
+    expect(nodeTextSelectionOffsets({ from: 3, to: 7 }, nodeText)).toEqual({ from: 0, to: 4 });
+  });
+
+  it("reports nothing for a caret, so the toolbar paints the whole node", () => {
+    expect(nodeTextSelectionOffsets({ from: 5, to: 5 }, nodeText)).toBeNull();
+  });
+
+  it("reports nothing for a selection that leaves the node's own text", () => {
+    // Into a quote hanging off the node, or across both — those blocks belong to
+    // the node's own toolbar, which formats them directly.
+    expect(nodeTextSelectionOffsets({ from: 5, to: 12 }, nodeText)).toBeNull();
+    expect(nodeTextSelectionOffsets({ from: 9, to: 12 }, nodeText)).toBeNull();
+  });
+
+  it("reports nothing for a block that holds no text of its own", () => {
+    expect(nodeTextSelectionOffsets({ from: 1, to: 4 }, null)).toBeNull();
   });
 });
 

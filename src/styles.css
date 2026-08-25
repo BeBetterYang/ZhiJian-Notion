@@ -34,6 +34,16 @@
   box-sizing: border-box;
 }
 
+/* A colour applied to selected text has to be visible before the selection is
+   dropped, and the platform's own highlight is opaque — macOS paints the system
+   accent blue, which swallows a red or a blue run whole. A light wash of the same
+   blue leaves both the text's colour and any background colour readable through
+   it. Only `background` is stated, so the text keeps whatever colour it was given
+   (a `::selection` rule contributes only the properties it declares). */
+::selection {
+  background: rgba(35, 131, 226, 0.22);
+}
+
 body {
   margin: 0;
 }
@@ -991,6 +1001,12 @@ textarea {
      is also where an edited node's box has to be pinned (see
      `.is-mindmap-floating > me-tpc`), so both read it from here. */
   --mindmap-row-pad-y: 2px;
+  /* How wide one table column may get before its text wraps. A cell holding a
+     sentence would otherwise take the whole sentence on one line — a four-column
+     table measured 1354px, three times the width of any other node — so the map
+     stopped reading as a shape. Both layers read it from here, because a table
+     node's box is measured from whichever of them is showing. */
+  --mindmap-table-cell-max-width: 13em;
 }
 
 .mindmap-canvas .map-container .context-menu {
@@ -1309,10 +1325,27 @@ textarea {
   content: attr(data-count);
 }
 
+/* A table sets the node's width, not the 28em reading measure every other node is
+   capped at: its columns are already bounded one by one
+   (`--mindmap-table-cell-max-width`), and a cap on the box only clipped the box —
+   the table itself kept its full width and spilled out of the frame, across the
+   node's own selection outline and over its neighbours. Every box between the
+   shell and the table has to give way, on the display side and the editor side
+   alike, or whichever one is left clamped hands mind-elixir the wrong node size. */
 .mindmap-node-shell:has(.mindmap-node-table),
+.mindmap-node-shell:has(.mindmap-node-table) .mindmap-node-display,
+.mindmap-node-shell:has(.mindmap-node-table) .mindmap-node-editor-slot,
+.mindmap-node-shell:has(.mindmap-node-table) .mindmap-content-host,
 .mindmap-node-shell:has(.mindmap-node-table) .mindmap-node-renderer,
 .mindmap-node-shell:has(.mindmap-node-table) .mindmap-node-body {
   width: max-content;
+  max-width: none;
+}
+
+/* mind-elixir caps every node at 35em (its own topic.css). A table wider than that
+   would leave the frame again, and unlike a run of text it cannot be wrapped any
+   further — its columns are as narrow as they are allowed to get. */
+.map-container me-tpc:has(.mindmap-node-table) {
   max-width: none;
 }
 
@@ -1396,6 +1429,14 @@ textarea {
   text-decoration: line-through;
 }
 
+/* The map's link popup is the outline's own `bn-link-toolbar`, so it brings its looks
+   with it and needs only a layer to sit in: fixed and outside the canvas, which is
+   transformed and would otherwise position it against itself. */
+.mindmap-link-toolbar-layer {
+  position: fixed;
+  z-index: 130;
+}
+
 /* Mirrors `.mindmap-node-editor [data-content-type="quote"] blockquote` below,
    declaration for declaration, so a quote occupies the same box either way. */
 .mindmap-node-quote {
@@ -1444,12 +1485,17 @@ textarea {
 
 .mindmap-node-table table {
   width: max-content;
+  /* BlockNote's own tables are laid out this way (core editor.css), and a resized
+     column only holds its width under fixed layout — auto layout treats a
+     `<colgroup>` width as a suggestion and lets long text push past it. */
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: inherit;
 }
 
 .mindmap-node-table td {
   min-width: 4em;
+  max-width: var(--mindmap-table-cell-max-width);
   padding: 0.3em 0.45em;
   border: 1px solid #cfd5dc;
   vertical-align: top;
@@ -1609,6 +1655,7 @@ textarea {
   /* Feeds BlockNote's own `min-width: var(--default-cell-min-width) !important`,
      which is why this matches `.mindmap-node-table td` instead of fighting it. */
   --default-cell-min-width: 4em;
+  max-width: var(--mindmap-table-cell-max-width);
   padding: 0.3em 0.45em;
   border-color: #cfd5dc;
 }

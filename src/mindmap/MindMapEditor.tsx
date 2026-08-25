@@ -13,6 +13,7 @@ import { createMindMapStructureSignature, treeToMindElixir } from "./mindElixirA
 import { applyMindElixirOperation } from "./mindElixirCommands";
 import { displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, mindMapEditingLayout, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, type EditingTarget } from "./mindMapInteraction";
 import { MINDMAP_THEME } from "./mindMapTheme";
+import { MindMapLinkHoverTracker } from "./MindMapLinkHoverTracker";
 import { renderMindMapNodeDisplayHtml } from "./MindMapNodeRenderer";
 import { MindMapNodeContent } from "./MindMapNodeGroupBlock";
 
@@ -163,6 +164,13 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
   useEffect(() => () => onNodeToolbarRef.current(false), []);
 
   const reportNodeToolbar = useCallback((active: boolean) => onNodeToolbarRef.current(active), []);
+
+  // The run of a node's own text the user has selected, on its way to the hidden
+  // outline editor the plain-node toolbar is bound to.
+  const reportTextSelection = useCallback(
+    (selection: MindMapTextSelection | null) => onTextSelectionRef.current(selection),
+    [],
+  );
 
   useEffect(() => {
     if (!containerRef.current || mindRef.current) return;
@@ -580,10 +588,14 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
           borrows so a coloured run of text or table cell looks the same at rest as
           it does in the editor — see `.mindmap-canvas.bn-root` in `styles.css`. */}
       <div className="mindmap-canvas bn-root" ref={containerRef} />
+      {/* Hovering a link anywhere in the map — a node's own text, a quote or a table
+          cell — opens the outline's link toolbar over it. The popup itself is rendered
+          by `MindMapLinkToolbar`, inside the outline editor whose component it is. */}
+      <MindMapLinkHoverTracker canvasRef={containerRef} />
       {contentTargets.map(({ id, host }) => {
         const node = tree.nodes[id];
         return node ? createPortal(
-          <MindMapNodeContent node={node} store={store} selected={selectedNodeId === id} editing={editingTarget?.nodeId === id} toolbarTarget={toolbarTarget} onSelect={selectTreeNode} onFocusNode={selectMindElixirNode} onFinishEdit={finishNodeEdit} onToolbarActiveChange={reportNodeToolbar} focusBlockId={editingTarget?.nodeId === id ? editingTarget.focusBlockId : undefined} focusPoint={editingTarget?.nodeId === id ? editingTarget.focusPoint : undefined} focusRequest={focusRequest} onFocusRequestHandled={onFocusRequestHandled} />,
+          <MindMapNodeContent node={node} store={store} selected={selectedNodeId === id} editing={editingTarget?.nodeId === id} toolbarTarget={toolbarTarget} onSelect={selectTreeNode} onFocusNode={selectMindElixirNode} onFinishEdit={finishNodeEdit} onToolbarActiveChange={reportNodeToolbar} onTextSelectionChange={reportTextSelection} focusBlockId={editingTarget?.nodeId === id ? editingTarget.focusBlockId : undefined} focusPoint={editingTarget?.nodeId === id ? editingTarget.focusPoint : undefined} focusRequest={focusRequest} onFocusRequestHandled={onFocusRequestHandled} />,
           host,
           id,
         ) : null;

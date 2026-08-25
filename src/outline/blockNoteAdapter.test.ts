@@ -67,6 +67,25 @@ describe("blockNoteAdapter", () => {
     expect(parsed.nodes.app.props?.checked).toBe(true);
   });
 
+  it("projects a link on part of a row back as a link", () => {
+    const tree = createInitialTree();
+    tree.nodes.web.content = {
+      text: "人民法院应当",
+      spans: [
+        { text: "人民法院", marks: { linkUrl: "https://example.com/a", textColor: "red" } },
+        { text: "应当", marks: { textColor: "red" } },
+      ],
+    };
+    const [projected] = treeToBlockNote(tree);
+    const web = projected.children?.[0] as Block;
+    const inline = web.content as unknown as Array<Record<string, unknown>>;
+    expect(inline[0]).toMatchObject({ type: "link", href: "https://example.com/a" });
+    expect(inline[1]).toMatchObject({ type: "text", text: "应当" });
+    // And back again, so an edit elsewhere in the row cannot wash the link out.
+    const parsed = blockNoteToTree([projected as Block], tree)!;
+    expect(parsed.nodes.web.content.spans?.[0].marks?.linkUrl).toBe("https://example.com/a");
+  });
+
   it("normalizes extra top-level blocks under the single root", () => {
     const tree = blockNoteToTree([
       block("root", "根标题", {}),

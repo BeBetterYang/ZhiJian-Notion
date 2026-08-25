@@ -1,5 +1,6 @@
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
+import type { BlockNoteEditor, PartialBlock } from "@blocknote/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ZhiJianNode, ZhiJianTree } from "../core/tree";
@@ -10,10 +11,15 @@ import { correctCaretAfterClick, placeCaretAtPoint } from "../shared/caretAtPoin
 import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 import { saveImageAsset } from "../shared/imageAssetStore";
 import { LinkDialog } from "../shared/LinkDialog";
-import { applyLink, handleShortcutKeyDown } from "../shared/shortcuts";
+import {
+  applyLink,
+  blockTextRange,
+  handleShortcutKeyDown,
+} from "../shared/shortcuts";
 import { ZhiJianFormattingToolbar } from "../shared/ZhiJianFormattingToolbar";
 import { zhijianDictionary } from "../shared/zhijianDictionary";
-import { nodeDocumentSignature, resolveMindMapFocusBlockId, suppressMindMapEnter } from "./mindMapInteraction";
+import type { MindMapTextSelection } from "./MindMapEditor";
+import { nodeDocumentSignature, nodeTextSelectionOffsets, resolveMindMapFocusBlockId, suppressMindMapEnter } from "./mindMapInteraction";
 
 interface MindMapNodeContentProps {
   node: ZhiJianNode;
@@ -34,6 +40,12 @@ interface MindMapNodeContentProps {
    * the outline's bridge can stand down for as long as it is. See `ownsToolbar`.
    */
   onToolbarActiveChange: (active: boolean) => void;
+  /**
+   * Which run of the node's own text is selected, for the toolbar the outline
+   * bridge shows — that toolbar has no sight of this editor's selection and would
+   * otherwise format the whole node. See `nodeTextSelectionOffsets`.
+   */
+  onTextSelectionChange: (selection: MindMapTextSelection | null) => void;
   focusBlockId?: string;
   focusPoint?: { x: number; y: number };
   focusRequest: { nodeId: string; focusBlockId: string; requestId: number } | null;
@@ -55,6 +67,7 @@ function MindMapNodeEditor({
   onSelect,
   onFocusNode,
   onToolbarActiveChange,
+  onTextSelectionChange,
   focusRequest,
   onFocusRequestHandled,
 }: MindMapNodeContentProps) {
@@ -95,15 +108,18 @@ function MindMapNodeEditor({
    * *is* — a heading, a todo — because a node's type is not part of what this editor
    * writes back (see `updateNodeDocument`). A quote or a picture hanging off the node
    * exists nowhere else, so those blocks are this editor's to format, and it takes
-   * the host over for as long as the caret sits in one. A table node is left out
-   * entirely: its cell colours come from BlockNote's own table handles.
+   * the host over for as long as the caret sits in one.
+   *
+   * A table is this editor's too, even though the table is the node's first block:
+   * the run being styled is inside one cell, and the bridge has no way to select a
+   * cell — it counts characters in the node's own text, of which a table has none.
+   * BlockNote's table handles stay alongside for whole-cell colours.
    */
   const ownsToolbar =
     selected &&
     Boolean(toolbarTarget) &&
-    node.type !== "table" &&
     activeBlockId !== null &&
-    activeBlockId !== node.id;
+    (node.type === "table" || activeBlockId !== node.id);
 
   useEffect(() => {
     onToolbarActiveChange(ownsToolbar);
@@ -174,8 +190,7 @@ function MindMapNodeEditor({
   }, [editor, node, node.blocks]);
 
   useEffect(() => {
-    return editor.onSelectionChange(() => {
-      onSelect(node.id);
+    const report = () => {
       let block: string | null = null;
       try {
         block = editor.getSelection()?.blocks[0]?.id ?? editor.getTextCursorPosition().block.id;
@@ -183,14 +198,31 @@ function MindMapNodeEditor({
         // A block selection — a picture, say — exposes no text cursor.
       }
       setActiveBlockId(block);
+      const offsets = nodeTextSelectionOffsets(
+        editor.prosemirrorState.selection,
+        blockTextRange(editor, node.id),
+      );
+      // After `onSelect`, which clears the range for the node it selects: the two
+      // land in one React commit, so the range has to be the later of the two.
+      onTextSelectionChange(offsets ? { nodeId: node.id, ...offsets } : null);
+    };
+    const unsubscribe = editor.onSelectionChange(() => {
+      onSelect(node.id);
+      report();
     });
-  }, [editor, node.id, onSelect]);
+    return () => {
+      unsubscribe();
+      // The edit is over and the node is selected as a whole again, which is what a
+      // toolbar press should act on — a range nobody can see any more is not.
+      onTextSelectionChange(null);
+    };
+  }, [editor, node.id, onSelect, onTextSelectionChange]);
 
   useEffect(() => {
     const current = blockNoteToTree(editor.document, nodeTree);
     const next = current?.nodes[node.id];
     if (!next || nodeDocumentSignature(next) === nodeDocumentSignature(node)) return;
-    const applyProjection = () => editor.replaceBlocks(editor.document, projectedBlocks);
+    const applyProjection = () => reprojectKeepingSelection(editor, projectedBlocks);
     if (composing.current) deferredExternalApply.current = applyProjection;
     else applyProjection();
   }, [editor, node, nodeTree, projectedBlocks]);
@@ -361,7 +393,15 @@ function MindMapNodeEditor({
           );
         }}
       >
-        {ownsToolbar && toolbarTarget ? createPortal(<ZhiJianFormattingToolbar />, toolbarTarget) : null}
+        {ownsToolbar && toolbarTarget
+          ? createPortal(
+            // A table node has no text row of its own to hang a quote or a picture
+            // off, and the caret is inside a cell: the insert buttons would act on
+            // the table block from within it. The styling controls are the point.
+            <ZhiJianFormattingToolbar showStructuralControls={node.type !== "table"} />,
+            toolbarTarget,
+          )
+          : null}
       </BlockNoteView>
       {/* 添加图片 (Alt Enter): the picker only opens from a real click on an input. */}
       <input
@@ -399,4 +439,21 @@ function MindMapNodeEditor({
 
 function singleNodeTree(node: ZhiJianNode): ZhiJianTree {
   return { rootId: node.id, nodes: { [node.id]: { ...node, children: [] } } };
+}
+
+/**
+ * Reprojects the node's document without dropping the range the user is working on.
+ *
+ * Every block is replaced, which collapses the selection — and the change that most
+ * often arrives from outside is the bridged toolbar painting this node's text, where
+ * the next press is usually a second style over the same run. Styling moves no text,
+ * so the positions still name the same characters; a projection that did change the
+ * length fails the bounds check and leaves BlockNote's own placement alone.
+ */
+function reprojectKeepingSelection(editor: BlockNoteEditor, blocks: PartialBlock[]) {
+  const { from, to } = editor.prosemirrorState.selection;
+  editor.replaceBlocks(editor.document, blocks);
+  if (to < editor.prosemirrorState.doc.content.size) {
+    editor._tiptapEditor.commands.setTextSelection({ from, to });
+  }
 }

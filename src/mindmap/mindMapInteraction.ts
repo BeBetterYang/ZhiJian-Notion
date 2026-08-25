@@ -57,6 +57,28 @@ export function resolveMindMapFocusBlockId(nodeId: string, availableBlockIds: st
 }
 
 /**
+ * Which part of a node's own text the toolbar should act on.
+ *
+ * A plain node's toolbar is bound to the hidden outline editor rather than to the
+ * editor the text is being typed in — see `outline/mindMapTextSelection.ts` for why
+ * — and the outline can only mirror a range it has been told about. The offsets are
+ * counted in characters from the start of the node's text, which is the unit both
+ * halves of that bridge agree on.
+ *
+ * Null means the whole node: nothing is selected, or the selection reaches past the
+ * node's own text into a quote it carries, and those blocks are formatted by the
+ * node's own toolbar instead.
+ */
+export function nodeTextSelectionOffsets(
+  selection: { from: number; to: number },
+  nodeTextRange: { from: number; to: number } | null,
+) {
+  if (!nodeTextRange || selection.from >= selection.to) return null;
+  if (selection.from < nodeTextRange.from || selection.to > nodeTextRange.to) return null;
+  return { from: selection.from - nodeTextRange.from, to: selection.to - nodeTextRange.from };
+}
+
+/**
  * True when Enter must be swallowed by the in-node editor.
  *
  * That editor projects exactly one node, so a second top-level block has nowhere

@@ -21,6 +21,7 @@ import type { TreeStore } from "../core/treeStore";
 import { useTree } from "../core/treeStore/useTree";
 import { blockNoteToTree, treeToBlockNote } from "./blockNoteAdapter";
 import { ZhiJianSlashMenu } from "./ZhiJianSlashMenu";
+import { MindMapLinkToolbar } from "./MindMapLinkToolbar";
 import { ZhiJianFormattingToolbar } from "../shared/ZhiJianFormattingToolbar";
 import type { MindMapTextSelection } from "../mindmap/MindMapEditor";
 import { resolveMindMapTextRange } from "./mindMapTextSelection";
@@ -186,9 +187,16 @@ export function OutlineEditor({
         }
       }}
     >
-      <FormattingToolbarController formattingToolbar={() => <ZhiJianFormattingToolbar />} />
+      <FormattingToolbarController
+        formattingToolbar={() => <ZhiJianFormattingToolbar />}
+      />
       <SideMenuController sideMenu={RootProtectedSideMenu} />
       <ZhiJianSlashMenu />
+      {/* The map's links open this same editor's link toolbar, which is why it hangs
+          here: BlockNote's components and dictionary come from this view. It shows
+          nothing until the map reports a hover, and the map is only mounted in its own
+          view — see `MindMapLinkToolbar`. */}
+      <MindMapLinkToolbar />
       {showMindMapToolbar && mindMapToolbarTarget
         ? createPortal(
             <ZhiJianFormattingToolbar onInsertQuote={onMindMapInsertQuote} />,

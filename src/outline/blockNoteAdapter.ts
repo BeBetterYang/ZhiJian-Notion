@@ -318,7 +318,7 @@ function blockNoteStylesToMarks(styles: Record<string, unknown> | undefined): Ri
 }
 
 function spanToBlockNoteInline(span: RichTextSpan) {
-  return {
+  const styledText = {
     type: "text",
     text: span.text,
     styles: {
@@ -330,4 +330,14 @@ function spanToBlockNoteInline(span: RichTextSpan) {
       backgroundColor: span.marks?.backgroundColor,
     },
   };
+  // A link on part of a row is a span like any other, and leaving `linkUrl` out here
+  // dropped it from every editor that reads the tree: the address survived in the
+  // store and in the map's display layer, but the editor showed plain text — so the
+  // next keystroke wrote the link away, and nothing could remove it either, because
+  // BlockNote only offers 编辑/移除链接 when the caret is inside a real link mark.
+  // (`toBlockNoteContent` already did this for a link covering a whole row; a
+  // partial one goes through here.)
+  return span.marks?.linkUrl
+    ? { type: "link", href: span.marks.linkUrl, content: [styledText] }
+    : styledText;
 }

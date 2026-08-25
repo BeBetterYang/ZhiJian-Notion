@@ -60,13 +60,22 @@ export function ZhiJianFormattingToolbar({
 
   // The root block is the fixed document title. It remains editable as text,
   // but cannot be changed into another block type or receive formatting.
-  if (activeBlock?.id === editor.document[0]?.id) {
+  //
+  // A table is the exception, because it can be the whole of a block: a table node
+  // in the map is edited in a document of its own, where the table *is* the first
+  // block, and the text being styled belongs to one of its cells rather than to any
+  // title. Nothing else can stand in for it — the outline bridge cannot select a
+  // cell — so without this a run inside a cell had no way to be coloured at all.
+  const isTableBlock = activeBlock?.type === "table";
+  if (activeBlock?.id === editor.document[0]?.id && !isTableBlock) {
     return null;
   }
 
   return (
     <FormattingToolbar>
-      <BlockTypeSelect items={blockTypes} />
+      {/* Every type on offer is a kind of text row, and a table is none of them:
+          picking one would replace the table with an empty paragraph. */}
+      {isTableBlock ? null : <BlockTypeSelect items={blockTypes} />}
       {showStructuralControls ? (
         <InsertQuoteButton
           onInsertQuote={onInsertQuote}

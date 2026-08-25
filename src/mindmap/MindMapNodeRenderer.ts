@@ -115,7 +115,25 @@ export function applyMindMapVisualVariables(element: HTMLElement, style: MindMap
 function renderTableHtml(node: ZhiJianNode) {
   const rows = node.props?.table?.rows ?? [];
   const body = rows.map((row) => `<tr>${row.map((cell) => `<td${renderCellAttributes(cell)}>${renderRichTextHtml(cell.content)}</td>`).join("")}</tr>`).join("");
-  return `<div class="mindmap-node-table"><table><tbody>${body}</tbody></table>${rows.length ? "" : "表格"}</div>`;
+  return `<div class="mindmap-node-table"><table>${renderColumnGroupHtml(node, rows[0]?.length ?? 0)}<tbody>${body}</tbody></table>${rows.length ? "" : "表格"}</div>`;
+}
+
+/**
+ * The column widths a resize left behind, in the same `<colgroup>` prosemirror-tables
+ * builds from its `colwidth` attributes. Without it a dragged column snapped back to
+ * its content width the moment the editor closed, which also resized the node box —
+ * the display layer is what mind-elixir measures at rest. Columns nobody has touched
+ * are left width-less on both sides, so they keep wrapping at
+ * `--mindmap-table-cell-max-width`.
+ */
+function renderColumnGroupHtml(node: ZhiJianNode, columnCount: number) {
+  const widths = node.props?.table?.columnWidths ?? [];
+  if (!columnCount || !widths.some((width) => typeof width === "number" && width > 0)) return "";
+  const columns = Array.from({ length: columnCount }, (_, index) => {
+    const width = widths[index];
+    return `<col${typeof width === "number" && width > 0 ? ` style="width:${width}px"` : ""}>`;
+  });
+  return `<colgroup>${columns.join("")}</colgroup>`;
 }
 
 /**
