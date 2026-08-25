@@ -37,6 +37,7 @@ import {
   loadWorkspaceState,
   saveWorkspaceDocument,
   saveWorkspaceState,
+  WorkspaceApiError,
 } from "./serverApi";
 import {
   childNodes,
@@ -184,6 +185,10 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
       })
       .catch((error) => {
         if (canceled) return;
+        if (error instanceof WorkspaceApiError && error.status === 401) {
+          onLogout();
+          return;
+        }
         setNodes([]);
         setActiveFileId("");
         setSelectedMenuKey("");
@@ -195,7 +200,7 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
     return () => {
       canceled = true;
     };
-  }, [session]);
+  }, [onLogout, session]);
 
   useEffect(() => {
     if (!serverReady || !serverAvailable || !activeFile || !activeDocumentStore) return;

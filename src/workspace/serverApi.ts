@@ -14,10 +14,20 @@ export interface WorkspaceServerState {
   documents?: Record<string, ZhiJianTree>;
 }
 
+export class WorkspaceApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "WorkspaceApiError";
+  }
+}
+
 export async function loadWorkspaceState(session: WorkspaceSession): Promise<WorkspaceServerState | null> {
   const response = await fetch("/api/workspace", { headers: authHeaders(session) });
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error(await readApiError(response, "无法从服务器读取工作区数据。"));
+  if (!response.ok) throw new WorkspaceApiError(await readApiError(response, "无法从服务器读取工作区数据。"), response.status);
   return response.json() as Promise<WorkspaceServerState>;
 }
 
@@ -27,7 +37,7 @@ export async function saveWorkspaceState(session: WorkspaceSession, state: Works
     headers: authHeaders(session),
     body: JSON.stringify(state),
   });
-  if (!response.ok) throw new Error(await readApiError(response, "无法保存工作区数据到服务器。"));
+  if (!response.ok) throw new WorkspaceApiError(await readApiError(response, "无法保存工作区数据到服务器。"), response.status);
 }
 
 export async function saveWorkspaceDocument(session: WorkspaceSession, fileId: string, tree: ZhiJianTree) {
@@ -36,7 +46,7 @@ export async function saveWorkspaceDocument(session: WorkspaceSession, fileId: s
     headers: authHeaders(session),
     body: JSON.stringify({ tree }),
   });
-  if (!response.ok) throw new Error(await readApiError(response, "无法保存文档到服务器。"));
+  if (!response.ok) throw new WorkspaceApiError(await readApiError(response, "无法保存文档到服务器。"), response.status);
 }
 
 function authHeaders(session: WorkspaceSession) {
