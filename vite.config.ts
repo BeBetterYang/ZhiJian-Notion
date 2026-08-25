@@ -3,29 +3,32 @@ import react from "@vitejs/plugin-react";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ServerResponse } from "node:http";
-import type { Connect } from "vite";
+import { loadEnv, type Connect } from "vite";
 
 const DATA_DIR = path.resolve(".zhijian-server-data", "users");
 const REGISTRATION_CODE = "nihaozhijian";
 
-export default defineConfig({
-  plugins: [react(), workspaceServerPlugin()],
-  build: {
-    rollupOptions: {
-      input: {
-        editor: "index.html",
-        workspace: "workspace.html",
+export default defineConfig(({ mode }) => {
+  const appEnv = loadEnv(mode, process.cwd(), "");
+  return {
+    plugins: [react(), workspaceServerPlugin(appEnv)],
+    build: {
+      rollupOptions: {
+        input: {
+          editor: "index.html",
+          workspace: "workspace.html",
+        },
       },
     },
-  },
-  test: {
-    environment: "jsdom",
-    globals: true,
-    setupFiles: "./src/test/setup.ts",
-  },
+    test: {
+      environment: "jsdom",
+      globals: true,
+      setupFiles: "./src/test/setup.ts",
+    },
+  };
 });
 
-function workspaceServerPlugin() {
+function workspaceServerPlugin(appEnv: Record<string, string>) {
   const attachApi = (middlewares: Connect.Server) => {
     middlewares.use("/api/auth", async (request, response, next) => {
       try {
@@ -35,7 +38,7 @@ function workspaceServerPlugin() {
           const email = normalizeEmail(body.email);
           const password = typeof body.password === "string" ? body.password : "";
           if (!email || !password) return sendJson(response, 400, { error: "请输入邮箱和密码。" });
-          const payload = await supabaseAuthRequest("token?grant_type=password", {
+          const payload = await supabaseAuthRequest(appEnv, "token?grant_type=password", {
             method: "POST",
             body: JSON.stringify({ email, password }),
           });
@@ -53,7 +56,7 @@ function workspaceServerPlugin() {
             return sendJson(response, 403, { error: "注册码不正确。" });
           }
           if (!email || !password) return sendJson(response, 400, { error: "请输入邮箱和密码。" });
-          const payload = await supabaseAuthRequest("signup", {
+          const payload = await supabaseAuthRequest(appEnv, "signup", {
             method: "POST",
             body: JSON.stringify({ email, password, data: { name } }),
           });
@@ -71,7 +74,7 @@ function workspaceServerPlugin() {
 
     middlewares.use("/api/workspace", async (request, response, next) => {
       try {
-        const user = await requireAuthenticatedUser(request);
+        const user = await requireAuthenticatedUser(appEnv, request);
         if (request.method === "GET") {
           const record = await readUserRecord(user.email);
           return sendJson(response, 200, withoutViewState(record) ?? {});
@@ -131,19 +134,19 @@ function normalizeEmail(value: unknown) {
     : "";
 }
 
-async function requireAuthenticatedUser(request: Connect.IncomingMessage) {
+async function requireAuthenticatedUser(appEnv: Record<string, string>, request: Connect.IncomingMessage) {
   const header = request.headers.authorization ?? "";
   const accessToken = typeof header === "string" && header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
   if (!accessToken) throw statusError("请先登录。", 401);
-  const user = await supabaseAuthRequest("user", { method: "GET", token: accessToken });
+  const user = await supabaseAuthRequest(appEnv, "user", { method: "GET", token: accessToken });
   const email = normalizeEmail(readRecord(user).email);
   if (!email) throw statusError("登录状态无效。", 401);
   return { email };
 }
 
-async function supabaseAuthRequest(pathname: string, init: RequestInit & { token?: string }) {
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
-  const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || "";
+async function supabaseAuthRequest(appEnv: Record<string, string>, pathname: string, init: RequestInit & { token?: string }) {
+  const url = appEnv.SUPABASE_URL || appEnv.VITE_SUPABASE_URL || "";
+  const publishableKey = appEnv.SUPABASE_PUBLISHABLE_KEY || appEnv.VITE_SUPABASE_PUBLISHABLE_KEY || appEnv.SUPABASE_ANON_KEY || "";
   if (!url || !publishableKey) throw new Error("Supabase Auth 环境变量未配置。");
   const response = await fetch(`${url.replace(/\/$/, "")}/auth/v1/${pathname}`, {
     ...init,
