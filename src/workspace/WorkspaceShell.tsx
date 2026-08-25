@@ -87,11 +87,11 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
   const [settingsView, setSettingsView] = useState<SettingsView>("account");
   const [settingsEdit, setSettingsEdit] = useState<SettingsEdit>(null);
   const [headerToolbarTarget, setHeaderToolbarTarget] = useState<HTMLDivElement | null>(null);
-  const [nodes, setNodes] = useState(initialNodes);
-  const [activeFileId, setActiveFileId] = useState("product-plan");
-  const [selectedMenuKey, setSelectedMenuKey] = useState("tree:product-plan");
+  const [nodes, setNodes] = useState<WorkspaceNode[]>([]);
+  const [activeFileId, setActiveFileId] = useState("");
+  const [selectedMenuKey, setSelectedMenuKey] = useState("");
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
-  const [expandedFolders, setExpandedFolders] = useState(() => new Set(initialNodes.filter((node) => node.type === "folder").map((node) => node.id)));
+  const [expandedFolders, setExpandedFolders] = useState(() => new Set<string>());
   const [search, setSearch] = useState("");
   const [searchFilterOpen, setSearchFilterOpen] = useState(false);
   const [searchFolderQuery, setSearchFolderQuery] = useState("");
@@ -123,6 +123,7 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
   const peekCloseTimer = useRef<number | null>(null);
   const documentStores = useRef(new Map<string, TreeStore>());
   const [serverReady, setServerReady] = useState(false);
+  const [serverAvailable, setServerAvailable] = useState(false);
   const [serverStatus, setServerStatus] = useState("正在连接服务器...");
 
   const files = useMemo(() => nodes.filter(isWorkspaceFile), [nodes]);
@@ -154,6 +155,7 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
   useEffect(() => {
     let canceled = false;
     setServerReady(false);
+    setServerAvailable(false);
     setServerStatus("正在连接服务器...");
     void loadWorkspaceState(session)
       .then((state) => {
@@ -178,11 +180,17 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
         });
         setExpandedFolders(new Set(nextNodes.filter((node) => node.type === "folder").map((node) => node.id)));
         setServerStatus("");
+        setServerAvailable(true);
         setServerReady(true);
       })
-      .catch(() => {
+      .catch((error) => {
         if (canceled) return;
-        setServerStatus("服务器数据读取失败，当前使用本地预览数据。");
+        setNodes([]);
+        setActiveFileId("");
+        setSelectedMenuKey("");
+        documentStores.current = new Map();
+        setServerAvailable(false);
+        setServerStatus(`服务器数据读取失败：${errorMessage(error)}`);
         setServerReady(true);
       });
     return () => {
@@ -191,7 +199,7 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
   }, [session]);
 
   useEffect(() => {
-    if (!serverReady || !activeFile || !activeDocumentStore) return;
+    if (!serverReady || !serverAvailable || !activeFile || !activeDocumentStore) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const unsubscribe = activeDocumentStore.subscribe((tree) => {
       if (timer) clearTimeout(timer);
@@ -209,10 +217,10 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
       }
       unsubscribe();
     };
-  }, [activeDocumentStore, activeFile, serverReady, session]);
+  }, [activeDocumentStore, activeFile, serverAvailable, serverReady, session]);
 
   useEffect(() => {
-    if (!serverReady) return;
+    if (!serverReady || !serverAvailable) return;
     const timer = setTimeout(() => {
       void saveWorkspaceState(session, {
         profile: userProfile,
@@ -221,7 +229,7 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
       }).catch((error) => setServerStatus(`工作区保存到服务器失败：${errorMessage(error)}`));
     }, 500);
     return () => clearTimeout(timer);
-  }, [nodes, serverReady, session, userProfile]);
+  }, [nodes, serverAvailable, serverReady, session, userProfile]);
 
   useEffect(() => {
     if (!activeFile || !activeDocumentStore) return;
@@ -675,12 +683,17 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
                 setRecentSearches([]);
                 saveRecentSearches([]);
               }}
+              onDelete={(value) => {
+                const next = recentSearches.filter((item) => item !== value);
+                setRecentSearches(next);
+                saveRecentSearches(next);
+              }}
               onSelect={(value) => setSearch(value)}
             />
           ) : (
             <section className="workspace-files" aria-labelledby="workspace-files-title">
               <div className="section-label" id="workspace-files-title">工作空间</div>
-              {renderTree(null)}
+              {serverReady ? renderTree(null) : <WorkspaceLoading label="正在加载工作区" compact />}
             </section>
           )}
         </div>
@@ -702,7 +715,9 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
           <div className="document-header-actions" ref={setHeaderToolbarTarget} />
         </header>
         <div className="document-stage">
-          {activeDocumentStore && activeFile ? (
+          {!serverReady ? (
+            <WorkspaceLoading label="正在加载服务器数据" />
+          ) : activeDocumentStore && activeFile ? (
             <App
               key={activeFile.id}
               embedded
@@ -715,7 +730,9 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
                   : null
               }
             />
-          ) : null}
+          ) : (
+            <div className="document-empty-state">暂无可打开的文档</div>
+          )}
         </div>
       </section>
       {settingsOpen ? (
@@ -1030,9 +1047,10 @@ function GlobalSearchResults({ query, results, expandedFileIds, onToggleFile, on
   );
 }
 
-function RecentSearchPanel({ searches, onClear, onSelect }: {
+function RecentSearchPanel({ searches, onClear, onDelete, onSelect }: {
   searches: string[];
   onClear: () => void;
+  onDelete: (value: string) => void;
   onSelect: (value: string) => void;
 }) {
   return (
@@ -1043,10 +1061,24 @@ function RecentSearchPanel({ searches, onClear, onSelect }: {
       </header>
       {searches.length ? (
         <div className="recent-search-tags">
-          {searches.map((item) => <button type="button" key={item} onClick={() => onSelect(item)}>{item}</button>)}
+          {searches.map((item) => (
+            <span className="recent-search-tag" key={item}>
+              <button type="button" className="recent-search-value" onClick={() => onSelect(item)}>{item}</button>
+              <button type="button" className="recent-search-delete icon-button" onClick={() => onDelete(item)} aria-label={`删除搜索记录 ${item}`}><FiX /></button>
+            </span>
+          ))}
         </div>
       ) : <div className="empty-section">暂无最近搜索</div>}
     </section>
+  );
+}
+
+function WorkspaceLoading({ label, compact = false }: { label: string; compact?: boolean }) {
+  return (
+    <div className={`workspace-loading ${compact ? "is-compact" : ""}`} role="status" aria-live="polite">
+      <span className="workspace-loading-spinner" aria-hidden="true" />
+      <span>{label}</span>
+    </div>
   );
 }
 
