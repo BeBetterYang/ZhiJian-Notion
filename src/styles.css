@@ -1568,11 +1568,14 @@ textarea {
 .mindmap-node-editor .bn-block-content > h2,
 .mindmap-node-editor .bn-block-content > h3,
 .mindmap-node-editor .bn-inline-content {
-  color: inherit;
   font-size: var(--mindmap-font-size, 16px) !important;
   font-style: inherit;
   font-weight: inherit;
   line-height: var(--mindmap-line-height, 1.5) !important;
+}
+
+.mindmap-node-editor {
+  color: var(--zhijian-ink);
 }
 
 .mindmap-node-editor .bn-editor {
