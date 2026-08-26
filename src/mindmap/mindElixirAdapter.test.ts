@@ -45,7 +45,7 @@ describe("mindElixirAdapter", () => {
     tree.nodes.web.content = { text: "任务", spans: [{ text: "任务", marks: { bold: true } }] };
     const node = (treeToMindElixir(tree).nodeData.children as NodeObj[])[0];
     expect(node.metadata).toMatchObject({ type: "todo", checked: true });
-    expect(node.dangerouslySetInnerHTML).toContain('class="mindmap-node-checkbox"');
+    expect(node.dangerouslySetInnerHTML).toContain('class="mindmap-node-checkbox" data-node-id="web" type="checkbox" checked');
   });
 
   it("does not change visible structure when blocks change", () => {

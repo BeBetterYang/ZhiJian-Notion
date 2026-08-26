@@ -192,6 +192,17 @@ export function isBlankMindMapSurface(target: EventTarget | null) {
   return target instanceof Element ? target.closest(MINDMAP_CHROME_SELECTOR) === null : false;
 }
 
+/**
+ * MindElixir only starts a node drag when the pointer event targets `me-tpc`
+ * itself. The lightweight display fills that topic, so ordinary presses land on
+ * nested spans or images. Controls and the edit layer keep their own gestures.
+ */
+export function mindMapDisplayDragTopic(target: EventTarget | null) {
+  if (!(target instanceof Element) || !target.closest(".mindmap-node-display")) return null;
+  if (target.closest("a,button,input,select,textarea,[role=checkbox]")) return null;
+  return target.closest<HTMLElement>("me-tpc");
+}
+
 const UNIT = "\u001f";
 const SPAN = "\u001d";
 const FIELD = "\u001e";

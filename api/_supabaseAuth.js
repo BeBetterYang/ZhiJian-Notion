@@ -60,17 +60,25 @@ export function authSessionFromPayload(payload) {
   const user = payload.user;
   const email = typeof user?.email === "string" ? user.email.trim().toLowerCase() : "";
   const accessToken = typeof payload.access_token === "string" ? payload.access_token : "";
+  const name = readUserName(user);
   if (!email || !accessToken) return null;
   return {
     email,
-    name: typeof user?.user_metadata?.name === "string" && user.user_metadata.name.trim()
-      ? user.user_metadata.name.trim()
-      : displayNameFromEmail(email),
+    name: name || displayNameFromEmail(email),
     userId: typeof user?.id === "string" ? user.id : "",
     accessToken,
     refreshToken: typeof payload.refresh_token === "string" ? payload.refresh_token : "",
     expiresAt: typeof payload.expires_at === "number" ? payload.expires_at : undefined,
   };
+}
+
+function readUserName(user) {
+  const metadata = user?.user_metadata;
+  for (const key of ["name", "full_name", "user_name", "username"]) {
+    const value = metadata?.[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
 }
 
 function displayNameFromEmail(email) {

@@ -11,7 +11,7 @@ import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 import { handleShortcutKeyDown } from "../shared/shortcuts";
 import { createMindMapStructureSignature, treeToMindElixir } from "./mindElixirAdapter";
 import { applyMindElixirOperation } from "./mindElixirCommands";
-import { displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, isMindMapGeometryEditorElement, mindMapMeasuredSizeChanged, mindMapScaleFromTransform, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, unscaledMindMapSize, type EditingTarget, type MindMapMeasuredSize } from "./mindMapInteraction";
+import { displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, isMindMapGeometryEditorElement, mindMapDisplayDragTopic, mindMapMeasuredSizeChanged, mindMapScaleFromTransform, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, unscaledMindMapSize, type EditingTarget, type MindMapMeasuredSize } from "./mindMapInteraction";
 import { MINDMAP_THEME } from "./mindMapTheme";
 import { MindMapLinkHoverTracker } from "./MindMapLinkHoverTracker";
 import { renderMindMapNodeDisplayHtml } from "./MindMapNodeRenderer";
@@ -460,16 +460,50 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       }
       const checkbox = target?.closest<HTMLElement>(".mindmap-node-checkbox");
       const nodeId = checkbox?.dataset.nodeId;
-      if (!nodeId || event.button !== 0) return;
+      if (nodeId && event.button === 0) {
+        event.preventDefault();
+        event.stopPropagation();
+        const node = storeRef.current.getNode(nodeId);
+        if (node?.type !== "todo") return;
+        storeRef.current.updateProps(nodeId, { checked: !(node.props?.checked ?? false) });
+        selectTreeNode(nodeId);
+        return;
+      }
+
+      const dragTopic = mindMapDisplayDragTopic(target);
+      if (!dragTopic || event.button !== 0 || target === dragTopic) return;
+      // Preserve the active pointer id: MindElixir captures it on the topic and
+      // receives the real move/up events, so an unselected node can drag from the
+      // first press on its display content.
       event.preventDefault();
-      event.stopPropagation();
-      const node = storeRef.current.getNode(nodeId);
-      if (node?.type !== "todo") return;
-      storeRef.current.updateProps(nodeId, { checked: !(node.props?.checked ?? false) });
-      selectTreeNode(nodeId);
+      event.stopImmediatePropagation();
+      dragTopic.dispatchEvent(new PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        pointerId: event.pointerId,
+        pointerType: event.pointerType,
+        isPrimary: event.isPrimary,
+        button: event.button,
+        buttons: event.buttons,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        ctrlKey: event.ctrlKey,
+        shiftKey: event.shiftKey,
+        altKey: event.altKey,
+        metaKey: event.metaKey,
+      }));
     };
     const onClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
+      // The state already changed on pointerdown. Suppress the native checkbox's
+      // own click toggle so it cannot briefly paint the opposite state while the
+      // store projection is replacing the display HTML.
+      if (target?.closest(".mindmap-node-checkbox")) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       // mind-elixir reads a modifier-click on the collapse handle as "collapse the
       // whole subtree" — a second collapse mechanism, and one that rebuilds the map
       // from its own data and reports nothing, so the store never hears about it.

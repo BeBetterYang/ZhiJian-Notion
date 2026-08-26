@@ -79,7 +79,7 @@ export function renderMindMapNodeDisplayHtml(node: ZhiJianNode, searchQuery = ""
   const primary = node.type === "table"
     ? renderTableHtml(node)
     : node.type === "todo"
-      ? `<span class="mindmap-node-todo ${node.props?.checked ? "is-checked" : ""}"><span class="mindmap-node-checkbox" data-node-id="${escapeHtml(node.id)}" role="checkbox" aria-checked="${node.props?.checked ? "true" : "false"}">${node.props?.checked ? "✓" : ""}</span><span class="${richTextClass}">${renderRichTextHtml(node.content, searchQuery)}</span></span>`
+      ? `<span class="mindmap-node-todo ${node.props?.checked ? "is-checked" : ""}"><input class="mindmap-node-checkbox" data-node-id="${escapeHtml(node.id)}" type="checkbox"${node.props?.checked ? " checked" : ""} tabindex="-1" aria-label="切换待办状态"><span class="${richTextClass}">${renderRichTextHtml(node.content, searchQuery)}</span></span>`
       : `<span class="${richTextClass}">${renderRichTextHtml(node.content, searchQuery)}</span>`;
   const description = node.description
     ? `<div class="mindmap-node-quote mindmap-node-description" data-block-id="${escapeHtml(`${node.id}::description`)}">${renderRichTextHtml(node.description, searchQuery)}</div>`

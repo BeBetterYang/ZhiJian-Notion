@@ -31,6 +31,15 @@ export async function register(name: string, email: string, password: string, co
   return requestAuth("/api/auth/register", { name: normalizedName, email, password, code });
 }
 
+export async function refreshWorkspaceSession(session: WorkspaceSession): Promise<AuthResult> {
+  if (!session.refreshToken) return { error: "登录状态已过期，请重新登录。" };
+  return requestAuth("/api/auth/refresh", { refreshToken: session.refreshToken });
+}
+
+export function shouldRefreshWorkspaceSession(session: WorkspaceSession, now = Math.floor(Date.now() / 1000)) {
+  return Boolean(session.refreshToken && typeof session.expiresAt === "number" && session.expiresAt <= now + 60);
+}
+
 function validateCredentials(email: string, password: string, name?: string) {
   const normalizedEmail = email.trim().toLowerCase();
   if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) return { error: "请输入有效的邮箱地址。" };

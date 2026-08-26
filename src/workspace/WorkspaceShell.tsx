@@ -59,6 +59,7 @@ import {
 
 interface WorkspaceShellProps {
   session: WorkspaceSession;
+  onSessionRefresh: (session: WorkspaceSession) => void;
   onLogout: () => void;
 }
 
@@ -79,7 +80,7 @@ interface UserProfile {
   avatarUrl: string;
 }
 
-export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
+export function WorkspaceShell({ session, onSessionRefresh, onLogout }: WorkspaceShellProps) {
   const [userProfile, setUserProfile] = useState<UserProfile>(() => profileFromSession(session));
   const [profileDraft, setProfileDraft] = useState<UserProfile>(() => profileFromSession(session));
   const [newPassword, setNewPassword] = useState("");
@@ -157,7 +158,7 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
     setServerReady(false);
     setServerAvailable(false);
     setServerStatus("正在连接服务器...");
-    void loadWorkspaceState(session)
+    void loadWorkspaceState(session, { onSessionRefresh })
       .then((state) => {
         if (canceled) return;
         const nextProfile = normalizeUserProfile(state?.profile, session);
@@ -200,7 +201,7 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
     return () => {
       canceled = true;
     };
-  }, [onLogout, session]);
+  }, [onLogout, onSessionRefresh, session]);
 
   useEffect(() => {
     if (!serverReady || !serverAvailable || !activeFile || !activeDocumentStore) return;
@@ -209,19 +210,19 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
-        void saveWorkspaceDocument(session, activeFile.id, tree)
+        void saveWorkspaceDocument(session, activeFile.id, tree, { onSessionRefresh })
           .catch((error) => setServerStatus(`文档保存到服务器失败：${errorMessage(error)}`));
       }, 400);
     });
     return () => {
       if (timer) {
         clearTimeout(timer);
-        void saveWorkspaceDocument(session, activeFile.id, activeDocumentStore.getSnapshot())
+        void saveWorkspaceDocument(session, activeFile.id, activeDocumentStore.getSnapshot(), { onSessionRefresh })
           .catch((error) => setServerStatus(`文档保存到服务器失败：${errorMessage(error)}`));
       }
       unsubscribe();
     };
-  }, [activeDocumentStore, activeFile, serverAvailable, serverReady, session]);
+  }, [activeDocumentStore, activeFile, onSessionRefresh, serverAvailable, serverReady, session]);
 
   useEffect(() => {
     if (!serverReady || !serverAvailable) return;
@@ -230,10 +231,10 @@ export function WorkspaceShell({ session, onLogout }: WorkspaceShellProps) {
         profile: userProfile,
         nodes,
         documents: snapshotDocumentStores(documentStores.current),
-      }).catch((error) => setServerStatus(`工作区保存到服务器失败：${errorMessage(error)}`));
+      }, { onSessionRefresh }).catch((error) => setServerStatus(`工作区保存到服务器失败：${errorMessage(error)}`));
     }, 500);
     return () => clearTimeout(timer);
-  }, [nodes, serverAvailable, serverReady, session, userProfile]);
+  }, [nodes, onSessionRefresh, serverAvailable, serverReady, session, userProfile]);
 
   useEffect(() => {
     if (!activeFile || !activeDocumentStore) return;

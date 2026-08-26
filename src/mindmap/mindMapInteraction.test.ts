@@ -7,6 +7,7 @@ import {
   hiddenDescendantCount,
   isBlankMindMapSurface,
   isMindMapGeometryEditorElement,
+  mindMapDisplayDragTopic,
   mindMapMeasuredSizeChanged,
   mindMapScaleFromTransform,
   mindMapUpdateMode,
@@ -60,6 +61,21 @@ describe("MindMap interaction state", () => {
     expect(resolveMindMapFocusBlockId(node.id, blockIds, "quote")).toBe("quote");
     expect(resolveMindMapFocusBlockId(node.id, blockIds, `${node.id}::description`)).toBe(`${node.id}::description`);
     expect(resolveMindMapFocusBlockId(node.id, blockIds, "missing")).toBe(node.id);
+  });
+});
+
+describe("mindMapDisplayDragTopic", () => {
+  it("forwards a display press to its topic even before the node is selected", () => {
+    document.body.innerHTML = `<me-tpc><div class="mindmap-node-display"><span class="mindmap-node-rich-text">节点</span></div></me-tpc>`;
+    const topic = document.querySelector("me-tpc");
+    expect(mindMapDisplayDragTopic(document.querySelector(".mindmap-node-rich-text"))).toBe(topic);
+    expect(mindMapDisplayDragTopic(topic)).toBeNull();
+  });
+
+  it("keeps controls and the edit layer out of node dragging", () => {
+    document.body.innerHTML = `<me-tpc><div class="mindmap-node-display"><input class="mindmap-node-checkbox"></div><div class="mindmap-node-editor"><span>编辑</span></div></me-tpc>`;
+    expect(mindMapDisplayDragTopic(document.querySelector("input"))).toBeNull();
+    expect(mindMapDisplayDragTopic(document.querySelector(".mindmap-node-editor span"))).toBeNull();
   });
 });
 
