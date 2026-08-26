@@ -1,4 +1,4 @@
-/* global Buffer, process, fetch */
+/* global Buffer, process, fetch, setTimeout */
 
 const TABLE = "workspace_states";
 
@@ -71,22 +71,44 @@ async function supabaseRequest(path, init) {
     throw new Error("Supabase 环境变量未配置。");
   }
 
-  const response = await fetch(`${url.replace(/\/$/, "")}/rest/v1/${path}`, {
+  const request = () => fetch(`${url.replace(/\/$/, "")}/rest/v1/${path}`, {
     ...init,
     headers: {
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`,
+      ...serviceKeyHeaders(serviceRoleKey),
       "Content-Type": "application/json",
       ...(init.headers ?? {}),
     },
   });
 
+  let response = await request();
+  let text = await response.text();
+  if (!response.ok && isJwtIssuedAtFutureError(text)) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    response = await request();
+    text = await response.text();
+  }
+
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || "Supabase 请求失败。");
+    throw new Error(text || "Supabase 请求失败。");
   }
 
   if (response.status === 204) return null;
-  const text = await response.text();
   return text ? JSON.parse(text) : null;
+}
+
+function serviceKeyHeaders(key) {
+  return key.startsWith("sb_secret_")
+    ? { apikey: key }
+    : { apikey: key, Authorization: `Bearer ${key}` };
+}
+
+function isJwtIssuedAtFutureError(text) {
+  if (!text) return false;
+  if (text.includes("JWT issued at future")) return true;
+  try {
+    const payload = JSON.parse(text);
+    return payload?.code === "PGRST303" && typeof payload?.message === "string" && payload.message.includes("future");
+  } catch {
+    return false;
+  }
 }

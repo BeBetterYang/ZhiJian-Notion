@@ -1,4 +1,4 @@
-import type { ZhiJianNode, ZhiJianNodeBlock, ZhiJianTree } from "./types";
+import type { ZhiJianMindMapDecorations, ZhiJianNode, ZhiJianNodeBlock, ZhiJianTree } from "./types";
 import { normalizeRichText, plainTextContent } from "./richText";
 
 export function cloneTree(tree: ZhiJianTree): ZhiJianTree {
@@ -7,6 +7,22 @@ export function cloneTree(tree: ZhiJianTree): ZhiJianTree {
     nodes: Object.fromEntries(
       Object.entries(tree.nodes).map(([id, node]) => [id, cloneNode(node)]),
     ),
+    mindMap: tree.mindMap ? cloneMindMapDecorations(tree.mindMap) : undefined,
+  };
+}
+
+function cloneMindMapDecorations(decorations: ZhiJianMindMapDecorations): ZhiJianMindMapDecorations {
+  return {
+    summaries: decorations.summaries?.map((summary) => ({
+      ...summary,
+      style: summary.style ? { ...summary.style } : undefined,
+    })),
+    arrows: decorations.arrows?.map((arrow) => ({
+      ...arrow,
+      delta1: arrow.delta1 ? { ...arrow.delta1 } : undefined,
+      delta2: arrow.delta2 ? { ...arrow.delta2 } : undefined,
+      style: arrow.style ? { ...arrow.style } : undefined,
+    })),
   };
 }
 

@@ -1,6 +1,7 @@
 import type {
   RichTextContent,
   TreeListener,
+  ZhiJianMindMapDecorations,
   ZhiJianNode,
   ZhiJianNodeBlock,
   ZhiJianNodeType,
@@ -254,6 +255,26 @@ export class TreeStore {
         },
       };
       draft.nodes[id] = touchNode(node);
+    });
+  }
+
+  /**
+   * Replace the map's 摘要 and 连接 wholesale.
+   *
+   * Wholesale because mind-elixir owns the live set while the map is mounted — it
+   * creates, edits, reshapes and drops them itself — so the map reports the set it
+   * has rather than a patch, and this is where that set is kept for the next time
+   * the map is built. Nothing else reads it: the outline projects nodes only.
+   *
+   * Entries pointing at nodes that no longer exist are dropped here rather than
+   * left for the map to fail to draw, since the outline can delete the very node a
+   * summary was drawn around while the map is not even mounted.
+   */
+  setMindMapDecorations(decorations: ZhiJianMindMapDecorations) {
+    this.commit((draft) => {
+      const summaries = (decorations.summaries ?? []).filter((summary) => draft.nodes[summary.parent]);
+      const arrows = (decorations.arrows ?? []).filter((arrow) => draft.nodes[arrow.from] && draft.nodes[arrow.to]);
+      draft.mindMap = summaries.length || arrows.length ? { summaries, arrows } : undefined;
     });
   }
 

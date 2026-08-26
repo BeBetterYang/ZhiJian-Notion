@@ -13,6 +13,7 @@ type Editor<BS extends BlockSchema, IS extends InlineContentSchema, SS extends S
 export interface OutlineBlockLike {
   id: string;
   type: string;
+  content?: unknown;
   children: OutlineBlockLike[];
 }
 
@@ -32,6 +33,21 @@ export function partitionNodeChildren<T extends { type: string }>(block: { child
 
 export function hasNodeAttachments(block: { children: { type: string }[] }) {
   return block.children.some((child) => isAttachmentBlock(child.type));
+}
+
+export function isOutlineBlockContentEmpty(block: { content?: unknown }) {
+  const content = block.content;
+  if (content === undefined || content === null) return true;
+  if (typeof content === "string") return content.length === 0;
+  if (Array.isArray(content)) {
+    return content.every((item) => {
+      if (typeof item === "string") return item.length === 0;
+      if (!item || typeof item !== "object") return false;
+      const text = (item as { text?: unknown }).text;
+      return typeof text === "string" ? text.length === 0 : false;
+    });
+  }
+  return false;
 }
 
 export function outlineNodeKeyAction(params: {
@@ -144,7 +160,7 @@ export function handleOutlineNodeKeyDown<BS extends BlockSchema, IS extends Inli
     key: event.key,
     block,
     isRoot: editor.document[0]?.id === block.id,
-    isEmpty: parent.content.size === 0,
+    isEmpty: isOutlineBlockContentEmpty(block),
     atStart,
     atEnd,
     selectionEmpty: selection.empty,

@@ -56,7 +56,59 @@ export function treeToMindElixir(tree: ZhiJianTree, options: MindElixirProjectio
   // own, so this is what actually decides the layout. One direction, like an
   // outline read left to right — `SIDE` splits the root's children between the two
   // sides, which reads as two maps.
-  return { nodeData: visit(tree.nodes[rootId]), direction: MindElixir.RIGHT };
+  //
+  // 摘要 and 连接 travel with it as well, and that is what makes them survive: both
+  // `init` and `refresh` read them straight off the data and re-render them, so a
+  // structural rebuild — or a switch to the outline and back, which is an `init`
+  // over a fresh instance — no longer leaves the map's own annotations behind.
+  return {
+    nodeData: visit(tree.nodes[rootId]),
+    direction: MindElixir.RIGHT,
+    summaries: visibleSummaries(tree, rootId, options.visibleNodeIds),
+    arrows: visibleArrows(tree, rootId, options.visibleNodeIds),
+  };
+}
+
+/**
+ * The summaries the current projection can actually draw.
+ *
+ * A summary is anchored to child indices of one parent, so it only means anything
+ * while that parent is in the projection with its children unfiltered — under
+ * 进入当前主题 the parent may be outside the visible subtree, and a search filters
+ * children out from under it, which would slide the indices onto other nodes.
+ */
+function visibleSummaries(tree: ZhiJianTree, rootId: string, visibleNodeIds?: Set<string> | null) {
+  return (tree.mindMap?.summaries ?? []).filter((summary) => {
+    const parent = tree.nodes[summary.parent];
+    if (!parent || !isInSubtree(tree, summary.parent, rootId)) return false;
+    if (visibleNodeIds && parent.children.some((childId) => !visibleNodeIds.has(childId))) return false;
+    return summary.end < parent.children.length;
+  });
+}
+
+/**
+ * The arrows whose two ends are both drawn in the current projection.
+ *
+ * An arrow crossing out of the subtree under 进入当前主题, or into a node a search
+ * filtered away, has one end with nowhere to land — mind-elixir looks the node up
+ * on the canvas to draw from, so it has to be left out rather than drawn to a
+ * stale position.
+ */
+function visibleArrows(tree: ZhiJianTree, rootId: string, visibleNodeIds?: Set<string> | null) {
+  const drawn = (nodeId: string) =>
+    Boolean(tree.nodes[nodeId]) &&
+    isInSubtree(tree, nodeId, rootId) &&
+    (!visibleNodeIds || visibleNodeIds.has(nodeId) || nodeId === rootId);
+  return (tree.mindMap?.arrows ?? []).filter((arrow) => drawn(arrow.from) && drawn(arrow.to));
+}
+
+function isInSubtree(tree: ZhiJianTree, nodeId: string, rootId: string) {
+  let current: string | null | undefined = nodeId;
+  while (current) {
+    if (current === rootId) return true;
+    current = tree.nodes[current]?.parentId;
+  }
+  return false;
 }
 
 /**

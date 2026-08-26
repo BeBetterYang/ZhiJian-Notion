@@ -1,6 +1,9 @@
 export type {
   TreeListener,
   ZhiJianImageData,
+  ZhiJianMindMapArrow,
+  ZhiJianMindMapDecorations,
+  ZhiJianMindMapSummary,
   ZhiJianNode,
   ZhiJianNodeBlock,
   ZhiJianNodeType,

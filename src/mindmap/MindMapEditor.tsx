@@ -11,6 +11,12 @@ import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 import { handleShortcutKeyDown } from "../shared/shortcuts";
 import { createMindMapStructureSignature, treeToMindElixir } from "./mindElixirAdapter";
 import { applyMindElixirOperation } from "./mindElixirCommands";
+import {
+  correctMindMapSummaryOffsets,
+  isMindMapDecorationOperation,
+  readMindMapDecorations,
+  sameMindMapDecorations,
+} from "./mindMapDecorations";
 import { displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, isMindMapGeometryEditorElement, mindMapDisplayDragTopic, mindMapMeasuredSizeChanged, mindMapScaleFromTransform, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, unscaledMindMapSize, type EditingTarget, type MindMapMeasuredSize } from "./mindMapInteraction";
 import { MINDMAP_THEME } from "./mindMapTheme";
 import { MindMapLinkHoverTracker } from "./MindMapLinkHoverTracker";
@@ -72,6 +78,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
   const editingTargetRef = useRef<EditingTarget>(null);
   const geometryMeasureFrame = useRef(0);
   const linkFrame = useRef(0);
+  const decorationSaveFrame = useRef(0);
   const editingShellRef = useRef<string | null>(null);
   const floatingFrame = useRef<HTMLElement | null>(null);
   const floatingNodeId = useRef<string | null>(null);
@@ -105,6 +112,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     suppressOperation.current = true;
     mind.refresh(data);
     mind.clearHistory?.();
+    correctMindMapSummaryOffsets(mind, treeRef.current);
     queueMicrotask(() => {
       suppressOperation.current = false;
       collectTargets();
@@ -113,6 +121,33 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       try { mind.selectNode(mind.findEle(restoreId)); } catch { lastSelectedNodeId.current = null; }
     });
   }, [collectTargets]);
+
+  /**
+   * Hand the map's current 摘要 and 连接 to the store.
+   *
+   * Guarded on the set having actually changed, because the live-reshape listener
+   * fires while an arrow's control point is dragged, and every commit is an undo
+   * step. Only the map reads these back, so this does not touch the outline.
+   */
+  const saveDecorations = useCallback(() => {
+    const mind = mindRef.current;
+    if (!mind) return;
+    const decorations = readMindMapDecorations(mind);
+    if (sameMindMapDecorations(storeRef.current.getSnapshot().mindMap, decorations)) return;
+    storeRef.current.setMindMapDecorations(decorations);
+  }, []);
+
+  /**
+   * The same save, coalesced to one per frame — `updateArrowDelta` fires per
+   * pointer move, and the library's own docs ask callers to throttle it.
+   */
+  const scheduleSaveDecorations = useCallback(() => {
+    window.cancelAnimationFrame(decorationSaveFrame.current);
+    decorationSaveFrame.current = window.requestAnimationFrame(() => {
+      decorationSaveFrame.current = 0;
+      saveDecorations();
+    });
+  }, [saveDecorations]);
 
   const scheduleLinkDiv = useCallback(() => {
     window.cancelAnimationFrame(linkFrame.current);
@@ -187,6 +222,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
   useEffect(() => () => {
     window.cancelAnimationFrame(linkFrame.current);
     window.cancelAnimationFrame(geometryMeasureFrame.current);
+    window.cancelAnimationFrame(decorationSaveFrame.current);
   }, []);
 
   const reportNodeToolbar = useCallback((active: boolean) => onNodeToolbarRef.current(active), []);
@@ -218,6 +254,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       theme: MINDMAP_THEME,
     });
     mind.init(treeToMindElixir(initialTree.current, projectionOptionsRef.current));
+    correctMindMapSummaryOffsets(mind, initialTree.current);
     if (initialViewportRef.current) {
       restoreMindMapViewport(mind, initialViewportRef.current);
     }
@@ -236,6 +273,13 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     queueMicrotask(collectTargets);
     mind.bus.addListener("operation", (operation: Operation) => {
       if (suppressOperation.current) return;
+      // 摘要 and 连接 report on this same bus, and their `obj.id` is the
+      // annotation's own id — treating it as a node id would select a node that
+      // does not exist. They are stored whole instead, off the instance.
+      if (isMindMapDecorationOperation(operation)) {
+        saveDecorations();
+        return;
+      }
       if ("obj" in operation && operation.obj?.id) {
         const nodeId = operation.obj.id;
         lastSelectedNodeId.current = nodeId;
@@ -286,6 +330,14 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       if (viewport) onViewportChange?.(viewport);
     });
     mind.bus.addListener("changeDirection", () => window.requestAnimationFrame(collectTargets));
+    // Every re-render of the annotations ends here, whichever caused it — a layout
+    // pass, a refresh, or creating one — so this is the one place the summary lift
+    // has to be applied from.
+    mind.bus.addListener("linkDiv", () => correctMindMapSummaryOffsets(mind, treeRef.current));
+    // Dragging an arrow's control point moves it without an `operation`; the delta
+    // is part of the arrow, so it has to be stored too. `saveDecorations` no-ops
+    // when nothing changed, which is what keeps a drag from filling the undo stack.
+    mind.bus.addListener("updateArrowDelta", () => scheduleSaveDecorations());
     mindRef.current = mind;
     return () => { mind.destroy(); mindRef.current = null; };
   }, [applyEditingTarget, collectTargets, onViewportChange]);

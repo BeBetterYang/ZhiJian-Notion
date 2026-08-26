@@ -26,8 +26,8 @@ export async function supabaseAuthRequest(path, init = {}) {
     ...init,
     headers: {
       apikey: publishableKey,
-      Authorization: `Bearer ${init.token ?? publishableKey}`,
       "Content-Type": "application/json",
+      ...(init.token ? { Authorization: `Bearer ${init.token}` } : undefined),
       ...(init.headers ?? {}),
     },
   });

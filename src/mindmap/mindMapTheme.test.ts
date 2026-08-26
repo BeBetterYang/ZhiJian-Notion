@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { mindMapMainBranchPath, mindMapSubBranchPath } from "./mindMapTheme";
+import { describe, expect, it, vi } from "vitest";
+import {
+  mindMapMainBranchPath,
+  mindMapSubBranchPath,
+  resolveMindMapPrimaryAnchor,
+  resolveMindMapPrimaryAnchorY,
+} from "./mindMapTheme";
 
 const NODE_GAP_X = 30;
 
@@ -65,6 +70,38 @@ describe("mindMapMainBranchPath", () => {
     );
   });
 
+  it("anchors to the supplied primary-line y instead of the full node centre", () => {
+    const path = mindMapMainBranchPath({
+      ...mainParams,
+      pH: 180,
+      ...child,
+      cH: 160,
+      direction: "rhs",
+    }, {
+      parentAnchorY: () => 218,
+      childAnchorY: () => 116,
+    });
+
+    expect(path).toBe("M 180 218 H 250 V 116 H 280");
+  });
+
+  it("uses primary content edges when anchor boxes are supplied", () => {
+    const path = mindMapMainBranchPath({
+      ...mainParams,
+      pW: 260,
+      pH: 180,
+      ...child,
+      cW: 240,
+      cH: 160,
+      direction: "rhs",
+    }, {
+      parentAnchor: () => ({ left: 120, width: 80, centerY: 218 }),
+      childAnchor: () => ({ left: 300, width: 64, centerY: 116 }),
+    });
+
+    expect(path).toBe("M 200 218 H 270 V 116 H 300");
+  });
+
   it("turns the elbow a quarter for the top-down layout", () => {
     const path = mindMapMainBranchPath({ ...mainParams, ...child, cT: 300, direction: "down" });
 
@@ -108,4 +145,69 @@ describe("mindMapSubBranchPath", () => {
     expect(new Set(paths.map(trunkX)).size).toBe(1);
     expect(trunkX(paths[0])).toBe(160);
   });
+
+  it("keeps quote and image height out of sub-branch y anchors", () => {
+    const path = mindMapSubBranchPath({
+      ...subParams,
+      pH: 220,
+      cH: 180,
+      direction: "rhs",
+      isFirst: false,
+    }, NODE_GAP_X, {
+      parentAnchorY: () => 221,
+      childAnchorY: () => 114,
+    });
+
+    expect(path).toBe("M 130 221 H 160 V 114 H 190");
+  });
 });
+
+describe("resolveMindMapPrimaryAnchorY", () => {
+  it("measures the primary content within the matched mind-elixir frame", () => {
+    const container = document.createElement("div");
+    const map = document.createElement("div");
+    map.className = "map-canvas";
+    const parent = document.createElement("me-parent");
+    const primary = document.createElement("div");
+    primary.className = "mindmap-node-primary";
+    primary.textContent = "第一行\n第二行";
+    parent.append(primary, document.createElement("div"));
+    map.append(parent);
+    container.append(map);
+    document.body.append(container);
+
+    mockBox(parent, { top: 200, left: 80, width: 180, height: 180 });
+    mockRect(parent, { top: 400, left: 160, width: 360, height: 360 });
+    mockRect(primary, { top: 410, left: 172, width: 320, height: 48 });
+    vi.spyOn(window, "getComputedStyle").mockImplementation((element) => ({
+      transform: element === map ? "matrix(2, 0, 0, 2, 0, 0)" : "none",
+      lineHeight: "24px",
+    } as CSSStyleDeclaration));
+
+    const geometry = {
+      top: 200,
+      left: 80,
+      width: 180,
+      height: 180,
+    };
+    expect(resolveMindMapPrimaryAnchorY(container, geometry)).toBe(211);
+    expect(resolveMindMapPrimaryAnchor(container, geometry)).toEqual({
+      left: 86,
+      width: 160,
+      centerY: 211,
+    });
+  });
+});
+
+function mockBox(element: HTMLElement, box: { top: number; left: number; width: number; height: number }) {
+  Object.defineProperties(element, {
+    offsetTop: { configurable: true, value: box.top },
+    offsetLeft: { configurable: true, value: box.left },
+    offsetWidth: { configurable: true, value: box.width },
+    offsetHeight: { configurable: true, value: box.height },
+  });
+}
+
+function mockRect(element: HTMLElement, rect: { top: number; left: number; width: number; height: number }) {
+  element.getBoundingClientRect = () => new DOMRect(rect.left, rect.top, rect.width, rect.height);
+}

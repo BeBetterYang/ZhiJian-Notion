@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   hasNodeAttachments,
+  isOutlineBlockContentEmpty,
   outlineEnterAction,
   outlineNodeKeyAction,
   partitionNodeChildren,
@@ -40,6 +41,14 @@ describe("partitionNodeChildren", () => {
 });
 
 describe("outlineNodeKeyAction", () => {
+  it("reads emptiness from BlockNote content instead of wrapper node size", () => {
+    expect(isOutlineBlockContentEmpty({ content: "" })).toBe(true);
+    expect(isOutlineBlockContentEmpty({ content: [] })).toBe(true);
+    expect(isOutlineBlockContentEmpty({ content: [{ type: "text", text: "" }] })).toBe(true);
+    expect(isOutlineBlockContentEmpty({ content: [{ type: "text", text: "Web端" }] })).toBe(false);
+    expect(isOutlineBlockContentEmpty({ content: "Web端" })).toBe(false);
+  });
+
   it("protects a node whose image would be stranded", () => {
     const target = block("n1", "paragraph", [block("img", "image")]);
 
