@@ -1578,6 +1578,14 @@ textarea {
   color: var(--zhijian-ink);
 }
 
+/* MindElixir colours every native <em> with its selection colour. Italic is a
+   text mark here, so an uncoloured run must keep the node's own ink; a real
+   textColor on the surrounding run still flows through this inheritance. */
+.mindmap-node-renderer em,
+.mindmap-node-editor em {
+  color: inherit;
+}
+
 .mindmap-node-editor .bn-editor {
   min-height: 0;
   padding: 0;
