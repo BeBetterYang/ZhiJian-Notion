@@ -1115,6 +1115,23 @@ textarea {
   margin: 0;
   padding: 0;
   pointer-events: auto;
+}
+
+/* A node at rest is a box to grab, not a paragraph to select: pressing on its text
+   and pulling used to start a browser text selection, which swallowed the gesture
+   mind-elixir reads as a drag — so an unselected node could not be dragged by its
+   text at all, and a selected one turned the drag into a highlight more often than
+   not. The text becomes selectable the moment the node is being edited, which is
+   the only state where a range means anything: the toolbar reads its range from the
+   node's own editor, never from this copy. */
+.mindmap-node-display,
+.mindmap-node-renderer {
+  user-select: none;
+}
+
+.mindmap-node-editor-slot,
+.mindmap-content-host,
+.mindmap-node-editor {
   user-select: text;
 }
 
@@ -1520,6 +1537,13 @@ textarea {
 .mindmap-node-renderer *,
 .mindmap-node-editor * {
   pointer-events: auto;
+}
+
+/* Selectable inside the editor only — the display copy stays a drag handle, see the
+   `user-select` pair further up. Kept as a blanket rule because BlockNote's own
+   wrappers each carry their own `user-select`. */
+.mindmap-content-host *,
+.mindmap-node-editor * {
   user-select: text;
 }
 
