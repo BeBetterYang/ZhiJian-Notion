@@ -11,7 +11,7 @@ import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 import { handleShortcutKeyDown } from "../shared/shortcuts";
 import { createMindMapStructureSignature, treeToMindElixir } from "./mindElixirAdapter";
 import { applyMindElixirOperation } from "./mindElixirCommands";
-import { displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, mindMapEditingLayout, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, type EditingTarget } from "./mindMapInteraction";
+import { didMindMapGeometryChange, displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, mindMapNodeGeometrySignature, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, type EditingTarget } from "./mindMapInteraction";
 import { MINDMAP_THEME } from "./mindMapTheme";
 import { MindMapLinkHoverTracker } from "./MindMapLinkHoverTracker";
 import { renderMindMapNodeDisplayHtml } from "./MindMapNodeRenderer";
@@ -70,6 +70,10 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
   const selectedNodeRef = useRef(selectedNodeId);
   const lastSelectedNodeId = useRef<string | null>(selectedNodeId);
   const editingTargetRef = useRef<EditingTarget>(null);
+  const editingGeometrySignature = useRef<string | null>(null);
+  const geometryLayoutFrame = useRef(0);
+  const geometrySettleFrame = useRef(0);
+  const linkFrame = useRef(0);
   const editingShellRef = useRef<string | null>(null);
   const floatingFrame = useRef<HTMLElement | null>(null);
   const floatingNodeId = useRef<string | null>(null);
@@ -81,6 +85,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
   const contentHosts = useRef(new Map<string, HTMLDivElement>());
   const [contentTargets, setContentTargets] = useState<Array<{ id: string; host: HTMLElement }>>([]);
   const [editingTarget, setEditingTarget] = useState<EditingTarget>(null);
+  const [liveGeometryNodeId, setLiveGeometryNodeId] = useState<string | null>(null);
 
   const collectTargets = useCallback(() => {
     const slots = Array.from(containerRef.current?.querySelectorAll<HTMLElement>("[data-zhijian-node-content]") ?? []);
@@ -110,6 +115,30 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       try { mind.selectNode(mind.findEle(restoreId)); } catch { lastSelectedNodeId.current = null; }
     });
   }, [collectTargets]);
+
+  const scheduleLinkDiv = useCallback(() => {
+    window.cancelAnimationFrame(linkFrame.current);
+    linkFrame.current = window.requestAnimationFrame(() => {
+      linkFrame.current = 0;
+      mindRef.current?.linkDiv();
+    });
+  }, []);
+
+  const scheduleGeometryLayout = useCallback((nodeId: string) => {
+    window.cancelAnimationFrame(geometryLayoutFrame.current);
+    window.cancelAnimationFrame(geometrySettleFrame.current);
+    setLiveGeometryNodeId(nodeId);
+    geometryLayoutFrame.current = window.requestAnimationFrame(() => {
+      geometryLayoutFrame.current = 0;
+      scheduleLinkDiv();
+      geometrySettleFrame.current = window.requestAnimationFrame(() => {
+        geometrySettleFrame.current = 0;
+        if (editingTargetRef.current?.nodeId === nodeId) {
+          setLiveGeometryNodeId((current) => current === nodeId ? null : current);
+        }
+      });
+    });
+  }, [scheduleLinkDiv]);
 
   // `editingTargetRef` has to lead the state, not trail it. The tree-sync effect
   // below is declared before the editing effect, so an effect that only wrote the
@@ -162,6 +191,12 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
   // Switching to the outline unmounts the map, editor and all, and a host nobody is
   // filling any more must not keep the outline's toolbar bridge stood down.
   useEffect(() => () => onNodeToolbarRef.current(false), []);
+
+  useEffect(() => () => {
+    window.cancelAnimationFrame(linkFrame.current);
+    window.cancelAnimationFrame(geometryLayoutFrame.current);
+    window.cancelAnimationFrame(geometrySettleFrame.current);
+  }, []);
 
   const reportNodeToolbar = useCallback((active: boolean) => onNodeToolbarRef.current(active), []);
 
@@ -299,12 +334,16 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
 
   const beginNodeEdit = useCallback((nodeId: string, focusBlockId?: string, focusPoint?: { x: number; y: number }) => {
     selectMindElixirNode(nodeId);
+    editingGeometrySignature.current = mindMapNodeGeometrySignature(storeRef.current.getNode(nodeId));
+    setLiveGeometryNodeId(null);
     applyEditingTarget({ nodeId, focusBlockId, focusPoint });
   }, [applyEditingTarget, selectMindElixirNode]);
   beginNodeEditRef.current = beginNodeEdit;
 
   const finishNodeEdit = useCallback(() => {
     applyEditingTarget(null);
+    editingGeometrySignature.current = null;
+    setLiveGeometryNodeId(null);
     onActiveRef.current(true);
     // The node stays selected, and on the canvas "selected" is a keyboard state:
     // mind-elixir reads Enter and Tab off its own container. Editing left the focus
@@ -365,8 +404,16 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     const nextData = treeToMindElixir(tree, { searchQuery, visibleNodeIds, rootNodeId: zoomedNodeId });
     const mode = mindMapUpdateMode(structureSignature.current !== nextSignature, editingTargetRef.current !== null);
     if (mode === "content") {
-      const addedShell = updateMindMapNodesInPlace(mindRef.current, nextData.nodeData, editingTargetRef.current?.nodeId);
-      if (addedShell) queueMicrotask(collectTargets);
+      const editingNodeId = editingTargetRef.current?.nodeId;
+      const geometrySignature = editingNodeId ? mindMapNodeGeometrySignature(tree.nodes[editingNodeId]) : "";
+      const geometryChanged = editingNodeId
+        ? didMindMapGeometryChange(editingGeometrySignature.current, geometrySignature)
+        : false;
+      if (geometryChanged) editingGeometrySignature.current = geometrySignature;
+      const result = updateMindMapNodesInPlace(mindRef.current, nextData.nodeData, editingNodeId);
+      if (result.addedShell) queueMicrotask(collectTargets);
+      if (geometryChanged && editingNodeId) scheduleGeometryLayout(editingNodeId);
+      else if (result.changedNodeIds.some((id) => id !== editingNodeId)) scheduleLinkDiv();
       return;
     }
     if (mode === "defer-structure") {
@@ -374,9 +421,9 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       return;
     }
     refreshStructure(nextData, nextSignature);
-  }, [collectTargets, refreshStructure, searchQuery, tree, visibleNodeIds, zoomedNodeId]);
+  }, [collectTargets, refreshStructure, scheduleGeometryLayout, scheduleLinkDiv, searchQuery, tree, visibleNodeIds, zoomedNodeId]);
 
-  const editingLayout = mindMapEditingLayout(editingTarget ? tree.nodes[editingTarget.nodeId] : undefined);
+  const floatingEditingNodeId = editingTarget && liveGeometryNodeId !== editingTarget.nodeId ? editingTarget.nodeId : null;
 
   useEffect(() => {
     const previousNodeId = editingShellRef.current;
@@ -388,19 +435,15 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     }
     // Before `syncEditingShells`, so the frame is pinned to the display layer's
     // size rather than to whatever the editor has already grown to.
-    const floatingNode = editingLayout === "float" ? editingTarget?.nodeId ?? null : null;
-    const floatChanged = setEditingFloat(floatingNode);
+    const floatChanged = setEditingFloat(floatingEditingNodeId);
     const shellChanged = syncEditingShells(containerRef.current, editingTarget?.nodeId);
-    // Starting a float moves nothing — the frame keeps the size it already had — so
-    // every line mind-elixir has drawn still belongs where it is, and relinking
-    // would actively harm: it reads a first-level node's connector off `me-tpc`,
-    // which is now out of flow, and would drop the line to the middle of the
-    // grown box. Every other transition (a float ending, a display layer restored
-    // for the node that just left, a table or image editing live) does change the
-    // flow, and relinking is a full-canvas measure pass worth spending there.
-    const flowChanged = floatingNode === null || (previousNodeId !== null && previousNodeId !== floatingNode);
-    if (flowChanged && (floatChanged || shellChanged)) {
-      window.requestAnimationFrame(() => mindRef.current?.linkDiv());
+    // Starting an overlay moves nothing — the frame keeps the size it already had.
+    // Relinking there would measure the absolutely positioned editor rather than
+    // the flow box and is exactly what makes neighbouring branches twitch while
+    // typing. A real geometry release or leaving edit mode gets one coalesced pass.
+    const flowChanged = floatingEditingNodeId === null || (previousNodeId !== null && previousNodeId !== floatingEditingNodeId);
+    if (liveGeometryNodeId !== editingTarget?.nodeId && flowChanged && (floatChanged || shellChanged)) {
+      scheduleLinkDiv();
     }
     if (editingTarget === null && pendingStructure.current) {
       pendingStructure.current = false;
@@ -411,7 +454,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       const signature = createMindMapStructureSignature(current, visibleNodeIds, zoomedNodeId);
       if (signature !== structureSignature.current) refreshStructure(treeToMindElixir(current, { searchQuery, visibleNodeIds, rootNodeId: zoomedNodeId }), signature);
     }
-  }, [editingLayout, editingTarget, refreshStructure, searchQuery, setEditingFloat, visibleNodeIds, zoomedNodeId]);
+  }, [editingTarget, floatingEditingNodeId, liveGeometryNodeId, refreshStructure, scheduleLinkDiv, searchQuery, setEditingFloat, visibleNodeIds, zoomedNodeId]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -556,11 +599,11 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       // is what keeps typing off the critical path however many nodes there are.
       if (entries.every((entry) => nodeIdByHost.get(entry.target) === floatingNodeId.current)) return;
       window.cancelAnimationFrame(frame);
-      frame = window.requestAnimationFrame(() => mindRef.current?.linkDiv());
+      frame = window.requestAnimationFrame(scheduleLinkDiv);
     });
     contentTargets.forEach(({ host }) => observer.observe(host));
     return () => { observer.disconnect(); window.cancelAnimationFrame(frame); };
-  }, [contentTargets]);
+  }, [contentTargets, scheduleLinkDiv]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -572,15 +615,17 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     // phase on the canvas instead of a listener per picture.
     const onImageLoad = (event: Event) => {
       if (!(event.target instanceof HTMLImageElement)) return;
+      const shell = event.target.closest<HTMLElement>(".mindmap-node-shell[data-node-id]");
+      if (shell?.dataset.nodeId === floatingNodeId.current) return;
       window.cancelAnimationFrame(frame);
-      frame = window.requestAnimationFrame(() => mindRef.current?.linkDiv());
+      frame = window.requestAnimationFrame(scheduleLinkDiv);
     };
     container.addEventListener("load", onImageLoad, true);
     return () => {
       container.removeEventListener("load", onImageLoad, true);
       window.cancelAnimationFrame(frame);
     };
-  }, []);
+  }, [scheduleLinkDiv]);
 
   return (
     <>
@@ -683,9 +728,9 @@ function syncEditingShells(container: HTMLElement | null, editingNodeId: string 
 }
 
 function updateMindMapNodesInPlace(mind: MindElixir | null, root: NodeObj, editingNodeId?: string) {
-  if (!mind) return false;
+  if (!mind) return { addedShell: false, changedNodeIds: [] as string[] };
   let addedShell = false;
-  let changed = false;
+  const changedNodeIds: string[] = [];
   const visit = (nextNode: NodeObj) => {
     try {
       const topicElement = mind.findEle(nextNode.id);
@@ -700,15 +745,14 @@ function updateMindMapNodesInPlace(mind: MindElixir | null, root: NodeObj, editi
       });
       const result = updateStableShell(topicElement, nextNode.dangerouslySetInnerHTML ?? "", nextNode.id === editingNodeId);
       addedShell = addedShell || result === "added";
-      changed = changed || result !== "unchanged";
+      if (result !== "unchanged") changedNodeIds.push(nextNode.id);
     } catch {
       // Collapsed descendants are not mounted.
     }
     nextNode.children?.forEach(visit);
   };
   visit(root);
-  if (changed) mind.linkDiv();
-  return addedShell;
+  return { addedShell, changedNodeIds };
 }
 
 function updateStableShell(topicElement: HTMLElement, nextHtml: string, editing: boolean) {

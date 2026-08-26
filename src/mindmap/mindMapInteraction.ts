@@ -110,21 +110,26 @@ export function hiddenDescendantCount(tree: Pick<ZhiJianTree, "nodes">, nodeId: 
 }
 
 /**
- * Whether an edited node's box may leave the map's flow while the edit lasts.
+ * The parts of a node document that change the box MindElixir has to lay out.
  *
- * mind-elixir lays every node out in normal flow, so typing a character grows the
- * box, pushes the node's own subtree and every later sibling, and costs a full
- * connector relink — per keystroke. `"float"` pins the node's frame at the size it
- * already has and lets the box grow above the map instead, so the layout only
- * settles once, on the way out.
- *
- * Tables and images stay `"live"` on purpose: their geometry is the thing being
- * edited — dragging an image's resize handle, adding a table row — so the map has
- * to follow along while it happens.
+ * Text content, caret movement and rich-text marks are deliberately excluded:
+ * those are edited in an overlay and should not make sibling nodes jiggle while
+ * typing. Image count/source/preview width and table shape/column widths are
+ * included because they change the visual node's measured geometry and therefore
+ * need the map to settle around the new box.
  */
-export function mindMapEditingLayout(node?: Pick<ZhiJianNode, "type" | "blocks">) {
-  if (!node || node.type === "table") return "live" as const;
-  return node.blocks?.some((block) => block.type === "image") ? ("live" as const) : ("float" as const);
+export function mindMapNodeGeometrySignature(node?: Pick<ZhiJianNode, "type" | "blocks" | "props">) {
+  if (!node) return "";
+  return [
+    node.type === "table" ? tableGeometrySignature(node.props?.table) : "",
+    ...(node.blocks ?? [])
+      .filter((block) => block.type === "image")
+      .map((block) => imageGeometrySignature(block)),
+  ].join(UNIT);
+}
+
+export function didMindMapGeometryChange(previous: string | null, next: string) {
+  return previous !== null && previous !== next;
 }
 
 /**
@@ -229,6 +234,30 @@ function blockSignature(block: ZhiJianNodeBlock) {
     image.caption ?? "",
     image.previewWidth ?? 480,
     image.showPreview ?? true,
+  ].join(FIELD);
+}
+
+function imageGeometrySignature(block: Extract<ZhiJianNodeBlock, { type: "image" }>) {
+  const image = block.image;
+  return [
+    "i",
+    block.id,
+    image.assetId ?? image.url ?? "",
+    image.previewWidth ?? 480,
+    image.showPreview ?? true,
+  ].join(FIELD);
+}
+
+function tableGeometrySignature(table?: ZhiJianTableData) {
+  if (!table) return "";
+  const columnCount = Math.max(0, ...table.rows.map((row) => row.length));
+  return [
+    "t",
+    table.rows.length,
+    columnCount,
+    table.headerRows ?? 0,
+    table.headerCols ?? 0,
+    ...(table.columnWidths ?? []).map((width) => width ?? ""),
   ].join(FIELD);
 }
 

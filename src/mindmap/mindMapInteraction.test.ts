@@ -4,9 +4,10 @@ import { createInitialTree, type ZhiJianNode, type ZhiJianTree } from "../core/t
 import { blockNoteToTree, treeToBlockNote } from "../outline/blockNoteAdapter";
 import {
   displayClickAction,
+  didMindMapGeometryChange,
   hiddenDescendantCount,
   isBlankMindMapSurface,
-  mindMapEditingLayout,
+  mindMapNodeGeometrySignature,
   mindMapUpdateMode,
   nodeDocumentSignature,
   nodeTextSelectionOffsets,
@@ -247,22 +248,32 @@ describe("suppressMindMapEnter", () => {
   });
 });
 
-describe("mindMapEditingLayout", () => {
-  it("floats a text node so typing never reflows the map", () => {
-    expect(mindMapEditingLayout({ type: "text" })).toBe("float");
-    expect(mindMapEditingLayout({ type: "heading" })).toBe("float");
-    expect(mindMapEditingLayout({ type: "todo", blocks: [] })).toBe("float");
-    // A quote grows the box like text does, so it floats with it.
-    expect(mindMapEditingLayout({ type: "text", blocks: [{ id: "q1", type: "quote", content: { text: "引用" } }] })).toBe("float");
+describe("mindMapNodeGeometrySignature", () => {
+  it("ignores text, rich-text marks and quotes while editing in the overlay", () => {
+    const base = mindMapNodeGeometrySignature({ type: "text", props: {}, blocks: [] });
+    expect(mindMapNodeGeometrySignature({ type: "text", props: {}, blocks: [{ id: "q1", type: "quote", content: { text: "引用" } }] })).toBe(base);
+    expect(mindMapNodeGeometrySignature({ type: "heading", props: { style: { fontStyle: "italic" } }, blocks: [] })).toBe(base);
   });
 
-  it("keeps tables and images laid out live, because the edit is their geometry", () => {
-    expect(mindMapEditingLayout({ type: "table" })).toBe("live");
-    expect(mindMapEditingLayout({ type: "text", blocks: [{ id: "i1", type: "image", image: { url: "asset:1" } }] })).toBe("live");
+  it("changes when an image's measured box changes", () => {
+    const base = mindMapNodeGeometrySignature({ type: "text", blocks: [{ id: "i1", type: "image", image: { url: "asset:1", previewWidth: 320 } }] });
+    const resized = mindMapNodeGeometrySignature({ type: "text", blocks: [{ id: "i1", type: "image", image: { url: "asset:1", previewWidth: 420 } }] });
+    expect(didMindMapGeometryChange(base, resized)).toBe(true);
   });
 
-  it("never floats a node it cannot see", () => {
-    expect(mindMapEditingLayout(undefined)).toBe("live");
+  it("changes for table rows, columns and column widths, but not cell text", () => {
+    const table = (text: string, widths = [120]) => mindMapNodeGeometrySignature({
+      type: "table",
+      props: { table: { rows: [[{ content: { text } }]], columnWidths: widths } },
+      blocks: [],
+    });
+    expect(table("甲")).toBe(table("乙"));
+    expect(didMindMapGeometryChange(table("甲"), table("甲", [160]))).toBe(true);
+    expect(didMindMapGeometryChange(table("甲"), mindMapNodeGeometrySignature({
+      type: "table",
+      props: { table: { rows: [[{ content: { text: "甲" } }], [{ content: { text: "乙" } }]], columnWidths: [120] } },
+      blocks: [],
+    }))).toBe(true);
   });
 });
 
