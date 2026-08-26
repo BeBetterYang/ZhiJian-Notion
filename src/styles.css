@@ -673,9 +673,6 @@ textarea {
   overflow: auto;
   padding: 14px 10px 48px;
   container-type: inline-size;
-  --outline-marker-size: 6px;
-  --outline-marker-leading: -23px;
-  --outline-marker-trailing: 34px;
 }
 
 .outline-panel .bn-container {
@@ -789,13 +786,10 @@ textarea {
      by 24px on a three-row table. `1lh` rather than a constant because a heading's
      line box is 48px or 72px, not 24px, and the handle follows it there. */
   align-self: flex-start;
-  flex: 0 0 var(--outline-marker-size);
-  width: var(--outline-marker-size);
-  height: var(--outline-marker-size);
-  margin: calc((1lh - var(--outline-marker-size)) / 2)
-    var(--outline-marker-trailing)
-    0
-    var(--outline-marker-leading);
+  flex: 0 0 6px;
+  width: 6px;
+  height: 6px;
+  margin: calc((1lh - 6px) / 2) 14px 0 0;
   border-radius: 50%;
   background: #686970;
   pointer-events: none;
@@ -916,7 +910,7 @@ textarea {
 .outline-panel .bn-side-menu [draggable="true"] {
   position: absolute;
   top: 3px;
-  left: calc(100% - 32px);
+  left: calc(100% - 9px);
   width: 24px;
   min-width: 24px;
   height: 24px;
