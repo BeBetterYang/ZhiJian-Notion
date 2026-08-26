@@ -1,7 +1,7 @@
 import "mind-elixir/style.css";
 import MindElixir, { type MindElixirData, type NodeObj, type Operation, type Topic } from "mind-elixir";
 import { zh_CN } from "mind-elixir/i18n";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { createPortal } from "react-dom";
 import type { ZhiJianTree } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
@@ -11,7 +11,7 @@ import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 import { handleShortcutKeyDown } from "../shared/shortcuts";
 import { createMindMapStructureSignature, treeToMindElixir } from "./mindElixirAdapter";
 import { applyMindElixirOperation } from "./mindElixirCommands";
-import { didMindMapGeometryChange, displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, mindMapNodeGeometrySignature, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, type EditingTarget } from "./mindMapInteraction";
+import { displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, isMindMapGeometryEditorElement, mindMapMeasuredSizeChanged, mindMapScaleFromTransform, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, unscaledMindMapSize, type EditingTarget, type MindMapMeasuredSize } from "./mindMapInteraction";
 import { MINDMAP_THEME } from "./mindMapTheme";
 import { MindMapLinkHoverTracker } from "./MindMapLinkHoverTracker";
 import { renderMindMapNodeDisplayHtml } from "./MindMapNodeRenderer";
@@ -70,13 +70,12 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
   const selectedNodeRef = useRef(selectedNodeId);
   const lastSelectedNodeId = useRef<string | null>(selectedNodeId);
   const editingTargetRef = useRef<EditingTarget>(null);
-  const editingGeometrySignature = useRef<string | null>(null);
-  const geometryLayoutFrame = useRef(0);
-  const geometrySettleFrame = useRef(0);
+  const geometryMeasureFrame = useRef(0);
   const linkFrame = useRef(0);
   const editingShellRef = useRef<string | null>(null);
   const floatingFrame = useRef<HTMLElement | null>(null);
   const floatingNodeId = useRef<string | null>(null);
+  const floatingFrameSize = useRef<MindMapMeasuredSize | null>(null);
   const treeRef = useRef(tree);
   treeRef.current = tree;
   projectionOptionsRef.current = { searchQuery, visibleNodeIds, rootNodeId: zoomedNodeId };
@@ -85,7 +84,6 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
   const contentHosts = useRef(new Map<string, HTMLDivElement>());
   const [contentTargets, setContentTargets] = useState<Array<{ id: string; host: HTMLElement }>>([]);
   const [editingTarget, setEditingTarget] = useState<EditingTarget>(null);
-  const [liveGeometryNodeId, setLiveGeometryNodeId] = useState<string | null>(null);
 
   const collectTargets = useCallback(() => {
     const slots = Array.from(containerRef.current?.querySelectorAll<HTMLElement>("[data-zhijian-node-content]") ?? []);
@@ -124,19 +122,12 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     });
   }, []);
 
-  const scheduleGeometryLayout = useCallback((nodeId: string) => {
-    window.cancelAnimationFrame(geometryLayoutFrame.current);
-    window.cancelAnimationFrame(geometrySettleFrame.current);
-    setLiveGeometryNodeId(nodeId);
-    geometryLayoutFrame.current = window.requestAnimationFrame(() => {
-      geometryLayoutFrame.current = 0;
-      scheduleLinkDiv();
-      geometrySettleFrame.current = window.requestAnimationFrame(() => {
-        geometrySettleFrame.current = 0;
-        if (editingTargetRef.current?.nodeId === nodeId) {
-          setLiveGeometryNodeId((current) => current === nodeId ? null : current);
-        }
-      });
+  const scheduleGeometryMeasure = useCallback((nodeId: string) => {
+    window.cancelAnimationFrame(geometryMeasureFrame.current);
+    geometryMeasureFrame.current = window.requestAnimationFrame(() => {
+      geometryMeasureFrame.current = 0;
+      if (editingTargetRef.current?.nodeId !== nodeId) return;
+      if (resizeFloatingFrameToEditor(mindRef.current, nodeId, floatingFrameSize)) scheduleLinkDiv();
     });
   }, [scheduleLinkDiv]);
 
@@ -169,12 +160,13 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     }
     floatingFrame.current = next;
     floatingNodeId.current = next ? nodeId : null;
+    floatingFrameSize.current = null;
     if (next) {
-      // Layout pixels, not `getBoundingClientRect`: the canvas carries a zoom
-      // transform, and the frame has to be pinned in the map's own units.
-      next.style.width = `${next.offsetWidth}px`;
-      next.style.height = `${next.offsetHeight}px`;
+      const size = measureElementSize(next, mindRef.current);
+      next.style.width = `${size.width}px`;
+      next.style.height = `${size.height}px`;
       next.classList.add("is-mindmap-floating");
+      floatingFrameSize.current = size;
     }
     return true;
   }, []);
@@ -194,8 +186,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
 
   useEffect(() => () => {
     window.cancelAnimationFrame(linkFrame.current);
-    window.cancelAnimationFrame(geometryLayoutFrame.current);
-    window.cancelAnimationFrame(geometrySettleFrame.current);
+    window.cancelAnimationFrame(geometryMeasureFrame.current);
   }, []);
 
   const reportNodeToolbar = useCallback((active: boolean) => onNodeToolbarRef.current(active), []);
@@ -334,16 +325,12 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
 
   const beginNodeEdit = useCallback((nodeId: string, focusBlockId?: string, focusPoint?: { x: number; y: number }) => {
     selectMindElixirNode(nodeId);
-    editingGeometrySignature.current = mindMapNodeGeometrySignature(storeRef.current.getNode(nodeId));
-    setLiveGeometryNodeId(null);
     applyEditingTarget({ nodeId, focusBlockId, focusPoint });
   }, [applyEditingTarget, selectMindElixirNode]);
   beginNodeEditRef.current = beginNodeEdit;
 
   const finishNodeEdit = useCallback(() => {
     applyEditingTarget(null);
-    editingGeometrySignature.current = null;
-    setLiveGeometryNodeId(null);
     onActiveRef.current(true);
     // The node stays selected, and on the canvas "selected" is a keyboard state:
     // mind-elixir reads Enter and Tab off its own container. Editing left the focus
@@ -405,15 +392,13 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     const mode = mindMapUpdateMode(structureSignature.current !== nextSignature, editingTargetRef.current !== null);
     if (mode === "content") {
       const editingNodeId = editingTargetRef.current?.nodeId;
-      const geometrySignature = editingNodeId ? mindMapNodeGeometrySignature(tree.nodes[editingNodeId]) : "";
-      const geometryChanged = editingNodeId
-        ? didMindMapGeometryChange(editingGeometrySignature.current, geometrySignature)
-        : false;
-      if (geometryChanged) editingGeometrySignature.current = geometrySignature;
       const result = updateMindMapNodesInPlace(mindRef.current, nextData.nodeData, editingNodeId);
       if (result.addedShell) queueMicrotask(collectTargets);
-      if (geometryChanged && editingNodeId) scheduleGeometryLayout(editingNodeId);
-      else if (result.changedNodeIds.some((id) => id !== editingNodeId)) scheduleLinkDiv();
+      if (editingNodeId && result.changedNodeIds.includes(editingNodeId) && isMindMapGeometryEditingNode(mindRef.current, editingNodeId)) {
+        scheduleGeometryMeasure(editingNodeId);
+      } else if (result.changedNodeIds.some((id) => id !== editingNodeId)) {
+        scheduleLinkDiv();
+      }
       return;
     }
     if (mode === "defer-structure") {
@@ -421,9 +406,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       return;
     }
     refreshStructure(nextData, nextSignature);
-  }, [collectTargets, refreshStructure, scheduleGeometryLayout, scheduleLinkDiv, searchQuery, tree, visibleNodeIds, zoomedNodeId]);
-
-  const floatingEditingNodeId = editingTarget && liveGeometryNodeId !== editingTarget.nodeId ? editingTarget.nodeId : null;
+  }, [collectTargets, refreshStructure, scheduleGeometryMeasure, scheduleLinkDiv, searchQuery, tree, visibleNodeIds, zoomedNodeId]);
 
   useEffect(() => {
     const previousNodeId = editingShellRef.current;
@@ -433,17 +416,22 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     if (previousNodeId && previousNodeId !== editingTarget?.nodeId) {
       refreshNodeDisplay(mindRef.current, treeRef.current, previousNodeId, searchQuery);
     }
-    // Before `syncEditingShells`, so the frame is pinned to the display layer's
-    // size rather than to whatever the editor has already grown to.
-    const floatChanged = setEditingFloat(floatingEditingNodeId);
-    const shellChanged = syncEditingShells(containerRef.current, editingTarget?.nodeId);
-    // Starting an overlay moves nothing — the frame keeps the size it already had.
-    // Relinking there would measure the absolutely positioned editor rather than
-    // the flow box and is exactly what makes neighbouring branches twitch while
-    // typing. A real geometry release or leaving edit mode gets one coalesced pass.
-    const flowChanged = floatingEditingNodeId === null || (previousNodeId !== null && previousNodeId !== floatingEditingNodeId);
-    if (liveGeometryNodeId !== editingTarget?.nodeId && flowChanged && (floatChanged || shellChanged)) {
-      scheduleLinkDiv();
+    let shellChanged = false;
+    let frameChanged = false;
+    let floatChanged = false;
+    if (editingTarget) {
+      // Pin the frame before revealing the editor. The topic itself stays absolute
+      // for the full edit lifecycle, so typing never re-enters mind-elixir's flow.
+      floatChanged = setEditingFloat(editingTarget.nodeId);
+      shellChanged = syncEditingShells(containerRef.current, editingTarget.nodeId);
+      if (previousNodeId && previousNodeId !== editingTarget.nodeId && (floatChanged || shellChanged)) scheduleLinkDiv();
+    } else {
+      // Show the final display while the topic is still floating, then resize the
+      // placeholder once to the display size before putting the topic back in flow.
+      shellChanged = syncEditingShells(containerRef.current, undefined);
+      if (previousNodeId) frameChanged = resizeFloatingFrameToDisplay(mindRef.current, previousNodeId, floatingFrameSize);
+      floatChanged = setEditingFloat(null);
+      if ((previousNodeId || floatChanged) && (frameChanged || floatChanged || shellChanged)) scheduleLinkDiv();
     }
     if (editingTarget === null && pendingStructure.current) {
       pendingStructure.current = false;
@@ -454,7 +442,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       const signature = createMindMapStructureSignature(current, visibleNodeIds, zoomedNodeId);
       if (signature !== structureSignature.current) refreshStructure(treeToMindElixir(current, { searchQuery, visibleNodeIds, rootNodeId: zoomedNodeId }), signature);
     }
-  }, [editingTarget, floatingEditingNodeId, liveGeometryNodeId, refreshStructure, scheduleLinkDiv, searchQuery, setEditingFloat, visibleNodeIds, zoomedNodeId]);
+  }, [editingTarget, refreshStructure, scheduleLinkDiv, searchQuery, setEditingFloat, visibleNodeIds, zoomedNodeId]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -594,16 +582,17 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     const nodeIdByHost = new Map(contentTargets.map(({ id, host }) => [host as Element, id]));
     let frame = 0;
     const observer = new ResizeObserver((entries) => {
-      // A floating node grows over the map rather than through it, so its own
-      // resize moves nothing and the connector layer needs no measure pass. This
-      // is what keeps typing off the critical path however many nodes there are.
-      if (entries.every((entry) => nodeIdByHost.get(entry.target) === floatingNodeId.current)) return;
+      const floatingNode = floatingNodeId.current;
+      if (floatingNode && entries.every((entry) => nodeIdByHost.get(entry.target) === floatingNode)) {
+        if (entries.some((entry) => isMindMapGeometryEditorElement(entry.target))) scheduleGeometryMeasure(floatingNode);
+        return;
+      }
       window.cancelAnimationFrame(frame);
       frame = window.requestAnimationFrame(scheduleLinkDiv);
     });
     contentTargets.forEach(({ host }) => observer.observe(host));
     return () => { observer.disconnect(); window.cancelAnimationFrame(frame); };
-  }, [contentTargets, scheduleLinkDiv]);
+  }, [contentTargets, scheduleGeometryMeasure, scheduleLinkDiv]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -616,7 +605,10 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     const onImageLoad = (event: Event) => {
       if (!(event.target instanceof HTMLImageElement)) return;
       const shell = event.target.closest<HTMLElement>(".mindmap-node-shell[data-node-id]");
-      if (shell?.dataset.nodeId === floatingNodeId.current) return;
+      if (shell?.dataset.nodeId === floatingNodeId.current) {
+        scheduleGeometryMeasure(shell.dataset.nodeId);
+        return;
+      }
       window.cancelAnimationFrame(frame);
       frame = window.requestAnimationFrame(scheduleLinkDiv);
     };
@@ -625,7 +617,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       container.removeEventListener("load", onImageLoad, true);
       window.cancelAnimationFrame(frame);
     };
-  }, [scheduleLinkDiv]);
+  }, [scheduleGeometryMeasure, scheduleLinkDiv]);
 
   return (
     <>
@@ -671,6 +663,77 @@ function nodeFrame(mind: MindElixir | null, nodeId: string) {
   } catch {
     // Collapsed descendants are not mounted.
     return null;
+  }
+}
+
+function mindMapCanvasScale(mind: MindElixir | null) {
+  if (!mind?.map) return 1;
+  const fallback = Number.isFinite(mind.scaleVal) && mind.scaleVal > 0 ? mind.scaleVal : 1;
+  const transform = window.getComputedStyle(mind.map).transform;
+  return mindMapScaleFromTransform(transform, fallback);
+}
+
+function measureElementSize(element: HTMLElement, mind: MindElixir | null): MindMapMeasuredSize {
+  // Client rects preserve fractional CSS pixels but include the canvas transform;
+  // divide by its exact scale before writing the size back into map layout units.
+  const rect = element.getBoundingClientRect();
+  return unscaledMindMapSize({ width: rect.width, height: rect.height }, mindMapCanvasScale(mind));
+}
+
+function visibleTopicContent(topic: HTMLElement) {
+  return topic.querySelector<HTMLElement>(
+    ":scope > .mindmap-node-shell.is-editing .mindmap-node-editor, :scope > .mindmap-node-shell:not(.is-editing) .mindmap-node-display, :scope > .mindmap-node-shell",
+  );
+}
+
+function resizeFloatingFrameToElement(
+  mind: MindElixir | null,
+  nodeId: string,
+  sizeRef: MutableRefObject<MindMapMeasuredSize | null>,
+  element: HTMLElement | null,
+) {
+  const frame = nodeFrame(mind, nodeId);
+  if (!frame || !element) return false;
+  const nextSize = measureElementSize(element, mind);
+  if (!nextSize.width || !nextSize.height || !mindMapMeasuredSizeChanged(sizeRef.current, nextSize)) return false;
+  frame.style.width = `${nextSize.width}px`;
+  frame.style.height = `${nextSize.height}px`;
+  sizeRef.current = nextSize;
+  return true;
+}
+
+function resizeFloatingFrameToEditor(
+  mind: MindElixir | null,
+  nodeId: string,
+  sizeRef: MutableRefObject<MindMapMeasuredSize | null>,
+) {
+  try {
+    const editor = mind?.findEle(nodeId).querySelector<HTMLElement>(":scope > .mindmap-node-shell .mindmap-node-editor") ?? null;
+    return resizeFloatingFrameToElement(mind, nodeId, sizeRef, editor);
+  } catch {
+    return false;
+  }
+}
+
+function resizeFloatingFrameToDisplay(
+  mind: MindElixir | null,
+  nodeId: string,
+  sizeRef: MutableRefObject<MindMapMeasuredSize | null>,
+) {
+  try {
+    const topic = mind?.findEle(nodeId);
+    return topic ? resizeFloatingFrameToElement(mind, nodeId, sizeRef, visibleTopicContent(topic)) : false;
+  } catch {
+    return false;
+  }
+}
+
+function isMindMapGeometryEditingNode(mind: MindElixir | null, nodeId: string) {
+  try {
+    const editor = mind?.findEle(nodeId).querySelector<HTMLElement>(":scope > .mindmap-node-shell .mindmap-node-editor") ?? null;
+    return isMindMapGeometryEditorElement(editor);
+  } catch {
+    return false;
   }
 }
 

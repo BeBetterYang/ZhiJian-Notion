@@ -4,10 +4,11 @@ import { createInitialTree, type ZhiJianNode, type ZhiJianTree } from "../core/t
 import { blockNoteToTree, treeToBlockNote } from "../outline/blockNoteAdapter";
 import {
   displayClickAction,
-  didMindMapGeometryChange,
   hiddenDescendantCount,
   isBlankMindMapSurface,
-  mindMapNodeGeometrySignature,
+  isMindMapGeometryEditorElement,
+  mindMapMeasuredSizeChanged,
+  mindMapScaleFromTransform,
   mindMapUpdateMode,
   nodeDocumentSignature,
   nodeTextSelectionOffsets,
@@ -15,6 +16,7 @@ import {
   sameEditingTarget,
   shouldExitEditing,
   suppressMindMapEnter,
+  unscaledMindMapSize,
 } from "./mindMapInteraction";
 
 describe("MindMap interaction state", () => {
@@ -248,32 +250,39 @@ describe("suppressMindMapEnter", () => {
   });
 });
 
-describe("mindMapNodeGeometrySignature", () => {
-  it("ignores text, rich-text marks and quotes while editing in the overlay", () => {
-    const base = mindMapNodeGeometrySignature({ type: "text", props: {}, blocks: [] });
-    expect(mindMapNodeGeometrySignature({ type: "text", props: {}, blocks: [{ id: "q1", type: "quote", content: { text: "引用" } }] })).toBe(base);
-    expect(mindMapNodeGeometrySignature({ type: "heading", props: { style: { fontStyle: "italic" } }, blocks: [] })).toBe(base);
+describe("mind map geometry measurement", () => {
+  it("keeps subpixel DOM size changes instead of rounding them away", () => {
+    expect(mindMapMeasuredSizeChanged({ width: 120, height: 40 }, { width: 120, height: 40 })).toBe(false);
+    expect(mindMapMeasuredSizeChanged({ width: 120, height: 40 }, { width: 120.005, height: 40 })).toBe(false);
+    expect(mindMapMeasuredSizeChanged({ width: 120, height: 40 }, { width: 120.025, height: 40 })).toBe(true);
+    expect(mindMapMeasuredSizeChanged({ width: 120, height: 40 }, { width: 120, height: 40.025 })).toBe(true);
   });
 
-  it("changes when an image's measured box changes", () => {
-    const base = mindMapNodeGeometrySignature({ type: "text", blocks: [{ id: "i1", type: "image", image: { url: "asset:1", previewWidth: 320 } }] });
-    const resized = mindMapNodeGeometrySignature({ type: "text", blocks: [{ id: "i1", type: "image", image: { url: "asset:1", previewWidth: 420 } }] });
-    expect(didMindMapGeometryChange(base, resized)).toBe(true);
-  });
-
-  it("changes for table rows, columns and column widths, but not cell text", () => {
-    const table = (text: string, widths = [120]) => mindMapNodeGeometrySignature({
-      type: "table",
-      props: { table: { rows: [[{ content: { text } }]], columnWidths: widths } },
-      blocks: [],
+  it("converts transformed client rects back to fractional canvas pixels", () => {
+    expect(unscaledMindMapSize({ width: 80.3125, height: 32.4375 }, 0.8)).toEqual({
+      width: 100.390625,
+      height: 40.546875,
     });
-    expect(table("甲")).toBe(table("乙"));
-    expect(didMindMapGeometryChange(table("甲"), table("甲", [160]))).toBe(true);
-    expect(didMindMapGeometryChange(table("甲"), mindMapNodeGeometrySignature({
-      type: "table",
-      props: { table: { rows: [[{ content: { text: "甲" } }], [{ content: { text: "乙" } }]], columnWidths: [120] } },
-      blocks: [],
-    }))).toBe(true);
+  });
+
+  it("reads fractional scale from 2d and 3d CSS matrices", () => {
+    expect(mindMapScaleFromTransform("matrix(0.8, 0, 0, 0.8, 12.5, -4.25)")).toBe(0.8);
+    expect(mindMapScaleFromTransform("matrix3d(0.75, 0, 0, 0, 0, 0.75, 0, 0, 0, 0, 1, 0, 20, 30, 0, 1)")).toBe(0.75);
+    expect(mindMapScaleFromTransform("none", 0.625)).toBe(0.625);
+  });
+
+  it("only treats table and image editors as live geometry editors", () => {
+    const text = document.createElement("div");
+    text.innerHTML = `<div class="mindmap-node-editor"><div data-content-type="paragraph">正文</div></div>`;
+    expect(isMindMapGeometryEditorElement(text)).toBe(false);
+
+    const table = document.createElement("div");
+    table.innerHTML = `<div class="mindmap-node-editor"><div data-content-type="table"><table><tr><td>1</td></tr></table></div></div>`;
+    expect(isMindMapGeometryEditorElement(table)).toBe(true);
+
+    const image = document.createElement("div");
+    image.innerHTML = `<div class="mindmap-node-editor"><div data-content-type="image"><img src="asset:test" /></div></div>`;
+    expect(isMindMapGeometryEditorElement(image)).toBe(true);
   });
 });
 

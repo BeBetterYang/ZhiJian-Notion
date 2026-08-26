@@ -109,27 +109,55 @@ export function hiddenDescendantCount(tree: Pick<ZhiJianTree, "nodes">, nodeId: 
   return node.children.reduce((total, childId) => total + 1 + hiddenDescendantCount(tree, childId), 0);
 }
 
-/**
- * The parts of a node document that change the box MindElixir has to lay out.
- *
- * Text content, caret movement and rich-text marks are deliberately excluded:
- * those are edited in an overlay and should not make sibling nodes jiggle while
- * typing. Image count/source/preview width and table shape/column widths are
- * included because they change the visual node's measured geometry and therefore
- * need the map to settle around the new box.
- */
-export function mindMapNodeGeometrySignature(node?: Pick<ZhiJianNode, "type" | "blocks" | "props">) {
-  if (!node) return "";
-  return [
-    node.type === "table" ? tableGeometrySignature(node.props?.table) : "",
-    ...(node.blocks ?? [])
-      .filter((block) => block.type === "image")
-      .map((block) => imageGeometrySignature(block)),
-  ].join(UNIT);
+const GEOMETRY_EDITOR_SELECTOR = [
+  '[data-content-type="table"]',
+  '[data-content-type="image"]',
+  ".tableWrapper",
+  ".bn-file-block-content-wrapper",
+  "table",
+  "img",
+].join(", ");
+
+export interface MindMapMeasuredSize {
+  width: number;
+  height: number;
 }
 
-export function didMindMapGeometryChange(previous: string | null, next: string) {
-  return previous !== null && previous !== next;
+export function unscaledMindMapSize(
+  size: MindMapMeasuredSize,
+  scale: number,
+): MindMapMeasuredSize {
+  const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  return {
+    width: size.width / safeScale,
+    height: size.height / safeScale,
+  };
+}
+
+export function mindMapScaleFromTransform(transform: string, fallback = 1) {
+  if (!transform || transform === "none") return fallback;
+  const match = /^(matrix|matrix3d)\((.+)\)$/.exec(transform);
+  if (!match) return fallback;
+  const values = match[2].split(",").map(Number);
+  const scale = Math.hypot(values[0], values[1]);
+  return Number.isFinite(scale) && scale > 0 ? scale : fallback;
+}
+
+export function mindMapMeasuredSizeChanged(
+  previous: MindMapMeasuredSize | null,
+  next: MindMapMeasuredSize | null,
+  tolerance = 0.01,
+) {
+  if (!previous || !next) return false;
+  return Math.abs(previous.width - next.width) > tolerance || Math.abs(previous.height - next.height) > tolerance;
+}
+
+export function isMindMapGeometryEditorElement(element: Element | null) {
+  if (!element) return false;
+  const editor = element.matches(".mindmap-node-editor")
+    ? element
+    : element.querySelector(".mindmap-node-editor") ?? element.closest(".mindmap-node-editor");
+  return Boolean(editor?.querySelector(GEOMETRY_EDITOR_SELECTOR));
 }
 
 /**
@@ -234,30 +262,6 @@ function blockSignature(block: ZhiJianNodeBlock) {
     image.caption ?? "",
     image.previewWidth ?? 480,
     image.showPreview ?? true,
-  ].join(FIELD);
-}
-
-function imageGeometrySignature(block: Extract<ZhiJianNodeBlock, { type: "image" }>) {
-  const image = block.image;
-  return [
-    "i",
-    block.id,
-    image.assetId ?? image.url ?? "",
-    image.previewWidth ?? 480,
-    image.showPreview ?? true,
-  ].join(FIELD);
-}
-
-function tableGeometrySignature(table?: ZhiJianTableData) {
-  if (!table) return "";
-  const columnCount = Math.max(0, ...table.rows.map((row) => row.length));
-  return [
-    "t",
-    table.rows.length,
-    columnCount,
-    table.headerRows ?? 0,
-    table.headerCols ?? 0,
-    ...(table.columnWidths ?? []).map((width) => width ?? ""),
   ].join(FIELD);
 }
 
