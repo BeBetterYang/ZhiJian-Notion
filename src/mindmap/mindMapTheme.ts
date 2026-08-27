@@ -1,4 +1,4 @@
-import type { MainLineParams, MindElixirInstance, SubLineParams, Theme } from "mind-elixir";
+import type { MainLineParams, SubLineParams, Theme } from "mind-elixir";
 
 /**
  * How the map is drawn: right-angle connectors and no node chrome.
@@ -69,11 +69,9 @@ export const MINDMAP_THEME: Theme = {
     "--panel-bgcolor": CANVAS_COLOR,
     "--panel-border-color": "#e5e7eb",
   },
-  generateMainBranch(params) {
-    return mindMapMainBranchPath(params, mindMapBranchAnchorContext(this));
-  },
+  generateMainBranch: mindMapMainBranchPath,
   generateSubBranch(params) {
-    return mindMapSubBranchPath(params, mindMapNodeGapX(this.container), mindMapBranchAnchorContext(this));
+    return mindMapSubBranchPath(params, mindMapNodeGapX(this.container));
   },
 };
 
@@ -86,36 +84,13 @@ export function mindMapNodeGapX(container: HTMLElement) {
  * Root to first level. Both boxes here are the visible node boxes, so the line
  * runs from one edge to the other with nothing to compensate for.
  */
-interface BranchGeometry {
-  top: number;
-  left: number;
-  width: number;
-  height: number;
-}
-
-interface BranchAnchor {
-  left: number;
-  width: number;
-  centerY: number;
-}
-
-interface MindMapBranchAnchorContext {
-  parentAnchor?: (geometry: BranchGeometry) => BranchAnchor | null;
-  childAnchor?: (geometry: BranchGeometry) => BranchAnchor | null;
-  parentAnchorY?: (geometry: BranchGeometry) => number | null;
-  childAnchorY?: (geometry: BranchGeometry) => number | null;
-}
-
-export function mindMapMainBranchPath(
-  { pT, pL, pW, pH, cT, cL, cW, cH, direction }: MainLineParams,
-  anchors?: MindMapBranchAnchorContext,
-) {
+export function mindMapMainBranchPath({ pT, pL, pW, pH, cT, cL, cW, cH, direction }: MainLineParams) {
   if (direction === "down") return verticalElbowPath(pL + pW / 2, pT + pH, cL + cW / 2, cT);
-  const parent = anchorBox(anchors?.parentAnchor, anchors?.parentAnchorY, { top: pT, left: pL, width: pW, height: pH });
-  const child = anchorBox(anchors?.childAnchor, anchors?.childAnchorY, { top: cT, left: cL, width: cW, height: cH });
+  const fromY = pT + pH / 2;
+  const toY = cT + cH / 2;
   return direction === "lhs"
-    ? elbowPath(parent.left, parent.centerY, child.left + child.width, child.centerY)
-    : elbowPath(parent.left + parent.width, parent.centerY, child.left, child.centerY);
+    ? elbowPath(pL, fromY, cL + cW, toY)
+    : elbowPath(pL + pW, fromY, cL, toY);
 }
 
 /**
@@ -129,131 +104,14 @@ export function mindMapMainBranchPath(
 export function mindMapSubBranchPath(
   { pT, pL, pW, pH, cT, cL, cW, cH, direction, isFirst }: SubLineParams,
   nodeGapX: number,
-  anchors?: MindMapBranchAnchorContext,
 ) {
   if (direction === "down") return verticalElbowPath(pL + pW / 2, pT + pH, cL + cW / 2, cT);
-  const parent = anchorBox(anchors?.parentAnchor, anchors?.parentAnchorY, { top: pT, left: pL, width: pW, height: pH });
-  const child = anchorBox(anchors?.childAnchor, anchors?.childAnchorY, { top: cT, left: cL, width: cW, height: cH });
-  const fromY = parent.centerY;
-  const toY = child.centerY;
+  const fromY = pT + pH / 2;
+  const toY = cT + cH / 2;
   const parentInset = isFirst ? 0 : nodeGapX;
-  if (anchors?.parentAnchor || anchors?.childAnchor) {
-    return direction === "lhs"
-      ? elbowPath(parent.left, fromY, child.left + child.width, toY)
-      : elbowPath(parent.left + parent.width, fromY, child.left, toY);
-  }
   return direction === "lhs"
     ? elbowPath(pL + parentInset, fromY, cL + cW - nodeGapX, toY)
     : elbowPath(pL + pW - parentInset, fromY, cL + nodeGapX, toY);
-}
-
-function anchorBox(
-  resolveBox: ((geometry: BranchGeometry) => BranchAnchor | null) | undefined,
-  resolveY: ((geometry: BranchGeometry) => number | null) | undefined,
-  geometry: BranchGeometry,
-) {
-  return resolveBox?.(geometry) ?? {
-    left: geometry.left,
-    width: geometry.width,
-    centerY: resolveY?.(geometry) ?? geometry.top + geometry.height / 2,
-  };
-}
-
-function mindMapBranchAnchorContext(instance: MindElixirInstance): MindMapBranchAnchorContext {
-  const container = instance.container;
-  return {
-    parentAnchor: (geometry) => resolveMindMapPrimaryAnchor(container, geometry),
-    childAnchor: (geometry) => resolveMindMapPrimaryAnchor(container, geometry),
-  };
-}
-
-export function resolveMindMapPrimaryAnchorY(container: HTMLElement | null | undefined, geometry: BranchGeometry) {
-  return resolveMindMapPrimaryAnchor(container, geometry)?.centerY ?? null;
-}
-
-export function resolveMindMapPrimaryAnchor(container: HTMLElement | null | undefined, geometry: BranchGeometry): BranchAnchor | null {
-  const element = findMindMapGeometryElement(container, geometry);
-  if (!element) return null;
-  const primary = element.querySelector<HTMLElement>(".mindmap-node-primary");
-  if (!primary) return null;
-  const scale = mindMapScaleFromElement(container);
-  const elementRect = element.getBoundingClientRect();
-  const primaryRect = primary.getBoundingClientRect();
-  const anchorRect = firstLineAnchorRect(primary);
-  if (!elementRect.height || !anchorRect.height || !primaryRect.width) return null;
-  return {
-    left: geometry.left + (primaryRect.left - elementRect.left) / scale,
-    width: primaryRect.width / scale,
-    centerY: geometry.top + (anchorRect.top + anchorRect.height / 2 - elementRect.top) / scale,
-  };
-}
-
-function findMindMapGeometryElement(container: HTMLElement | null | undefined, geometry: BranchGeometry): HTMLElement | null {
-  if (!container) return null;
-  const candidates = container.querySelectorAll<HTMLElement>("me-root, me-parent, me-tpc");
-  let bestElement: HTMLElement | null = null;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (const element of candidates) {
-    if (!element.querySelector(".mindmap-node-primary")) continue;
-    const distance =
-      Math.abs(element.offsetTop - geometry.top) +
-      Math.abs(element.offsetLeft - geometry.left) +
-      Math.abs(element.offsetWidth - geometry.width) +
-      Math.abs(element.offsetHeight - geometry.height);
-    if (distance > 2) continue;
-    if (distance < bestDistance) {
-      bestElement = element;
-      bestDistance = distance;
-    }
-  }
-  return bestElement;
-}
-
-function firstLineAnchorRect(primary: HTMLElement) {
-  const text = firstTextNode(primary);
-  if (text && text.textContent) {
-    const range = document.createRange();
-    range.setStart(text, 0);
-    range.setEnd(text, Math.min(1, text.textContent.length));
-    const rect = typeof range.getBoundingClientRect === "function"
-      ? range.getBoundingClientRect()
-      : null;
-    range.detach();
-    if (rect && rect.height > 0) return rect;
-  }
-  const checkbox = primary.querySelector<HTMLElement>(".mindmap-node-checkbox");
-  if (checkbox) {
-    const rect = checkbox.getBoundingClientRect();
-    if (rect.height > 0) return rect;
-  }
-  const rect = primary.getBoundingClientRect();
-  const lineHeight = Number.parseFloat(window.getComputedStyle(primary).lineHeight);
-  if (Number.isFinite(lineHeight) && lineHeight > 0) {
-    return new DOMRect(rect.left, rect.top, rect.width, Math.min(lineHeight, rect.height || lineHeight));
-  }
-  return rect;
-}
-
-function firstTextNode(root: HTMLElement) {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode(node) {
-      return node.textContent ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
-    },
-  });
-  return walker.nextNode();
-}
-
-function mindMapScaleFromElement(container: HTMLElement | null | undefined) {
-  const map = container?.querySelector<HTMLElement>(".map-canvas");
-  if (!map) return 1;
-  const transform = window.getComputedStyle(map).transform;
-  if (!transform || transform === "none") return 1;
-  if (typeof DOMMatrixReadOnly === "undefined") {
-    const match = /^matrix\(([-\d.]+),/.exec(transform);
-    return match ? Number(match[1]) || 1 : 1;
-  }
-  const matrix = new DOMMatrixReadOnly(transform);
-  return matrix.a || 1;
 }
 
 /**
