@@ -7,7 +7,7 @@ import type { ZhiJianNode, ZhiJianTree } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
 import { blockNoteToTree, treeToBlockNote } from "../outline/blockNoteAdapter";
 import { insertImageBlocks } from "../shared/attachmentInsertion";
-import { correctCaretAfterClick, placeCaretAtPoint } from "../shared/caretAtPoint";
+import { correctCaretAfterClick, placeCaretAtPoint, placeCaretInTableCell } from "../shared/caretAtPoint";
 import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 import { saveImageAsset } from "../shared/imageAssetStore";
 import { LinkDialog } from "../shared/LinkDialog";
@@ -48,6 +48,8 @@ interface MindMapNodeContentProps {
   onTextSelectionChange: (selection: MindMapTextSelection | null) => void;
   focusBlockId?: string;
   focusPoint?: { x: number; y: number };
+  focusTableCell?: { row: number; column: number };
+  onGeometryChange: (nodeId: string) => void;
   focusRequest: { nodeId: string; focusBlockId: string; requestId: number } | null;
   onFocusRequestHandled: (requestId: number) => void;
 }
@@ -63,6 +65,8 @@ function MindMapNodeEditor({
   onFinishEdit,
   focusBlockId,
   focusPoint,
+  focusTableCell,
+  onGeometryChange,
   toolbarTarget,
   onSelect,
   onFocusNode,
@@ -134,7 +138,7 @@ function MindMapNodeEditor({
     // when the block list changes — deleting a quote, say — and refocusing then
     // would yank the caret away from wherever the user is actually typing, back
     // to the coordinates of the click that opened the editor in the first place.
-    const intent = [activeRequest?.requestId ?? "", focusBlockId ?? "", focusPoint ? `${focusPoint.x},${focusPoint.y}` : ""].join("|");
+    const intent = [activeRequest?.requestId ?? "", focusBlockId ?? "", focusPoint ? `${focusPoint.x},${focusPoint.y}` : "", focusTableCell ? `${focusTableCell.row},${focusTableCell.column}` : ""].join("|");
     if (appliedFocusIntent.current === intent) return;
     const requestedBlockId = resolveMindMapFocusBlockId(
       node.id,
@@ -157,10 +161,15 @@ function MindMapNodeEditor({
         // it. Those land at the end of the target block, which is also where a
         // click falls back to when its coordinates resolve to nothing — appending
         // is what the user is about to do in all three cases.
-        if (!placeCaretAtPoint(editor, focusPoint)) {
+        const placedInTable = placeCaretInTableCell(editor, focusTableCell);
+        if (!placedInTable && !placeCaretAtPoint(editor, focusPoint)) {
           editor.setTextCursorPosition(requestedBlockId, "end");
         }
-        editor.focus();
+        // BlockNote's generic focus helper chooses the end of a table document.
+        // A cell-targeted selection is already exact, so focus ProseMirror without
+        // asking BlockNote to derive a second caret position over it.
+        if (placedInTable) editor._tiptapEditor.view.focus();
+        else editor.focus();
         if (activeRequest) onFocusRequestHandled(activeRequest.requestId);
       } catch {
         try {
@@ -172,7 +181,7 @@ function MindMapNodeEditor({
       }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [blockIds, editor, focusBlockId, focusPoint, focusRequest, node.id, onFocusRequestHandled]);
+  }, [blockIds, editor, focusBlockId, focusPoint, focusRequest, focusTableCell, node.id, onFocusRequestHandled]);
 
   useEffect(() => {
     if (!focusPrimaryAfterBlockDelete.current) return;
@@ -391,6 +400,9 @@ function MindMapNodeEditor({
             // is the only place a table's cells come back from the editor.
             updated.props?.table,
           );
+          if (node.type === "table" || node.blocks?.some((block) => block.type === "image")) {
+            onGeometryChange(node.id);
+          }
         }}
       >
         {ownsToolbar && toolbarTarget

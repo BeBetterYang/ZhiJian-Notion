@@ -17,6 +17,7 @@ import {
   sameEditingTarget,
   shouldExitEditing,
   suppressMindMapEnter,
+  updateMindMapPointerSession,
   unscaledMindMapSize,
 } from "./mindMapInteraction";
 
@@ -166,10 +167,34 @@ describe("sameEditingTarget", () => {
     expect(sameEditingTarget({ nodeId: "web" }, { nodeId: "web", focusBlockId: "quote" })).toBe(false);
     expect(
       sameEditingTarget(
+        { nodeId: "web", focusTableCell: { row: 0, column: 0 } },
+        { nodeId: "web", focusTableCell: { row: 0, column: 1 } },
+      ),
+    ).toBe(false);
+    expect(
+      sameEditingTarget(
         { nodeId: "web", focusPoint: { x: 12, y: 34 } },
         { nodeId: "web", focusPoint: { x: 12, y: 35 } },
       ),
     ).toBe(false);
+  });
+});
+
+describe("updateMindMapPointerSession", () => {
+  const session = { pointerId: 7, nodeId: "web", selectedNodeId: "web", startX: 10, startY: 20, dragged: false };
+
+  it("keeps a click below the drag threshold", () => {
+    expect(updateMindMapPointerSession(session, 7, 15, 24)?.dragged).toBe(false);
+  });
+
+  it("latches a drag so the following click cannot enter editing", () => {
+    const dragged = updateMindMapPointerSession(session, 7, 19, 20);
+    expect(dragged?.dragged).toBe(true);
+    expect(updateMindMapPointerSession(dragged, 7, 10, 20)?.dragged).toBe(true);
+  });
+
+  it("ignores another pointer", () => {
+    expect(updateMindMapPointerSession(session, 8, 30, 40)).toBe(session);
   });
 });
 

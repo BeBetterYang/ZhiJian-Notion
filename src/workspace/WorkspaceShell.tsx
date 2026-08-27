@@ -29,7 +29,7 @@ import {
   FiX,
 } from "react-icons/fi";
 import { FaStar } from "react-icons/fa";
-import App from "../App";
+import App, { type FocusBreadcrumbState } from "../App";
 import { createInitialTree, plainTextContent, richTextToPlainText, type ZhiJianNode, type ZhiJianTree } from "../core/tree";
 import { TreeStore } from "../core/treeStore";
 import type { WorkspaceSession } from "./auth";
@@ -88,6 +88,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const [settingsView, setSettingsView] = useState<SettingsView>("account");
   const [settingsEdit, setSettingsEdit] = useState<SettingsEdit>(null);
   const [headerToolbarTarget, setHeaderToolbarTarget] = useState<HTMLDivElement | null>(null);
+  const [focusBreadcrumbState, setFocusBreadcrumbState] = useState<FocusBreadcrumbState | null>(null);
   const [nodes, setNodes] = useState<WorkspaceNode[]>([]);
   const [activeFileId, setActiveFileId] = useState("");
   const [selectedMenuKey, setSelectedMenuKey] = useState("");
@@ -130,6 +131,9 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const files = useMemo(() => nodes.filter(isWorkspaceFile), [nodes]);
   const activeFile = files.find((file) => file.id === activeFileId) ?? files[0];
   const breadcrumbs = activeFile ? folderPath(nodes, activeFile.id) : [];
+  const focusBreadcrumbItems = focusBreadcrumbState?.items ?? [];
+  const focusedTitle = focusBreadcrumbItems.at(-1)?.label ?? null;
+  const focusAncestorItems = focusedTitle ? focusBreadcrumbItems.slice(0, -1) : [];
   const activeDocumentStore = activeFile ? getDocumentStore(documentStores.current, activeFile) : null;
   const sidebarDisplayWidth = searchMode ? Math.max(sidebarWidth, 448) : sidebarWidth;
 
@@ -715,7 +719,27 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         <header className="document-header">
           <div className="document-path">
             {breadcrumbs.map((folder) => <span className="breadcrumb-part" key={folder.id}><span>{folder.title}</span><FiChevronRight /></span>)}
-            <strong>{activeFile?.title || "无标题"}</strong>
+            {focusedTitle && focusBreadcrumbState ? (
+              <>
+                <button type="button" className="document-path-current" onClick={() => focusBreadcrumbState.navigate(null)}>
+                  {activeFile?.title || "无标题"}
+                </button>
+                {focusAncestorItems.map((item) => (
+                  <span className="breadcrumb-part document-focus-part" key={item.id}>
+                    <FiChevronRight />
+                    <button type="button" onClick={() => focusBreadcrumbState.navigate(item.id)}>
+                      {item.label}
+                    </button>
+                  </span>
+                ))}
+                <span className="breadcrumb-part document-focus-part is-current">
+                  <FiChevronRight />
+                  <span className="document-focus-current">{focusedTitle}</span>
+                </span>
+              </>
+            ) : (
+              <strong>{activeFile?.title || "无标题"}</strong>
+            )}
           </div>
           <div className="document-header-actions" ref={setHeaderToolbarTarget} />
         </header>
@@ -728,6 +752,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               embedded
               store={activeDocumentStore}
               toolbarTarget={headerToolbarTarget}
+              onFocusBreadcrumbChange={setFocusBreadcrumbState}
               viewStateStorageKey={documentViewStorageKey(activeFile.id)}
               focusNodeRequest={
                 documentFocusRequest?.fileId === activeFile.id

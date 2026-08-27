@@ -27,9 +27,22 @@ export function zoomedOutlineCss(tree: ZhiJianTree, zoomedNodeId: string | null)
       `.outline-panel ${ancestor} > .bn-block > .bn-block-group > .bn-block-outer:not([data-id="${escapeCssString(next)}"]) { display: none; }`,
       `.outline-panel ${ancestor} > .bn-block > .bn-block-group { margin-left: 0; padding-left: 0; }`,
       // The guide line belongs to a level that is no longer on screen.
-      `.outline-panel ${block(next)}::before { display: none; }`,
+      `.outline-panel ${block(next)}::before { display: none !important; }`,
     );
   }
+
+  const zoomed = block(path.at(-1)!);
+  rules.push(
+    // The focused node takes the same visual role as the document root. It is
+    // still the same Tree node and BlockNote block; only its outline projection
+    // changes while focus mode is active.
+    `.outline-panel ${zoomed} > .bn-block > .bn-block-content { font-size: 34px; font-weight: 700; line-height: 1.2; }`,
+    `.outline-panel ${zoomed} > .bn-block > .bn-block-content[data-content-type="heading"] > :is(h1, h2, h3) { font-size: inherit; line-height: inherit; }`,
+    `.outline-panel ${zoomed} > .bn-block > .bn-block-content::before { content: none !important; }`,
+    `.outline-panel ${zoomed} > .bn-block > .bn-block-content:has(.ProseMirror-trailingBreak:only-child)::after { content: "无标题" !important; }`,
+    `.outline-panel ${zoomed} > .bn-block > .bn-block-group { margin-left: 0; }`,
+    `.outline-panel ${zoomed} > .bn-block > .bn-block-group > .bn-block-outer::before { display: none; }`,
+  );
   return rules.join("\n");
 }
 

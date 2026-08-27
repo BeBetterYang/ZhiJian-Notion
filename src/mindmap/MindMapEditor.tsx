@@ -17,7 +17,7 @@ import {
   readMindMapDecorations,
   sameMindMapDecorations,
 } from "./mindMapDecorations";
-import { displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, isMindMapGeometryEditorElement, mindMapDisplayDragTopic, mindMapMeasuredSizeChanged, mindMapScaleFromTransform, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, unscaledMindMapSize, type EditingTarget, type MindMapMeasuredSize } from "./mindMapInteraction";
+import { displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, mindMapDisplayDragTopic, mindMapMeasuredSizeChanged, mindMapScaleFromTransform, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, unscaledMindMapSize, updateMindMapPointerSession, type EditingTarget, type MindMapMeasuredSize, type MindMapPointerSession } from "./mindMapInteraction";
 import { MINDMAP_THEME } from "./mindMapTheme";
 import { MindMapLinkHoverTracker } from "./MindMapLinkHoverTracker";
 import { renderMindMapNodeDisplayHtml } from "./MindMapNodeRenderer";
@@ -35,6 +35,8 @@ interface MindMapEditorProps {
    * `MindMapNodeGroupBlock`.
    */
   onNodeToolbarActiveChange: (active: boolean) => void;
+  onFocusNode?: (nodeId: string) => void;
+  onExitFocus?: () => void;
   selectedNodeId: string | null;
   toolbarTarget: HTMLElement | null;
   focusRequest: { nodeId: string; focusBlockId: string; requestId: number } | null;
@@ -54,7 +56,7 @@ export interface MindMapTextSelection {
   to: number;
 }
 
-export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, onTextSelectionChange, onNodeToolbarActiveChange, selectedNodeId, toolbarTarget, focusRequest, focusNodeRequest = null, onFocusRequestHandled, searchQuery = "", visibleNodeIds = null, zoomedNodeId = null, initialViewport, onViewportChange }: MindMapEditorProps) {
+export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, onTextSelectionChange, onNodeToolbarActiveChange, onFocusNode, onExitFocus, selectedNodeId, toolbarTarget, focusRequest, focusNodeRequest = null, onFocusRequestHandled, searchQuery = "", visibleNodeIds = null, zoomedNodeId = null, initialViewport, onViewportChange }: MindMapEditorProps) {
   const tree = useTree(store);
   const containerRef = useRef<HTMLDivElement>(null);
   const mindRef = useRef<MindElixir | null>(null);
@@ -73,6 +75,8 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
   const onActiveRef = useRef(onSelectionActiveChange);
   const onTextSelectionRef = useRef(onTextSelectionChange);
   const onNodeToolbarRef = useRef(onNodeToolbarActiveChange);
+  const onFocusNodeRef = useRef(onFocusNode);
+  const onExitFocusRef = useRef(onExitFocus);
   const selectedNodeRef = useRef(selectedNodeId);
   const lastSelectedNodeId = useRef<string | null>(selectedNodeId);
   const editingTargetRef = useRef<EditingTarget>(null);
@@ -85,9 +89,11 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
   const floatingFrameSize = useRef<MindMapMeasuredSize | null>(null);
   const treeRef = useRef(tree);
   treeRef.current = tree;
+  onFocusNodeRef.current = onFocusNode;
+  onExitFocusRef.current = onExitFocus;
   projectionOptionsRef.current = { searchQuery, visibleNodeIds, rootNodeId: zoomedNodeId };
-  const beginNodeEditRef = useRef<(nodeId: string, focusBlockId?: string) => void>(() => undefined);
-  const pointerSelectionBefore = useRef<{ nodeId: string; selectedNodeId: string | null } | null>(null);
+  const beginNodeEditRef = useRef<(nodeId: string, focusBlockId?: string, focusPoint?: { x: number; y: number }, focusTableCell?: { row: number; column: number }) => void>(() => undefined);
+  const pointerSession = useRef<MindMapPointerSession | null>(null);
   const contentHosts = useRef(new Map<string, HTMLDivElement>());
   const [contentTargets, setContentTargets] = useState<Array<{ id: string; host: HTMLElement }>>([]);
   const [editingTarget, setEditingTarget] = useState<EditingTarget>(null);
@@ -242,7 +248,27 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       // root's children between the two sides, which reads as two maps.
       direction: MindElixir.RIGHT,
       editable: true,
-      contextMenu: { locale: zh_CN },
+      contextMenu: {
+        locale: zh_CN,
+        focus: false,
+        extend: [
+          {
+            name: "专注",
+            onclick: (event) => {
+              dismissContextMenu(event);
+              const nodeId = mindRef.current?.currentNode?.nodeObj.id ?? selectedNodeRef.current;
+              if (nodeId && nodeId !== treeRef.current.rootId) onFocusNodeRef.current?.(nodeId);
+            },
+          },
+          {
+            name: "取消专注",
+            onclick: (event) => {
+              dismissContextMenu(event);
+              if (projectionOptionsRef.current.rootNodeId) onExitFocusRef.current?.();
+            },
+          },
+        ],
+      },
       toolBar: true,
       keypress: true,
       allowUndo: false,
@@ -255,7 +281,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     });
     mind.init(treeToMindElixir(initialTree.current, projectionOptionsRef.current));
     correctMindMapSummaryOffsets(mind, initialTree.current);
-    if (initialViewportRef.current) {
+    if (initialViewportRef.current && !projectionOptionsRef.current.rootNodeId) {
       restoreMindMapViewport(mind, initialViewportRef.current);
     }
     mind.beginEdit = async (element) => {
@@ -278,6 +304,10 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       // does not exist. They are stored whole instead, off the instance.
       if (isMindMapDecorationOperation(operation)) {
         saveDecorations();
+        // Creating a summary draws it and reports it without going through
+        // `linkDiv`, so the lift has to be applied here too — otherwise a summary
+        // sits low until the next layout pass happens to redraw it.
+        correctMindMapSummaryOffsets(mind, treeRef.current);
         return;
       }
       if ("obj" in operation && operation.obj?.id) {
@@ -366,7 +396,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
   const clearTreeSelection = useCallback(() => {
     if (!selectedNodeRef.current && !lastSelectedNodeId.current && !editingTargetRef.current) return;
     applyEditingTarget(null);
-    pointerSelectionBefore.current = null;
+    pointerSession.current = null;
     lastSelectedNodeId.current = null;
     selectedNodeRef.current = null;
     mindRef.current?.clearSelection();
@@ -375,9 +405,9 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     onTextSelectionRef.current(null);
   }, [applyEditingTarget]);
 
-  const beginNodeEdit = useCallback((nodeId: string, focusBlockId?: string, focusPoint?: { x: number; y: number }) => {
+  const beginNodeEdit = useCallback((nodeId: string, focusBlockId?: string, focusPoint?: { x: number; y: number }, focusTableCell?: { row: number; column: number }) => {
     selectMindElixirNode(nodeId);
-    applyEditingTarget({ nodeId, focusBlockId, focusPoint });
+    applyEditingTarget({ nodeId, focusBlockId, focusPoint, focusTableCell });
   }, [applyEditingTarget, selectMindElixirNode]);
   beginNodeEditRef.current = beginNodeEdit;
 
@@ -446,9 +476,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       const editingNodeId = editingTargetRef.current?.nodeId;
       const result = updateMindMapNodesInPlace(mindRef.current, nextData.nodeData, editingNodeId);
       if (result.addedShell) queueMicrotask(collectTargets);
-      if (editingNodeId && result.changedNodeIds.includes(editingNodeId) && isMindMapGeometryEditingNode(mindRef.current, editingNodeId)) {
-        scheduleGeometryMeasure(editingNodeId);
-      } else if (result.changedNodeIds.some((id) => id !== editingNodeId)) {
+      if (result.changedNodeIds.some((id) => id !== editingNodeId)) {
         scheduleLinkDiv();
       }
       return;
@@ -458,7 +486,15 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       return;
     }
     refreshStructure(nextData, nextSignature);
-  }, [collectTargets, refreshStructure, scheduleGeometryMeasure, scheduleLinkDiv, searchQuery, tree, visibleNodeIds, zoomedNodeId]);
+  }, [collectTargets, refreshStructure, scheduleLinkDiv, searchQuery, tree, visibleNodeIds, zoomedNodeId]);
+
+  const previousZoomedNodeId = useRef(zoomedNodeId);
+  useEffect(() => {
+    if (previousZoomedNodeId.current === zoomedNodeId) return;
+    previousZoomedNodeId.current = zoomedNodeId;
+    const frame = window.requestAnimationFrame(() => mindRef.current?.toCenter());
+    return () => window.cancelAnimationFrame(frame);
+  }, [zoomedNodeId]);
 
   useEffect(() => {
     const previousNodeId = editingShellRef.current;
@@ -503,7 +539,17 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       const target = event.target as Element | null;
       const shell = target?.closest<HTMLElement>(".mindmap-node-shell[data-node-id]");
       if (shell?.dataset.nodeId) {
-        pointerSelectionBefore.current = { nodeId: shell.dataset.nodeId, selectedNodeId: selectedNodeRef.current };
+        const selectedAtPointerDown = shell.closest("me-tpc")?.classList.contains("selected")
+          ? shell.dataset.nodeId
+          : selectedNodeRef.current;
+        pointerSession.current = {
+          pointerId: event.pointerId,
+          nodeId: shell.dataset.nodeId,
+          selectedNodeId: selectedAtPointerDown,
+          startX: event.clientX,
+          startY: event.clientY,
+          dragged: false,
+        };
       } else if (event.button === 0 && isBlankMindMapSurface(target)) {
         // Pointerdown, not click: this is the moment mind-elixir reads a gesture
         // on the blank surface as a box select and releases its own selection, so
@@ -546,6 +592,12 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
         metaKey: event.metaKey,
       }));
     };
+    const onPointerMove = (event: PointerEvent) => {
+      pointerSession.current = updateMindMapPointerSession(pointerSession.current, event.pointerId, event.clientX, event.clientY);
+    };
+    const onPointerCancel = (event: PointerEvent) => {
+      if (pointerSession.current?.pointerId === event.pointerId) pointerSession.current = null;
+    };
     const onClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
       // The state already changed on pointerdown. Suppress the native checkbox's
@@ -572,12 +624,26 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       const shell = target?.closest<HTMLElement>(".mindmap-node-shell[data-node-id]");
       const nodeId = shell?.dataset.nodeId;
       if (!nodeId) return;
+      const session = pointerSession.current?.nodeId === nodeId ? pointerSession.current : null;
+      pointerSession.current = null;
+      if (session?.dragged) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       const interactive = Boolean(target?.closest("a,button,input,select,textarea,[role=checkbox]"));
-      const selectedBefore = pointerSelectionBefore.current?.nodeId === nodeId ? pointerSelectionBefore.current.selectedNodeId : selectedNodeRef.current;
+      const selectedBefore = session ? session.selectedNodeId : selectedNodeRef.current;
       const action = displayClickAction(selectedBefore, editingTargetRef.current, nodeId, interactive, event.detail);
-      pointerSelectionBefore.current = null;
       if (action === "select") selectMindElixirNode(nodeId);
-      if (action === "edit") beginNodeEdit(nodeId, target?.closest<HTMLElement>("[data-block-id]")?.dataset.blockId, { x: event.clientX, y: event.clientY });
+      if (action === "edit") {
+        const cell = target?.closest<HTMLElement>("td[data-table-row][data-table-column]");
+        beginNodeEdit(
+          nodeId,
+          target?.closest<HTMLElement>("[data-block-id]")?.dataset.blockId,
+          { x: event.clientX, y: event.clientY },
+          cell ? { row: Number(cell.dataset.tableRow), column: Number(cell.dataset.tableColumn) } : undefined,
+        );
+      }
     };
     const onDoubleClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
@@ -587,7 +653,13 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      beginNodeEdit(nodeId, target?.closest<HTMLElement>("[data-block-id]")?.dataset.blockId, { x: event.clientX, y: event.clientY });
+      const cell = target?.closest<HTMLElement>("td[data-table-row][data-table-column]");
+      beginNodeEdit(
+        nodeId,
+        target?.closest<HTMLElement>("[data-block-id]")?.dataset.blockId,
+        { x: event.clientX, y: event.clientY },
+        cell ? { row: Number(cell.dataset.tableRow), column: Number(cell.dataset.tableColumn) } : undefined,
+      );
     };
     const onKeyDown = (event: KeyboardEvent) => {
       // Undo has to be answered on the canvas too. mind-elixir's own history is
@@ -637,12 +709,16 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       }));
     };
     container.addEventListener("pointerdown", onPointerDown, true);
+    container.addEventListener("pointermove", onPointerMove, true);
+    container.addEventListener("pointercancel", onPointerCancel, true);
     container.addEventListener("click", onClick, true);
     container.addEventListener("dblclick", onDoubleClick, true);
     container.addEventListener("keydown", onKeyDown, true);
     container.addEventListener("contextmenu", onContextMenu, true);
     return () => {
       container.removeEventListener("pointerdown", onPointerDown, true);
+      container.removeEventListener("pointermove", onPointerMove, true);
+      container.removeEventListener("pointercancel", onPointerCancel, true);
       container.removeEventListener("click", onClick, true);
       container.removeEventListener("dblclick", onDoubleClick, true);
       container.removeEventListener("keydown", onKeyDown, true);
@@ -669,16 +745,13 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     let frame = 0;
     const observer = new ResizeObserver((entries) => {
       const floatingNode = floatingNodeId.current;
-      if (floatingNode && entries.every((entry) => nodeIdByHost.get(entry.target) === floatingNode)) {
-        if (entries.some((entry) => isMindMapGeometryEditorElement(entry.target))) scheduleGeometryMeasure(floatingNode);
-        return;
-      }
+      if (floatingNode && entries.every((entry) => nodeIdByHost.get(entry.target) === floatingNode)) return;
       window.cancelAnimationFrame(frame);
       frame = window.requestAnimationFrame(scheduleLinkDiv);
     });
     contentTargets.forEach(({ host }) => observer.observe(host));
     return () => { observer.disconnect(); window.cancelAnimationFrame(frame); };
-  }, [contentTargets, scheduleGeometryMeasure, scheduleLinkDiv]);
+  }, [contentTargets, scheduleLinkDiv]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -692,7 +765,8 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       if (!(event.target instanceof HTMLImageElement)) return;
       const shell = event.target.closest<HTMLElement>(".mindmap-node-shell[data-node-id]");
       if (shell?.dataset.nodeId === floatingNodeId.current) {
-        scheduleGeometryMeasure(shell.dataset.nodeId);
+        // The edit projection is already floating over a fixed frame. Its initial
+        // image load is not a user geometry change and must not move the branch.
         return;
       }
       window.cancelAnimationFrame(frame);
@@ -703,14 +777,14 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       container.removeEventListener("load", onImageLoad, true);
       window.cancelAnimationFrame(frame);
     };
-  }, [scheduleGeometryMeasure, scheduleLinkDiv]);
+  }, [scheduleLinkDiv]);
 
   return (
     <>
       {/* `bn-root` is here for BlockNote's colour palette, which the display layer
           borrows so a coloured run of text or table cell looks the same at rest as
           it does in the editor — see `.mindmap-canvas.bn-root` in `styles.css`. */}
-      <div className="mindmap-canvas bn-root" ref={containerRef} />
+      <div className={`mindmap-canvas bn-root ${zoomedNodeId ? "is-focus-mode" : ""}`} ref={containerRef} />
       {/* Hovering a link anywhere in the map — a node's own text, a quote or a table
           cell — opens the outline's link toolbar over it. The popup itself is rendered
           by `MindMapLinkToolbar`, inside the outline editor whose component it is. */}
@@ -718,13 +792,18 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       {contentTargets.map(({ id, host }) => {
         const node = tree.nodes[id];
         return node ? createPortal(
-          <MindMapNodeContent node={node} store={store} selected={selectedNodeId === id} editing={editingTarget?.nodeId === id} toolbarTarget={toolbarTarget} onSelect={selectTreeNode} onFocusNode={selectMindElixirNode} onFinishEdit={finishNodeEdit} onToolbarActiveChange={reportNodeToolbar} onTextSelectionChange={reportTextSelection} focusBlockId={editingTarget?.nodeId === id ? editingTarget.focusBlockId : undefined} focusPoint={editingTarget?.nodeId === id ? editingTarget.focusPoint : undefined} focusRequest={focusRequest} onFocusRequestHandled={onFocusRequestHandled} />,
+          <MindMapNodeContent node={node} store={store} selected={selectedNodeId === id} editing={editingTarget?.nodeId === id} toolbarTarget={toolbarTarget} onSelect={selectTreeNode} onFocusNode={selectMindElixirNode} onFinishEdit={finishNodeEdit} onToolbarActiveChange={reportNodeToolbar} onTextSelectionChange={reportTextSelection} focusBlockId={editingTarget?.nodeId === id ? editingTarget.focusBlockId : undefined} focusPoint={editingTarget?.nodeId === id ? editingTarget.focusPoint : undefined} focusTableCell={editingTarget?.nodeId === id ? editingTarget.focusTableCell : undefined} onGeometryChange={scheduleGeometryMeasure} focusRequest={focusRequest} onFocusRequestHandled={onFocusRequestHandled} />,
           host,
           id,
         ) : null;
       })}
     </>
   );
+}
+
+function dismissContextMenu(event: MouseEvent) {
+  const menu = (event.currentTarget as Element | null)?.closest<HTMLElement>(".context-menu");
+  if (menu) menu.hidden = true;
 }
 
 function ensureHost(hosts: Map<string, HTMLDivElement>, id: string) {
@@ -809,15 +888,6 @@ function resizeFloatingFrameToDisplay(
   try {
     const topic = mind?.findEle(nodeId);
     return topic ? resizeFloatingFrameToElement(mind, nodeId, sizeRef, visibleTopicContent(topic)) : false;
-  } catch {
-    return false;
-  }
-}
-
-function isMindMapGeometryEditingNode(mind: MindElixir | null, nodeId: string) {
-  try {
-    const editor = mind?.findEle(nodeId).querySelector<HTMLElement>(":scope > .mindmap-node-shell .mindmap-node-editor") ?? null;
-    return isMindMapGeometryEditorElement(editor);
   } catch {
     return false;
   }

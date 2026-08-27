@@ -36,6 +36,28 @@ export function placeCaretAtPoint(editor: BlockNoteEditor, point?: CaretPoint) {
   return true;
 }
 
+/** Places the caret in the table cell represented by the lightweight map preview. */
+export function placeCaretInTableCell(
+  editor: BlockNoteEditor,
+  cell?: { row: number; column: number },
+) {
+  if (!cell || !editor.domElement) return false;
+  const tableCell = editor.domElement.querySelector<HTMLElement>(
+    `[data-content-type="table"] table tr:nth-child(${cell.row + 1}) :is(td, th):nth-child(${cell.column + 1})`,
+  );
+  if (!tableCell) return false;
+  const textblock = tableCell.querySelector<HTMLElement>("p, [data-content-type='paragraph']") ?? tableCell;
+  try {
+    const position = editor._tiptapEditor.view.posAtDOM(textblock, 0);
+    editor._tiptapEditor.commands.setTextSelection(
+      Math.min(position + 1, editor.prosemirrorState.doc.content.size - 1),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The same placement, run once the browser has had its say.
  *

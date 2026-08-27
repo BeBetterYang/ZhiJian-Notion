@@ -2,6 +2,7 @@ import type {
   BlockNoteEditor,
   BlockSchema,
   InlineContentSchema,
+  PartialBlock,
   StyleSchema,
 } from "@blocknote/core";
 import { isAttachmentBlock } from "../shared/attachmentInsertion";
@@ -86,10 +87,12 @@ export function outlineEnterAction(params: {
   block: OutlineBlockLike;
   atEnd: boolean;
   selectionEmpty: boolean;
-}): "default" | "insert-past-attachments" {
-  const { block, atEnd, selectionEmpty } = params;
+  focusedNodeId?: string | null;
+}): "default" | "insert-child" | "insert-past-attachments" {
+  const { block, atEnd, selectionEmpty, focusedNodeId } = params;
   if (!selectionEmpty || !atEnd) return "default";
   if (isAttachmentBlock(block.type) || block.type === "table") return "default";
+  if (focusedNodeId === block.id) return "insert-child";
   return hasNodeAttachments(block) ? "insert-past-attachments" : "default";
 }
 
@@ -118,6 +121,7 @@ export function previousFocusableBlockId(blocks: OutlineBlockLike[], targetId: s
 export function handleOutlineNodeKeyDown<BS extends BlockSchema, IS extends InlineContentSchema, SS extends StyleSchema>(
   event: KeyboardEvent,
   editor: Editor<BS, IS, SS>,
+  focusedNodeId?: string | null,
 ) {
   if (event.key !== "Backspace" && event.key !== "Delete" && event.key !== "Enter") return false;
   if (event.isComposing || event.metaKey || event.ctrlKey || event.altKey) return false;
@@ -137,9 +141,18 @@ export function handleOutlineNodeKeyDown<BS extends BlockSchema, IS extends Inli
   const atEnd = selection.$from.parentOffset === parent.content.size;
 
   if (event.key === "Enter") {
-    if (outlineEnterAction({ block, atEnd, selectionEmpty: selection.empty }) === "default") return false;
+    const enterAction = outlineEnterAction({ block, atEnd, selectionEmpty: selection.empty, focusedNodeId });
+    if (enterAction === "default") return false;
     event.preventDefault();
     event.stopPropagation();
+    if (enterAction === "insert-child") {
+      const updated = editor.updateBlock(block, {
+        children: [...block.children, { type: "paragraph", content: "" }],
+      } as unknown as PartialBlock<BS, IS, SS>);
+      const created = updated.children.at(-1);
+      if (created) editor.setTextCursorPosition(created, "start");
+      return true;
+    }
     const { attachments, childNodes } = partitionNodeChildren(block);
     // One transaction: the node keeps its attachments, the new node takes the
     // child nodes BlockNote's own Enter would have moved, and it lands after the

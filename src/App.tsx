@@ -32,6 +32,7 @@ interface AppProps {
   embedded?: boolean;
   store?: TreeStore;
   toolbarTarget?: HTMLElement | null;
+  onFocusBreadcrumbChange?: (state: FocusBreadcrumbState | null) => void;
   viewStateStorageKey?: string;
   focusNodeRequest?: {
     nodeId: string;
@@ -40,9 +41,27 @@ interface AppProps {
   } | null;
 }
 
+export interface FocusBreadcrumbItem {
+  id: string;
+  label: string;
+  current: boolean;
+}
+
+export interface FocusBreadcrumbState {
+  items: FocusBreadcrumbItem[];
+  navigate: (nodeId: string | null) => void;
+}
+
 const DEFAULT_VIEW_STATE_STORAGE_KEY = "zhijian.editor.view-state.v1";
 
-export default function App({ embedded = false, store: providedStore, toolbarTarget = null, viewStateStorageKey, focusNodeRequest = null }: AppProps) {
+export default function App({
+  embedded = false,
+  store: providedStore,
+  toolbarTarget = null,
+  onFocusBreadcrumbChange,
+  viewStateStorageKey,
+  focusNodeRequest = null,
+}: AppProps) {
   const viewStateKey = viewStateStorageKey ?? DEFAULT_VIEW_STATE_STORAGE_KEY;
   const [initialViewState] = useState(() => loadDocumentViewState(viewStateKey));
   const internalStore = useMemo(
@@ -169,6 +188,32 @@ export default function App({ embedded = false, store: providedStore, toolbarTar
       setZoomedNodeId(null);
     }
   }, [tree, zoomedNodeId]);
+
+  const focusBreadcrumbItems = useMemo<FocusBreadcrumbItem[]>(() => {
+    if (!zoomedNodeId) return [];
+    return zoomPath(tree, zoomedNodeId).slice(1).map((nodeId, index, path) => ({
+      id: nodeId,
+      label: richTextToPlainText(tree.nodes[nodeId]?.content ?? { text: "" }) || "未命名",
+      current: index === path.length - 1,
+    }));
+  }, [tree, zoomedNodeId]);
+
+  const navigateFocusBreadcrumb = useCallback(
+    (nodeId: string | null) => {
+      setZoomedNodeId(nodeId);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!onFocusBreadcrumbChange) return undefined;
+    onFocusBreadcrumbChange(
+      zoomedNodeId
+        ? { items: focusBreadcrumbItems, navigate: navigateFocusBreadcrumb }
+        : null,
+    );
+    return () => onFocusBreadcrumbChange(null);
+  }, [focusBreadcrumbItems, navigateFocusBreadcrumb, onFocusBreadcrumbChange, zoomedNodeId]);
 
   useEffect(() => {
     if (!toolbarMoreOpen && !collapseMenuOpen) return;
@@ -399,7 +444,6 @@ export default function App({ embedded = false, store: providedStore, toolbarTar
       />
     </div>
   );
-
   return (
     <main className={`app-shell ${embedded ? "is-embedded" : ""}`}>
       {!embedded ? <header className="topbar">
@@ -409,25 +453,6 @@ export default function App({ embedded = false, store: providedStore, toolbarTar
         </div>
         {editorToolbar}
       </header> : toolbarTarget ? createPortal(editorToolbar, toolbarTarget) : null}
-      {zoomedNodeId ? (
-        <nav className="zoom-breadcrumb" aria-label="当前主题">
-          <button type="button" className="zoom-breadcrumb-exit" onClick={() => setZoomedNodeId(null)}>
-            返回全文
-          </button>
-          {zoomPath(tree, zoomedNodeId).map((nodeId, index, path) => (
-            <span key={nodeId}>
-              <i aria-hidden="true">/</i>
-              <button
-                type="button"
-                disabled={index === path.length - 1}
-                onClick={() => setZoomedNodeId(nodeId === tree.rootId ? null : nodeId)}
-              >
-                {richTextToPlainText(tree.nodes[nodeId]?.content ?? { text: "" }) || "未命名"}
-              </button>
-            </span>
-          ))}
-        </nav>
-      ) : null}
       <div className="workspace">
         <section
           className={`pane editor-view ${activeView === "outline" ? "is-active" : "is-inactive"}`}
@@ -453,6 +478,11 @@ export default function App({ embedded = false, store: providedStore, toolbarTar
             zoomedNodeId={zoomedNodeId}
             initialScrollTop={initialViewState?.outlineScrollTop}
             onScrollPositionChange={updateOutlineScroll}
+            onFocusNode={(nodeId) => {
+              if (nodeId !== tree.rootId) {
+                setZoomedNodeId(nodeId);
+              }
+            }}
             onMindMapInsertQuote={(nodeId, focusBlockId) => {
               setSelectedNodeId(nodeId);
               setSelectionActive(true);
@@ -480,6 +510,12 @@ export default function App({ embedded = false, store: providedStore, toolbarTar
                 onSelectionActiveChange={setSelectionActive}
                 onTextSelectionChange={setMindMapTextSelection}
                 onNodeToolbarActiveChange={setMindMapNodeToolbarActive}
+                onFocusNode={(nodeId) => {
+                  if (nodeId !== tree.rootId) {
+                    setZoomedNodeId(nodeId);
+                  }
+                }}
+                onExitFocus={() => setZoomedNodeId(null)}
                 selectedNodeId={selectedNodeId}
                 toolbarTarget={mindMapToolbarTarget}
                 focusRequest={mindMapFocusRequest}

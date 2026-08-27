@@ -114,7 +114,7 @@ export function applyMindMapVisualVariables(element: HTMLElement, style: MindMap
 
 function renderTableHtml(node: ZhiJianNode) {
   const rows = node.props?.table?.rows ?? [];
-  const body = rows.map((row) => `<tr>${row.map((cell) => `<td${renderCellAttributes(cell)}>${renderRichTextHtml(cell.content)}</td>`).join("")}</tr>`).join("");
+  const body = rows.map((row, rowIndex) => `<tr>${row.map((cell, columnIndex) => `<td data-table-row="${rowIndex}" data-table-column="${columnIndex}"${renderCellAttributes(cell)}>${renderRichTextHtml(cell.content)}</td>`).join("")}</tr>`).join("");
   return `<div class="mindmap-node-table"><table>${renderColumnGroupHtml(node, rows[0]?.length ?? 0)}<tbody>${body}</tbody></table>${rows.length ? "" : "表格"}</div>`;
 }
 

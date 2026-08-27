@@ -59,8 +59,8 @@ describe("zoomedOutlineCss", () => {
     expect(css).toContain('[data-id="root"] > .bn-block > .bn-block-group > .bn-block-outer:not([data-id="a"]) { display: none; }');
     expect(css).toContain('[data-id="a"] > .bn-block > .bn-block-group > .bn-block-outer:not([data-id="a1"]) { display: none; }');
     // The zoomed node keeps its own row and its own children.
-    expect(css).not.toContain('[data-id="a1"] > .bn-block > .bn-block-content');
-    expect(css).not.toContain('[data-id="a1"] > .bn-block > .bn-block-group >');
+    expect(css).not.toContain('[data-id="a1"] > .bn-block > .bn-block-content { display: none; }');
+    expect(css).not.toContain('[data-id="a1"] > .bn-block > .bn-block-group > .bn-block-outer:not(');
   });
 
   it("takes back the indent of every level it hid", () => {
@@ -68,15 +68,24 @@ describe("zoomedOutlineCss", () => {
 
     expect(css).toContain('[data-id="root"] > .bn-block > .bn-block-group { margin-left: 0; padding-left: 0; }');
     expect(css).toContain('[data-id="a"] > .bn-block > .bn-block-group { margin-left: 0; padding-left: 0; }');
-    expect(css).toContain('[data-id="a"]::before { display: none; }');
-    expect(css).toContain('[data-id="a1"]::before { display: none; }');
+    expect(css).toContain('[data-id="a"]::before { display: none !important; }');
+    expect(css).toContain('[data-id="a1"]::before { display: none !important; }');
+  });
+
+  it("presents the focused node like the document root title", () => {
+    const css = zoomedOutlineCss(sampleTree(), "a1");
+
+    expect(css).toContain('[data-id="a1"] > .bn-block > .bn-block-content { font-size: 34px; font-weight: 700; line-height: 1.2; }');
+    expect(css).toContain('[data-id="a1"] > .bn-block > .bn-block-content::before { content: none !important; }');
+    expect(css).toContain('[data-id="a1"] > .bn-block > .bn-block-group { margin-left: 0; }');
+    expect(css).toContain('[data-id="a1"] > .bn-block > .bn-block-group > .bn-block-outer::before { display: none; }');
   });
 
   it("hides only the title when a 1 级主题 is zoomed", () => {
     const css = zoomedOutlineCss(sampleTree(), "a");
 
     expect(css).toContain('[data-id="root"] > .bn-block > .bn-block-group > .bn-block-outer:not([data-id="a"]) { display: none; }');
-    expect(css).not.toContain('[data-id="a"] > .bn-block > .bn-block-content');
+    expect(css).not.toContain('[data-id="a"] > .bn-block > .bn-block-content { display: none; }');
   });
 
   it("quotes an id that would otherwise close the attribute selector early", () => {

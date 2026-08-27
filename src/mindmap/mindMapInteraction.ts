@@ -8,7 +8,33 @@ import {
   type ZhiJianTree,
 } from "../core/tree";
 
-export type EditingTarget = { nodeId: string; focusBlockId?: string; focusPoint?: { x: number; y: number } } | null;
+export type EditingTarget = {
+  nodeId: string;
+  focusBlockId?: string;
+  focusPoint?: { x: number; y: number };
+  focusTableCell?: { row: number; column: number };
+} | null;
+
+export interface MindMapPointerSession {
+  pointerId: number;
+  nodeId: string;
+  selectedNodeId: string | null;
+  startX: number;
+  startY: number;
+  dragged: boolean;
+}
+
+export function updateMindMapPointerSession(
+  session: MindMapPointerSession | null,
+  pointerId: number,
+  x: number,
+  y: number,
+  threshold = 8,
+) {
+  if (!session || session.pointerId !== pointerId || session.dragged) return session;
+  if (Math.hypot(x - session.startX, y - session.startY) < threshold) return session;
+  return { ...session, dragged: true };
+}
 
 export type DisplayClickAction = "ignore" | "select" | "edit";
 
@@ -43,7 +69,9 @@ export function sameEditingTarget(a: EditingTarget, b: EditingTarget) {
     a.nodeId === b.nodeId &&
     a.focusBlockId === b.focusBlockId &&
     a.focusPoint?.x === b.focusPoint?.x &&
-    a.focusPoint?.y === b.focusPoint?.y
+    a.focusPoint?.y === b.focusPoint?.y &&
+    a.focusTableCell?.row === b.focusTableCell?.row &&
+    a.focusTableCell?.column === b.focusTableCell?.column
   );
 }
 

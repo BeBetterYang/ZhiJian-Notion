@@ -133,6 +133,12 @@ describe("outlineNodeKeyAction", () => {
 });
 
 describe("outlineEnterAction", () => {
+  it("adds below the focused node instead of beside it", () => {
+    const target = block("focused");
+    expect(outlineEnterAction({ block: target, atEnd: true, selectionEmpty: true, focusedNodeId: "focused" })).toBe("insert-child");
+    expect(outlineEnterAction({ block: target, atEnd: true, selectionEmpty: true, focusedNodeId: "other" })).toBe("default");
+  });
+
   it("jumps past the attachments at the end of a node with them", () => {
     const target = block("n1", "paragraph", [block("img", "image"), block("c1")]);
 

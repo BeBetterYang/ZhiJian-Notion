@@ -841,7 +841,7 @@ textarea {
 /* Packed to the right, 10px of padding past the last 20px slot: that lands the
    last control's centre on `row left - 20px`, which is exactly where BlockNote
    draws the indent guide descending from the parent. So the collapse chevron sits
-   *on* the line it belongs to, and on a leaf — where no chevron mounts — the add
+   *on* the line it belongs to, and on a leaf — where no chevron mounts — the more
    button slides right into the vacated slot instead of leaving a hole. The width
    stays 48px (border-box), so the absolutely positioned drag handle does not
    move. */
@@ -853,9 +853,9 @@ textarea {
   justify-content: flex-end;
 }
 
-/* The two controls that sit in the gutter flow — add block, then collapse — share
+/* The two controls that sit in the gutter flow — more, then collapse — share
    one 20px slot, one 16px glyph and one tone, which puts their centres 21px apart
-   and 20px from the marker: an even add · collapse · bullet rhythm rather than a
+   and 20px from the marker: an even more · collapse · bullet rhythm rather than a
    22px icon crowding a 16px chevron. The drag handle is excluded because it is
    absolutely positioned over the marker with a 24px hit area of its own. */
 .outline-panel .bn-side-menu > .bn-button:not([draggable="true"]) {
@@ -933,6 +933,260 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.outline-panel .bn-side-menu .outline-row-more-button::before {
+  background: rgb(240, 240, 241);
+}
+
+.outline-row-menu-layer {
+  position: fixed;
+  z-index: 60;
+}
+
+.outline-row-menu-layer .toolbar-file-input {
+  display: none;
+}
+
+.outline-row-menu {
+  position: relative;
+  width: 180px;
+  padding: 6px;
+  border: 1px solid rgba(15, 15, 15, 0.12);
+  border-radius: 6px;
+  background: #fff;
+  box-shadow:
+    0 8px 24px rgba(15, 15, 15, 0.12),
+    0 2px 8px rgba(15, 15, 15, 0.08);
+  color: #37352f;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.outline-row-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2px;
+  padding: 2px 0 4px;
+}
+
+.outline-row-menu-grid + .outline-row-menu-grid {
+  padding-top: 4px;
+  border-top: 1px solid rgba(55, 53, 47, 0.08);
+}
+
+.outline-row-menu-icon,
+.outline-row-menu-action,
+.outline-row-palette-item {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.outline-row-menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  min-width: 0;
+  padding: 0;
+  border-radius: 4px;
+  color: #37352f;
+}
+
+.outline-row-menu-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.outline-row-menu-action {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 30px;
+  padding: 0 6px;
+  gap: 8px;
+  border-radius: 4px;
+  text-align: left;
+  cursor: default;
+}
+
+.outline-row-menu-action > svg:first-child {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: #37352f;
+}
+
+.outline-row-menu-action span {
+  min-width: 0;
+  flex: 1;
+  white-space: nowrap;
+}
+
+.outline-row-menu-arrow {
+  width: 14px;
+  height: 14px;
+  color: rgba(55, 53, 47, 0.55);
+}
+
+.outline-row-menu-icon:hover,
+.outline-row-menu-action:hover,
+.outline-row-palette-item:hover {
+  background: rgba(55, 53, 47, 0.08);
+}
+
+.outline-row-menu-icon.is-active,
+.outline-row-menu-action.is-active,
+.outline-row-palette-item.is-active {
+  background: rgba(55, 53, 47, 0.12);
+}
+
+.outline-row-menu-action.is-disabled {
+  opacity: 0.45;
+}
+
+.outline-row-menu-action.is-disabled:hover {
+  background: transparent;
+}
+
+.outline-row-menu-action.is-danger,
+.outline-row-menu-action.is-danger > svg:first-child {
+  color: #eb5757;
+}
+
+.outline-row-palette {
+  position: absolute;
+  top: 76px;
+  left: calc(100% + 6px);
+  width: 128px;
+  padding: 6px;
+  border: 1px solid rgba(15, 15, 15, 0.12);
+  border-radius: 6px;
+  background: #fff;
+  box-shadow:
+    0 8px 24px rgba(15, 15, 15, 0.12),
+    0 2px 8px rgba(15, 15, 15, 0.08);
+}
+
+.outline-row-palette-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 28px;
+  padding: 0 6px;
+  gap: 8px;
+  border-radius: 4px;
+  text-align: left;
+  cursor: default;
+}
+
+.outline-row-emoji-palette {
+  display: grid;
+  grid-template-columns: repeat(4, 28px);
+  width: auto;
+  gap: 2px;
+}
+
+.outline-row-emoji-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 16px;
+  line-height: 1;
+  cursor: default;
+}
+
+.outline-row-emoji-item:hover {
+  background: rgba(55, 53, 47, 0.08);
+}
+
+.outline-row-color-swatch {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(15, 15, 15, 0.14);
+  border-radius: 50%;
+  background: #fff;
+}
+
+.outline-row-color-swatch[data-kind="text"][data-color="red"] {
+  background: #e03e3e;
+}
+
+.outline-row-color-swatch[data-kind="text"][data-color="gray"] {
+  background: #9b9a97;
+}
+
+.outline-row-color-swatch[data-kind="text"][data-color="brown"] {
+  background: #64473a;
+}
+
+.outline-row-color-swatch[data-kind="text"][data-color="orange"] {
+  background: #d9730d;
+}
+
+.outline-row-color-swatch[data-kind="text"][data-color="yellow"] {
+  background: #dfab01;
+}
+
+.outline-row-color-swatch[data-kind="text"][data-color="green"] {
+  background: #4d8f31;
+}
+
+.outline-row-color-swatch[data-kind="text"][data-color="blue"] {
+  background: #0b6e99;
+}
+
+.outline-row-color-swatch[data-kind="text"][data-color="purple"] {
+  background: #6940a5;
+}
+
+.outline-row-color-swatch[data-kind="text"][data-color="pink"] {
+  background: #ad1a72;
+}
+
+.outline-row-color-swatch[data-kind="background"][data-color="yellow"] {
+  background: #fbf3db;
+}
+
+.outline-row-color-swatch[data-kind="background"][data-color="gray"] {
+  background: #ebeced;
+}
+
+.outline-row-color-swatch[data-kind="background"][data-color="brown"] {
+  background: #e9e5e3;
+}
+
+.outline-row-color-swatch[data-kind="background"][data-color="red"] {
+  background: #fbe4e4;
+}
+
+.outline-row-color-swatch[data-kind="background"][data-color="orange"] {
+  background: #f6e9d9;
+}
+
+.outline-row-color-swatch[data-kind="background"][data-color="green"] {
+  background: #ddedea;
+}
+
+.outline-row-color-swatch[data-kind="background"][data-color="blue"] {
+  background: #ddebf1;
+}
+
+.outline-row-color-swatch[data-kind="background"][data-color="purple"] {
+  background: #eae4f2;
+}
+
+.outline-row-color-swatch[data-kind="background"][data-color="pink"] {
+  background: #f4dfeb;
 }
 
 .outline-panel .bn-side-menu [draggable="true"]::before {
@@ -1048,6 +1302,11 @@ textarea {
 .mindmap-canvas .map-container .context-menu .menu-list li:hover {
   background: rgba(55, 53, 47, 0.07);
   filter: none;
+}
+
+.mindmap-canvas:not(.is-focus-mode) .context-menu .menu-list li[id="取消专注"],
+.mindmap-canvas.is-focus-mode .context-menu .menu-list li[id="专注"] {
+  display: none;
 }
 
 .mindmap-canvas .map-container .context-menu .menu-list li span {
@@ -1513,7 +1772,7 @@ textarea {
 }
 
 .mindmap-node-table td {
-  min-width: 4em;
+  min-width: 8em;
   max-width: var(--mindmap-table-cell-max-width);
   padding: 0.3em 0.45em;
   border: 1px solid #cfd5dc;
@@ -1691,7 +1950,7 @@ textarea {
 .mindmap-node-editor [data-content-type="table"] th {
   /* Feeds BlockNote's own `min-width: var(--default-cell-min-width) !important`,
      which is why this matches `.mindmap-node-table td` instead of fighting it. */
-  --default-cell-min-width: 4em;
+  --default-cell-min-width: 8em;
   max-width: var(--mindmap-table-cell-max-width);
   padding: 0.3em 0.45em;
   border-color: #cfd5dc;

@@ -4,19 +4,34 @@ import type { BlockNoteEditor } from "@blocknote/core";
 import { SideMenuExtension } from "@blocknote/core/extensions";
 import {
   FormattingToolbarController,
-  AddBlockButton,
-  DragHandleButton,
   SideMenu,
   SideMenuController,
   useComponentsContext,
   useCreateBlockNote,
   useBlockNoteEditor,
+  useExtension,
   useExtensionState,
 } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { RiArrowDownSFill, RiArrowRightSFill } from "react-icons/ri";
+import {
+  RiArrowDownSFill,
+  RiArrowRightSFill,
+  RiBold,
+  RiCheckboxLine,
+  RiDeleteBinLine,
+  RiEditLine,
+  RiEmotionLine,
+  RiFontColor,
+  RiImage2Line,
+  RiItalic,
+  RiMarkPenLine,
+  RiMoreFill,
+  RiStrikethrough,
+  RiTable2,
+  RiUnderline,
+} from "react-icons/ri";
 import type { TreeStore } from "../core/treeStore";
 import { useTree } from "../core/treeStore/useTree";
 import { blockNoteToTree, treeToBlockNote } from "./blockNoteAdapter";
@@ -25,7 +40,7 @@ import { MindMapLinkToolbar } from "./MindMapLinkToolbar";
 import { ZhiJianFormattingToolbar } from "../shared/ZhiJianFormattingToolbar";
 import type { MindMapTextSelection } from "../mindmap/MindMapEditor";
 import { resolveMindMapTextRange } from "./mindMapTextSelection";
-import { insertImageBlocks } from "../shared/attachmentInsertion";
+import { insertImageBlocks, insertNodeAttachmentBlocks } from "../shared/attachmentInsertion";
 import { saveImageAsset } from "../shared/imageAssetStore";
 import { zhijianDictionary } from "../shared/zhijianDictionary";
 import { claimCaretBesideText, correctCaretAfterClick } from "../shared/caretAtPoint";
@@ -34,7 +49,13 @@ import { handleOutlineNodeKeyDown } from "./outlineNodeKeymap";
 import { collapsedOutlineCss } from "./outlineCollapse";
 import { zoomedOutlineCss } from "./outlineZoom";
 import { LinkDialog } from "../shared/LinkDialog";
-import { applyLink, handleShortcutKeyDown } from "../shared/shortcuts";
+import {
+  applyBlockShortcut,
+  applyLink,
+  blockTextRange,
+  handleShortcutKeyDown,
+  type ShortcutId,
+} from "../shared/shortcuts";
 
 interface OutlineEditorProps {
   store: TreeStore;
@@ -50,6 +71,7 @@ interface OutlineEditorProps {
   zoomedNodeId?: string | null;
   initialScrollTop?: number;
   onScrollPositionChange?: (scrollTop: number) => void;
+  onFocusNode?: (nodeId: string) => void;
 }
 
 export function OutlineEditor({
@@ -66,6 +88,7 @@ export function OutlineEditor({
   zoomedNodeId = null,
   initialScrollTop,
   onScrollPositionChange,
+  onFocusNode,
 }: OutlineEditorProps) {
   const tree = useTree(store);
   const panelRef = useRef<HTMLElement>(null);
@@ -79,9 +102,12 @@ export function OutlineEditor({
   // exists to put the caret in.
   const pendingCaretNodeId = useRef<string | null>(null);
   const [linkText, setLinkText] = useState<string | null>(null);
+  const [rowMenu, setRowMenu] = useState<OutlineRowMenuState | null>(null);
   const searchVisibilityCss = useMemo(() => outlineSearchVisibilityCss(tree, visibleNodeIds, searchQuery), [searchQuery, tree, visibleNodeIds]);
   const activeSearchCss = useMemo(() => outlineActiveSearchCss(activeSearchNodeId), [activeSearchNodeId]);
   const zoomCss = useMemo(() => zoomedOutlineCss(tree, zoomedNodeId), [tree, zoomedNodeId]);
+  const rowMenuHighlightCss = useMemo(() => outlineRowMenuHighlightCss(rowMenu?.nodeId ?? null), [rowMenu?.nodeId]);
+  const outlineContextValue = useMemo(() => ({ store, rowMenu, setRowMenu, onFocusNode }), [onFocusNode, rowMenu, store]);
   const editor = useCreateBlockNote(
     {
       initialContent: treeToBlockNote(tree),
@@ -191,6 +217,7 @@ export function OutlineEditor({
         formattingToolbar={() => <ZhiJianFormattingToolbar />}
       />
       <SideMenuController sideMenu={RootProtectedSideMenu} />
+      <OutlineRowMenuPortal />
       <ZhiJianSlashMenu />
       {/* The map's links open this same editor's link toolbar, which is why it hangs
           here: BlockNote's components and dictionary come from this view. It shows
@@ -224,6 +251,18 @@ export function OutlineEditor({
         if (event.button !== 0 || event.detail > 1) return;
         if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) return;
         const target = event.target as Element;
+        if (zoomedNodeId && target.closest(".bn-trailing-block")) {
+          event.preventDefault();
+          const focused = editor.getBlock(zoomedNodeId);
+          if (!focused) return;
+          const updated = editor.updateBlock(focused, {
+            children: [...focused.children, { type: "paragraph", content: "" }],
+          });
+          const created = updated.children.at(-1);
+          if (created) editor.setTextCursorPosition(created, "start");
+          editor.focus();
+          return;
+        }
         if (!target.matches(".bn-block-content, .bn-inline-content")) return;
         if (claimCaretBesideText(editor, { x: event.clientX, y: event.clientY })) {
           event.preventDefault();
@@ -253,7 +292,7 @@ export function OutlineEditor({
         ) {
           return;
         }
-        handleOutlineNodeKeyDown(event.nativeEvent, editor);
+        handleOutlineNodeKeyDown(event.nativeEvent, editor, zoomedNodeId);
       }}
       // Typing 你 through an IME reaches `onChange` once per pinyin letter, and
       // each of those was an undo step of its own. The composition marks the run
@@ -274,7 +313,8 @@ export function OutlineEditor({
       <style>{searchVisibilityCss}</style>
       <style>{activeSearchCss}</style>
       <style>{zoomCss}</style>
-      <OutlineStoreContext.Provider value={store}>{editorView}</OutlineStoreContext.Provider>
+      <style>{rowMenuHighlightCss}</style>
+      <OutlineStoreContext.Provider value={outlineContextValue}>{editorView}</OutlineStoreContext.Provider>
       {/* 添加图片 (Alt Enter) has nothing to insert until a file has been chosen, and
           the picker can only be opened from a real click on an input. */}
       <input
@@ -354,6 +394,11 @@ function outlineActiveSearchCss(nodeId: string | null) {
   return `.outline-panel .bn-block-outer[data-id="${escapeCssString(nodeId)}"] > .bn-block > .bn-block-content { background: rgba(55, 53, 47, 0.08); border-radius: 4px; }`;
 }
 
+function outlineRowMenuHighlightCss(nodeId: string | null) {
+  if (!nodeId) return "";
+  return `.outline-panel .bn-block-outer[data-id="${escapeCssString(nodeId)}"] > .bn-block > .bn-block-content { background: rgba(55, 53, 47, 0.08); border-radius: 4px; }`;
+}
+
 function blockSelectors(ids: string[]) {
   return ids.map((id) => `.bn-block-outer[data-id="${escapeCssString(id)}"]`).join(", ");
 }
@@ -369,34 +414,404 @@ function escapeCssString(value: string) {
  * component identity that changed on every tree change would remount it — mid-drag,
  * for a drag that ends in a change.
  */
-const OutlineStoreContext = createContext<TreeStore | null>(null);
+interface OutlineRowMenuState {
+  nodeId: string;
+  rootId: string | null;
+  position: {
+    top: number;
+    left: number;
+  };
+}
+
+interface OutlineStoreContextValue {
+  store: TreeStore;
+  rowMenu: OutlineRowMenuState | null;
+  setRowMenu: (menu: OutlineRowMenuState | null) => void;
+  onFocusNode?: (nodeId: string) => void;
+}
+
+const OutlineStoreContext = createContext<OutlineStoreContextValue | null>(null);
 
 function RootProtectedSideMenu() {
   const editor = useBlockNoteEditor();
-  const store = useContext(OutlineStoreContext);
+  const context = useContext(OutlineStoreContext);
   const state = useExtensionState(SideMenuExtension, {
     selector: (extensionState) => extensionState?.block,
   });
 
-  // The root is a fixed document title. Child blocks keep the standard
-  // BlockNote add/drag controls.
+  // The root is a fixed document title. Child blocks keep the row menu and the
+  // standard BlockNote drag handle.
   if (state?.id && state.id === editor.document[0]?.id) {
+    return null;
+  }
+  if (!state?.id) {
     return null;
   }
 
   return (
     <SideMenu>
-      <AddBlockButton />
-      {store && state?.id ? <CollapseButton store={store} nodeId={state.id} /> : null}
-      <DragHandleButton />
+      {context ? (
+        <OutlineRowMenuButton nodeId={state.id} rootId={editor.document[0]?.id ?? null} />
+      ) : null}
+      {context ? <CollapseButton store={context.store} nodeId={state.id} /> : null}
+      <FocusDragHandleButton nodeId={state.id} />
     </SideMenu>
   );
 }
 
+type PaletteKind = "text" | "background" | "emoji";
+type BasicStyle = "bold" | "italic" | "underline" | "strike";
+
+const COLOR_ITEMS: Array<{ label: string; value: string | null }> = [
+  { label: "默认", value: null },
+  { label: "灰色", value: "gray" },
+  { label: "棕色", value: "brown" },
+  { label: "红色", value: "red" },
+  { label: "橙色", value: "orange" },
+  { label: "黄色", value: "yellow" },
+  { label: "绿色", value: "green" },
+  { label: "蓝色", value: "blue" },
+  { label: "紫色", value: "purple" },
+  { label: "粉色", value: "pink" },
+];
+
+const EMOJI_ITEMS = [
+  "😀", "😄", "😂", "😊", "😍", "🤔", "😎", "😭", "😡", "👍", "👏", "🙏",
+  "💡", "⭐", "✅", "🔥", "📌", "📷", "📊", "📝", "🚩", "❗", "🎯", "🔗",
+  "📁", "📄", "📚", "💻", "📱", "🚀", "⚠️", "❤️", "💬", "🔍", "🧠", "🏷️",
+];
+
+function OutlineRowMenuButton({ nodeId, rootId }: { nodeId: string; rootId: string | null }) {
+  const editor = useBlockNoteEditor();
+  const Components = useComponentsContext()!;
+  const context = useContext(OutlineStoreContext);
+
+  return (
+    <Components.SideMenu.Button
+      className="bn-button outline-row-more-button"
+      label="更多"
+      icon={<RiMoreFill />}
+      onClick={(event) => {
+        const block = editor.getBlock(nodeId);
+        if (block) {
+          editor.setTextCursorPosition(block, "end");
+        }
+        const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+        context?.setRowMenu(
+          context.rowMenu?.nodeId === nodeId
+            ? null
+            : {
+                nodeId,
+                rootId,
+                position: {
+                  top: rect.bottom + 4,
+                  left: rect.left,
+                },
+              },
+        );
+      }}
+    />
+  );
+}
+
+function OutlineRowMenuPortal() {
+  const editor = useBlockNoteEditor();
+  const context = useContext(OutlineStoreContext);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const [palette, setPalette] = useState<PaletteKind | null>(null);
+  const menu = context?.rowMenu ?? null;
+  const nodeId = menu?.nodeId ?? "";
+  const rootId = menu?.rootId ?? null;
+  const activeBlock = nodeId ? editor.getBlock(nodeId) : undefined;
+  const activeStyles = editor.getActiveStyles() as Record<string, unknown>;
+  const activeTextColor = typeof activeStyles.textColor === "string" ? activeStyles.textColor : null;
+  const activeBackgroundColor = typeof activeStyles.backgroundColor === "string" ? activeStyles.backgroundColor : null;
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = (event: PointerEvent) => {
+      if (menuRef.current?.contains(event.target as Node)) return;
+      context?.setRowMenu(null);
+      setPalette(null);
+    };
+    window.addEventListener("pointerdown", close);
+    return () => window.removeEventListener("pointerdown", close);
+  }, [context, menu]);
+
+  const withTargetBlock = (action: () => void, keepOpen = false) => {
+    const block = editor.getBlock(nodeId);
+    if (!block || nodeId === rootId) return;
+    editor.setTextCursorPosition(block, "end");
+    action();
+    editor.focus();
+    if (!keepOpen) {
+      context?.setRowMenu(null);
+      setPalette(null);
+    }
+  };
+
+  const applyShortcut = (id: ShortcutId) => {
+    withTargetBlock(() => {
+      applyBlockShortcut(id, {
+        editor,
+        protectedBlockId: rootId,
+        onRequestImage: () => imageInputRef.current?.click(),
+      });
+    });
+  };
+
+  const applyColor = (kind: PaletteKind, color: string | null) => {
+    if (kind === "emoji") return;
+    withTargetBlock(() => {
+      toggleWholeBlockColor(editor, nodeId, kind, color);
+    });
+  };
+
+  const addDescription = () => {
+    withTargetBlock(() => {
+      const block = editor.getBlock(nodeId);
+      const existingQuote = block?.children.find((child) => child.type === "quote");
+      if (existingQuote) {
+        editor.setTextCursorPosition(existingQuote, "end");
+        return;
+      }
+      const [quote] = insertNodeAttachmentBlocks(editor, nodeId, [
+        { type: "quote" as const, content: "" },
+      ]);
+      if (quote) {
+        editor.setTextCursorPosition(quote, "start");
+      }
+    });
+  };
+
+  const deleteNode = () => {
+    if (nodeId === rootId) return;
+    context?.store.deleteNode(nodeId);
+    context?.setRowMenu(null);
+    setPalette(null);
+  };
+
+  const insertEmoji = (emoji: string) => {
+    withTargetBlock(() => editor.insertInlineContent(`${emoji} `));
+  };
+
+  if (!menu) return null;
+
+  return createPortal(
+    <div
+      className="outline-row-menu-layer"
+      ref={menuRef}
+      style={{ top: menu.position.top, left: menu.position.left }}
+      onMouseDown={(event) => event.preventDefault()}
+    >
+      <input
+        ref={imageInputRef}
+        className="toolbar-file-input"
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={async (event) => {
+          const files = Array.from(event.target.files ?? []);
+          event.target.value = "";
+          if (!files.length) return;
+          await insertImageBlocks(editor, nodeId, files, saveImageAsset);
+          context?.setRowMenu(null);
+          setPalette(null);
+        }}
+      />
+      <div className="outline-row-menu">
+          <div className="outline-row-menu-grid" aria-label="段落类型">
+            <RowMenuIconButton label="H1" active={isHeadingBlock(activeBlock, 1)} onClick={() => applyShortcut("heading-1")} />
+            <RowMenuIconButton label="H2" active={isHeadingBlock(activeBlock, 2)} onClick={() => applyShortcut("heading-2")} />
+            <RowMenuIconButton label="H3" active={isHeadingBlock(activeBlock, 3)} onClick={() => applyShortcut("heading-3")} />
+            <RowMenuIconButton label="T" active={activeBlock?.type === "paragraph"} onClick={() => applyShortcut("set-paragraph")} />
+          </div>
+          <div className="outline-row-menu-grid" aria-label="文字样式">
+            <RowMenuIconButton label="加粗" icon={<RiBold />} active={Boolean(activeStyles.bold)} onClick={() => withTargetBlock(() => toggleWholeBlockStyle(editor, nodeId, "bold"))} />
+            <RowMenuIconButton label="斜体" icon={<RiItalic />} active={Boolean(activeStyles.italic)} onClick={() => withTargetBlock(() => toggleWholeBlockStyle(editor, nodeId, "italic"))} />
+            <RowMenuIconButton label="下划线" icon={<RiUnderline />} active={Boolean(activeStyles.underline)} onClick={() => withTargetBlock(() => toggleWholeBlockStyle(editor, nodeId, "underline"))} />
+            <RowMenuIconButton label="删除线" icon={<RiStrikethrough />} active={Boolean(activeStyles.strike)} onClick={() => withTargetBlock(() => toggleWholeBlockStyle(editor, nodeId, "strike"))} />
+          </div>
+          <button className="outline-row-menu-action" type="button" onClick={() => setPalette(palette === "text" ? null : "text")}>
+            <RiFontColor />
+            <span>字体颜色</span>
+            <RiArrowRightSFill className="outline-row-menu-arrow" />
+          </button>
+          <button className="outline-row-menu-action" type="button" onClick={() => setPalette(palette === "background" ? null : "background")}>
+            <RiMarkPenLine />
+            <span>荧光笔</span>
+            <RiArrowRightSFill className="outline-row-menu-arrow" />
+          </button>
+          <button className="outline-row-menu-action" type="button" onClick={addDescription}>
+            <RiEditLine />
+            <span>编辑引用</span>
+          </button>
+          <button className="outline-row-menu-action" type="button" onClick={() => imageInputRef.current?.click()}>
+            <RiImage2Line />
+            <span>添加图片</span>
+          </button>
+          <button className="outline-row-menu-action" type="button" onClick={() => applyShortcut("toggle-todo")}>
+            <RiCheckboxLine />
+            <span>添加待办</span>
+          </button>
+          <button className="outline-row-menu-action" type="button" onClick={() => setPalette(palette === "emoji" ? null : "emoji")}>
+            <RiEmotionLine />
+            <span>表情符号</span>
+            <RiArrowRightSFill className="outline-row-menu-arrow" />
+          </button>
+          <button className="outline-row-menu-action" type="button" onClick={() => applyShortcut("insert-table")}>
+            <RiTable2 />
+            <span>添加表格</span>
+          </button>
+          <button className="outline-row-menu-action is-danger" type="button" onClick={deleteNode}>
+            <RiDeleteBinLine />
+            <span>删除</span>
+          </button>
+          {palette && palette !== "emoji" ? (
+            <div className="outline-row-palette">
+              {COLOR_ITEMS.map((item) => (
+                <button
+                  className={`outline-row-palette-item ${isActiveColor(palette, item.value, activeTextColor, activeBackgroundColor) ? "is-active" : ""}`}
+                  key={item.value ?? "default"}
+                  type="button"
+                  onClick={() => applyColor(palette, item.value)}
+                >
+                  <span
+                    className="outline-row-color-swatch"
+                    data-color={item.value ?? "default"}
+                    data-kind={palette}
+                  />
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {palette === "emoji" ? (
+            <div className="outline-row-palette outline-row-emoji-palette">
+              {EMOJI_ITEMS.map((emoji) => (
+                <button className="outline-row-emoji-item" key={emoji} type="button" onClick={() => insertEmoji(emoji)}>
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          ) : null}
+      </div>
+    </div>
+    ,
+    document.body,
+  );
+}
+
+function RowMenuIconButton({
+  label,
+  icon,
+  onClick,
+  active = false,
+}: {
+  label: string;
+  icon?: ReactNode;
+  onClick: () => void;
+  active?: boolean;
+}) {
+  return (
+    <button className={`outline-row-menu-icon ${active ? "is-active" : ""}`} type="button" aria-label={label} title={label} onClick={onClick}>
+      {icon ?? label}
+    </button>
+  );
+}
+
+function FocusDragHandleButton({ nodeId }: { nodeId: string }) {
+  const Components = useComponentsContext()!;
+  const context = useContext(OutlineStoreContext);
+  const sideMenu = useExtension(SideMenuExtension) as unknown as {
+    blockDragStart: (event: DragEvent, block: unknown) => void;
+    blockDragEnd: (event: DragEvent) => void;
+  };
+  const block = useExtensionState(SideMenuExtension, {
+    selector: (extensionState) => extensionState?.block,
+  });
+
+  if (!block) return null;
+
+  return (
+    <Components.SideMenu.Button
+      className="bn-button outline-focus-drag-handle"
+      label="进入专注"
+      draggable
+      icon={<span className="outline-focus-dot" aria-hidden="true" />}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        context?.onFocusNode?.(nodeId);
+      }}
+      onDragStart={(event) => sideMenu.blockDragStart(event, block)}
+      onDragEnd={(event) => sideMenu.blockDragEnd(event)}
+    />
+  );
+}
+
+function toggleWholeBlockStyle(editor: BlockNoteEditor, blockId: string, style: BasicStyle) {
+  const block = editor.getBlock(blockId);
+  if (!block) return;
+  const selection = editor.prosemirrorState.selection;
+  const range = blockTextRange(editor, blockId);
+  if (range && range.from < range.to) {
+    editor._tiptapEditor.commands.setTextSelection(range);
+  } else {
+    editor.setTextCursorPosition(block, "end");
+  }
+  editor.toggleStyles({ [style]: true } as Parameters<BlockNoteEditor["toggleStyles"]>[0]);
+  if (range && range.from < range.to) {
+    editor._tiptapEditor.commands.setTextSelection({ from: selection.from, to: selection.to });
+  }
+}
+
+function toggleWholeBlockColor(editor: BlockNoteEditor, blockId: string, kind: Exclude<PaletteKind, "emoji">, color: string | null) {
+  const block = editor.getBlock(blockId);
+  if (!block) return;
+  const selection = editor.prosemirrorState.selection;
+  const range = blockTextRange(editor, blockId);
+  if (range && range.from < range.to) {
+    editor._tiptapEditor.commands.setTextSelection(range);
+  } else {
+    editor.setTextCursorPosition(block, "end");
+  }
+  if (kind === "text") {
+    if (color === null) {
+      editor.removeStyles({ textColor: "" } as Parameters<BlockNoteEditor["removeStyles"]>[0]);
+    } else {
+      editor.addStyles({ textColor: color } as Parameters<BlockNoteEditor["addStyles"]>[0]);
+    }
+  } else if (color === null) {
+    editor.removeStyles({ backgroundColor: "" } as Parameters<BlockNoteEditor["removeStyles"]>[0]);
+  } else {
+    editor.addStyles({ backgroundColor: color } as Parameters<BlockNoteEditor["addStyles"]>[0]);
+  }
+  if (range && range.from < range.to) {
+    editor._tiptapEditor.commands.setTextSelection({ from: selection.from, to: selection.to });
+  }
+}
+
+function isHeadingBlock(block: ReturnType<BlockNoteEditor["getBlock"]> | undefined, level: 1 | 2 | 3) {
+  return block?.type === "heading" && (block.props as { level?: number } | undefined)?.level === level;
+}
+
+function isActiveColor(
+  kind: PaletteKind,
+  color: string | null,
+  activeTextColor: string | null,
+  activeBackgroundColor: string | null,
+) {
+  if (kind === "emoji") return false;
+  const active = kind === "text" ? activeTextColor : activeBackgroundColor;
+  return color === null ? active === null || active === "default" : active === color;
+}
+
 /**
- * The row's collapse toggle, shown between the add button and the marker for as long
- * as the pointer is on the row — a row with nothing under it has nothing to collapse
- * and shows no button at all, which is what tells the two apart at a glance.
+ * The row's collapse toggle, shown between the more button and the marker for as
+ * long as the pointer is on the row — a row with nothing under it has nothing to
+ * collapse and shows no button at all, which is what tells the two apart at a glance.
  */
 function CollapseButton({ store, nodeId }: { store: TreeStore; nodeId: string }) {
   const Components = useComponentsContext()!;

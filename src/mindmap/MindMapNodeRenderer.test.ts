@@ -36,9 +36,9 @@ describe("renderMindMapNodeDisplayHtml table cells", () => {
       }),
     );
 
-    expect(html).toContain('<td data-background-color="blue" data-text-color="red">');
-    // A cell with no colour of its own stays a plain cell.
-    expect(html).toContain("<td>");
+    expect(html).toContain('data-table-row="0" data-table-column="0" data-background-color="blue" data-text-color="red"');
+    // Every cell exposes its position so edit mode can restore the clicked cell.
+    expect(html).toContain('data-table-row="0" data-table-column="1"');
   });
 
   it("carries a cell's alignment through", () => {
@@ -46,7 +46,7 @@ describe("renderMindMapNodeDisplayHtml table cells", () => {
       tableNode({ table: { rows: [[{ content: { text: "1" }, textAlignment: "center" }]] } }),
     );
 
-    expect(html).toContain('<td data-text-alignment="center">');
+    expect(html).toContain('data-table-row="0" data-table-column="0" data-text-alignment="center"');
   });
 });
 

@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { caretPositionAtPoint } from "./caretAtPoint";
+import { describe, expect, it, vi } from "vitest";
+import type { BlockNoteEditor } from "@blocknote/core";
+import { caretPositionAtPoint, placeCaretInTableCell } from "./caretAtPoint";
 
 describe("caretPositionAtPoint", () => {
   it("keeps the resolved position when the click landed on a character", () => {
@@ -15,5 +16,30 @@ describe("caretPositionAtPoint", () => {
 
   it("leaves a click that landed in no line to the caller", () => {
     expect(caretPositionAtPoint({ position: 1, onCharacter: false, lineEnd: null })).toBeNull();
+  });
+});
+
+describe("placeCaretInTableCell", () => {
+  it("targets the clicked row and column rather than the final cell", () => {
+    const root = document.createElement("div");
+    root.innerHTML = `<div data-content-type="table"><table><tbody><tr><td><p>甲</p></td><td><p>乙</p></td></tr></tbody></table></div>`;
+    const setTextSelection = vi.fn();
+    const target = root.querySelectorAll("p")[0];
+    const editor = {
+      domElement: root,
+      _tiptapEditor: {
+        view: { posAtDOM: vi.fn((node: Node) => node === target ? 7 : 17) },
+        commands: { setTextSelection },
+      },
+      prosemirrorState: { doc: { content: { size: 30 } } },
+    } as unknown as BlockNoteEditor;
+
+    expect(placeCaretInTableCell(editor, { row: 0, column: 0 })).toBe(true);
+    expect(setTextSelection).toHaveBeenCalledWith(8);
+  });
+
+  it("does nothing when the requested cell no longer exists", () => {
+    const editor = { domElement: document.createElement("div") } as unknown as BlockNoteEditor;
+    expect(placeCaretInTableCell(editor, { row: 4, column: 4 })).toBe(false);
   });
 });
