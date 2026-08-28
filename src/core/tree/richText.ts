@@ -6,6 +6,12 @@ export interface RichTextMarks {
   textColor?: string;
   backgroundColor?: string;
   linkUrl?: string;
+  /**
+   * 挖空: a run of text the map hides behind a blue underline until it is clicked.
+   * A study aid rather than a style, so it is only shown as a blank in the mindmap's
+   * display layer — every editor keeps the text readable while it is being written.
+   */
+  cloze?: boolean;
 }
 
 export interface RichTextSpan {

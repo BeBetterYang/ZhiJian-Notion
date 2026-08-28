@@ -145,10 +145,11 @@ async function requireAuthenticatedUser(appEnv: Record<string, string>, request:
 }
 
 async function supabaseAuthRequest(appEnv: Record<string, string>, pathname: string, init: RequestInit & { token?: string }) {
-  const url = appEnv.SUPABASE_URL || appEnv.VITE_SUPABASE_URL || "";
+  const rawUrl = appEnv.SUPABASE_URL || appEnv.VITE_SUPABASE_URL || "";
+  const url = rawUrl.trim().replace(/\/(?:rest|auth)\/v1\/?$/i, "").replace(/\/$/, "");
   const publishableKey = appEnv.SUPABASE_PUBLISHABLE_KEY || appEnv.VITE_SUPABASE_PUBLISHABLE_KEY || appEnv.SUPABASE_ANON_KEY || "";
   if (!url || !publishableKey) throw new Error("Supabase Auth 环境变量未配置。");
-  const response = await fetch(`${url.replace(/\/$/, "")}/auth/v1/${pathname}`, {
+  const response = await fetch(`${url}/auth/v1/${pathname}`, {
     ...init,
     headers: {
       apikey: publishableKey,
@@ -158,7 +159,14 @@ async function supabaseAuthRequest(appEnv: Record<string, string>, pathname: str
     },
   });
   const text = await response.text();
-  const payload = text ? JSON.parse(text) as unknown : {};
+  let payload: unknown = {};
+  try {
+    payload = text ? JSON.parse(text) as unknown : {};
+  } catch {
+    throw new Error(/^\s*<!doctype\s+html|^\s*<html/i.test(text)
+      ? "Supabase Auth 返回了网页而不是数据，请检查 SUPABASE_URL。"
+      : "Supabase Auth 返回的数据格式不正确。");
+  }
   if (!response.ok) throw new Error(readSupabaseError(payload));
   return payload;
 }

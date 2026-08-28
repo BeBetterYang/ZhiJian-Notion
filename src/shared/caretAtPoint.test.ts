@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import type { BlockNoteEditor } from "@blocknote/core";
-import { caretPositionAtPoint, placeCaretInTableCell } from "./caretAtPoint";
+import {
+  caretPositionAtPoint,
+  caretPositionBesideText,
+  correctCaretAfterClick,
+  extendSelectionFromCaret,
+  placeCaretInTableCell,
+} from "./caretAtPoint";
 
 describe("caretPositionAtPoint", () => {
   it("keeps the resolved position when the click landed on a character", () => {
@@ -16,6 +22,57 @@ describe("caretPositionAtPoint", () => {
 
   it("leaves a click that landed in no line to the caller", () => {
     expect(caretPositionAtPoint({ position: 1, onCharacter: false, lineEnd: null })).toBeNull();
+  });
+});
+
+describe("correctCaretAfterClick", () => {
+  it("does not overwrite a drag selection", () => {
+    const getSelection = vi.spyOn(document, "getSelection").mockReturnValue({
+      isCollapsed: false,
+    } as Selection);
+    const editor = {
+      _tiptapEditor: {
+        view: { posAtCoords: vi.fn() },
+        commands: { setTextSelection: vi.fn() },
+      },
+    } as unknown as BlockNoteEditor;
+
+    correctCaretAfterClick(editor, { x: 120, y: 40 });
+
+    expect(editor._tiptapEditor.view.posAtCoords).not.toHaveBeenCalled();
+    expect(editor._tiptapEditor.commands.setTextSelection).not.toHaveBeenCalled();
+    getSelection.mockRestore();
+  });
+});
+
+describe("outline blank-text gesture", () => {
+  function gestureEditor() {
+    const setTextSelection = vi.fn();
+    const posAtCoords = vi.fn(() => ({ pos: 3, inside: 1 }));
+    const doc = {
+      resolve: () => ({ parent: { isTextblock: true }, end: () => 9 }),
+    };
+    const editor = {
+      _tiptapEditor: {
+        view: { posAtCoords, state: { doc } },
+        commands: { setTextSelection },
+      },
+      prosemirrorState: {
+        doc,
+      },
+    } as unknown as BlockNoteEditor;
+    return { editor, posAtCoords, setTextSelection };
+  }
+
+  it("records the line end as the anchor for a press beside text", () => {
+    const { editor } = gestureEditor();
+    expect(caretPositionBesideText(editor, { x: 120, y: 40 })).toBe(9);
+  });
+
+  it("extends selection from the recorded line-end anchor", () => {
+    const { editor, setTextSelection } = gestureEditor();
+    expect(extendSelectionFromCaret(editor, 9, { x: 60, y: 40 })).toBe(true);
+    expect(setTextSelection).toHaveBeenCalledWith({ from: 9, to: 3 });
   });
 });
 

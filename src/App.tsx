@@ -86,6 +86,8 @@ export default function App({
   const [mindMapNodeToolbarActive, setMindMapNodeToolbarActive] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
   const mindMapExportImageRef = useRef<(() => Promise<Blob | null>) | null>(null);
+  const handledFocusRequestIdRef = useRef<number | null>(null);
+  const searchResultHighlightTimerRef = useRef<number | null>(null);
   const toolbarMoreRef = useRef<HTMLDivElement>(null);
   const collapseMenuRef = useRef<HTMLDivElement>(null);
   const [toolbarMoreOpen, setToolbarMoreOpen] = useState(false);
@@ -126,7 +128,6 @@ export default function App({
 
   useEffect(() => {
     setActiveMatchIndex(0);
-    setActiveSearchNodeId(null);
   }, [searchQuery]);
 
   const handleOutlineSelect = useCallback(
@@ -289,23 +290,40 @@ export default function App({
 
   useEffect(() => {
     if (!focusNodeRequest || !tree.nodes[focusNodeRequest.nodeId]) return;
+    if (handledFocusRequestIdRef.current === focusNodeRequest.requestId) return;
+    handledFocusRequestIdRef.current = focusNodeRequest.requestId;
     const nodeId = focusNodeRequest.nodeId;
-    if (focusNodeRequest.query.trim()) {
-      setSearchQuery(focusNodeRequest.query);
-    }
-    setActiveSearchNodeId(nodeId);
+    setSearchOpen(false);
+    setReplaceText("");
+    setSearchQuery("");
     setSelectedNodeId(nodeId);
     setSelectionActive(true);
+    if (searchResultHighlightTimerRef.current !== null) {
+      window.clearTimeout(searchResultHighlightTimerRef.current);
+      searchResultHighlightTimerRef.current = null;
+    }
     if (activeView === "mindmap") {
+      setActiveSearchNodeId(null);
       setMindMapFocusNodeRequest({ nodeId, requestId: focusNodeRequest.requestId });
       return;
     }
+    setActiveSearchNodeId(nodeId);
+    searchResultHighlightTimerRef.current = window.setTimeout(() => {
+      setActiveSearchNodeId((current) => current === nodeId ? null : current);
+      searchResultHighlightTimerRef.current = null;
+    }, 1500);
     window.requestAnimationFrame(() => {
       document
         .querySelector(`.outline-panel .bn-block-outer[data-id="${cssEscape(nodeId)}"]`)
         ?.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
     });
   }, [activeView, focusNodeRequest, tree.nodes]);
+
+  useEffect(() => () => {
+    if (searchResultHighlightTimerRef.current !== null) {
+      window.clearTimeout(searchResultHighlightTimerRef.current);
+    }
+  }, []);
 
   const exportMarkdown = () => {
     downloadBlob(new Blob([treeToMarkdown(tree)], { type: "text/markdown;charset=utf-8" }), markdownFileName(tree));
@@ -611,11 +629,15 @@ export default function App({
           query={searchQuery}
           replacement={replaceText}
           focusSignal={searchFocusSignal}
-          onQueryChange={setSearchQuery}
+          onQueryChange={(query) => {
+            setSearchQuery(query);
+            setActiveSearchNodeId(null);
+          }}
           onReplacementChange={setReplaceText}
           onClose={() => {
             setSearchQuery("");
             setReplaceText("");
+            setActiveSearchNodeId(null);
             setSearchOpen(false);
           }}
           onPrevious={() => goToSearchMatch(-1)}

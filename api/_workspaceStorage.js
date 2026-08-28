@@ -65,13 +65,13 @@ export async function upsertWorkspaceDocument(email, fileId, tree) {
 }
 
 async function supabaseRequest(path, init) {
-  const url = process.env.SUPABASE_URL;
+  const url = supabaseProjectUrl(process.env.SUPABASE_URL);
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceRoleKey) {
     throw new Error("Supabase 环境变量未配置。");
   }
 
-  const request = () => fetch(`${url.replace(/\/$/, "")}/rest/v1/${path}`, {
+  const request = () => fetch(`${url}/rest/v1/${path}`, {
     ...init,
     headers: {
       ...serviceKeyHeaders(serviceRoleKey),
@@ -89,11 +89,31 @@ async function supabaseRequest(path, init) {
   }
 
   if (!response.ok) {
-    throw new Error(text || "Supabase 请求失败。");
+    throw new Error(supabaseResponseError(text));
   }
 
   if (response.status === 204) return null;
-  return text ? JSON.parse(text) : null;
+  return text ? parseSupabaseJson(text) : null;
+}
+
+function supabaseProjectUrl(value) {
+  return typeof value === "string"
+    ? value.trim().replace(/\/(?:rest|auth)\/v1\/?$/i, "").replace(/\/$/, "")
+    : "";
+}
+
+function parseSupabaseJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(supabaseResponseError(text));
+  }
+}
+
+function supabaseResponseError(text) {
+  return /^\s*<!doctype\s+html|^\s*<html/i.test(text)
+    ? "Supabase 返回了网页而不是数据，请确认 SUPABASE_URL 是项目地址且不包含 /rest/v1。"
+    : text || "Supabase 请求失败。";
 }
 
 function serviceKeyHeaders(key) {

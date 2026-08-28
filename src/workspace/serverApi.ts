@@ -39,7 +39,7 @@ export async function loadWorkspaceState(session: WorkspaceSession, options?: Wo
   const response = await workspaceFetch("/api/workspace", {}, session, options);
   if (response.status === 404) return null;
   if (!response.ok) throw new WorkspaceApiError(await readApiError(response, "无法从服务器读取工作区数据。"), response.status);
-  return response.json() as Promise<WorkspaceServerState>;
+  return readJsonResponse(response, "服务器返回的工作区数据格式不正确。") as Promise<WorkspaceServerState>;
 }
 
 export async function saveWorkspaceState(session: WorkspaceSession, state: WorkspaceServerState, options?: WorkspaceApiOptions) {
@@ -48,6 +48,7 @@ export async function saveWorkspaceState(session: WorkspaceSession, state: Works
     body: JSON.stringify(state),
   }, session, options);
   if (!response.ok) throw new WorkspaceApiError(await readApiError(response, "无法保存工作区数据到服务器。"), response.status);
+  await readJsonResponse(response, "服务器未返回有效的工作区保存结果。");
 }
 
 export async function saveWorkspaceDocument(session: WorkspaceSession, fileId: string, tree: ZhiJianTree, options?: WorkspaceApiOptions) {
@@ -56,6 +57,7 @@ export async function saveWorkspaceDocument(session: WorkspaceSession, fileId: s
     body: JSON.stringify({ tree }),
   }, session, options);
   if (!response.ok) throw new WorkspaceApiError(await readApiError(response, "无法保存文档到服务器。"), response.status);
+  await readJsonResponse(response, "服务器未返回有效的文档保存结果。");
 }
 
 async function workspaceFetch(input: RequestInfo | URL, init: RequestInit, session: WorkspaceSession, options?: WorkspaceApiOptions) {
@@ -104,10 +106,31 @@ function authHeaders(session: WorkspaceSession, headers?: HeadersInit) {
 }
 
 async function readApiError(response: Response, fallback: string) {
+  const text = await response.text();
+  if (looksLikeHtml(text)) return apiRouteError();
   try {
-    const payload = await response.json() as { error?: unknown };
+    const payload = JSON.parse(text) as { error?: unknown };
     return typeof payload.error === "string" && payload.error.trim() ? payload.error : fallback;
   } catch {
     return fallback;
   }
+}
+
+async function readJsonResponse(response: Response, fallback: string) {
+  const text = await response.text();
+  if (!text.trim()) return {};
+  if (looksLikeHtml(text)) throw new WorkspaceApiError(apiRouteError(), response.status || 502);
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new WorkspaceApiError(fallback, response.status || 502);
+  }
+}
+
+function looksLikeHtml(text: string) {
+  return /^\s*<!doctype\s+html|^\s*<html/i.test(text);
+}
+
+function apiRouteError() {
+  return "服务器 API 返回了网页而不是数据，请检查 Vercel 的 /api 路由和 Supabase 环境变量。";
 }

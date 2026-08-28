@@ -6,6 +6,7 @@ import {
   displayClickAction,
   hiddenDescendantCount,
   isBlankMindMapSurface,
+  isMindMapAnnotationTarget,
   isMindMapGeometryEditorElement,
   mindMapDisplayDragTopic,
   mindMapMeasuredSizeChanged,
@@ -181,6 +182,37 @@ describe("isBlankMindMapSurface", () => {
   it("ignores anything that is not an element", () => {
     expect(isBlankMindMapSurface(null)).toBe(false);
     expect(isBlankMindMapSurface(document)).toBe(false);
+  });
+});
+
+describe("isMindMapAnnotationTarget", () => {
+  const inCanvas = (html: string) => {
+    const canvas = document.createElement("div");
+    canvas.className = "map-container";
+    canvas.innerHTML = html;
+    return canvas;
+  };
+
+  it("claims the summary and arrow shapes and their labels", () => {
+    const canvas = inCanvas(
+      `<svg class="topiclinks"><g class="topiclinks"><path></path></g></svg>
+       <svg class="summary"><path></path></svg>
+       <div class="svg-label" data-type="summary" data-svg-id="s1"><span>摘要</span></div>`,
+    );
+    for (const selector of [".topiclinks path", ".summary path", ".svg-label span", ".svg-label"]) {
+      expect(isMindMapAnnotationTarget(canvas.querySelector(selector)), selector).toBe(true);
+    }
+  });
+
+  it("leaves a node's own content to the node handlers", () => {
+    const canvas = inCanvas(
+      `<me-tpc><div class="mindmap-node-shell" data-node-id="web">
+         <span class="mindmap-node-rich-text">正文</span>
+       </div></me-tpc>`,
+    );
+    expect(isMindMapAnnotationTarget(canvas.querySelector(".mindmap-node-rich-text"))).toBe(false);
+    expect(isMindMapAnnotationTarget(null)).toBe(false);
+    expect(isMindMapAnnotationTarget(document)).toBe(false);
   });
 });
 

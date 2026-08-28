@@ -3,7 +3,8 @@
 const REGISTRATION_CODE = "nihaozhijian";
 
 export function getSupabaseUrl() {
-  return process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
+  const value = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
+  return value.trim().replace(/\/(?:rest|auth)\/v1\/?$/i, "").replace(/\/$/, "");
 }
 
 export function getSupabasePublishableKey() {
@@ -22,7 +23,7 @@ export async function supabaseAuthRequest(path, init = {}) {
   const publishableKey = getSupabasePublishableKey();
   if (!url || !publishableKey) throw new Error("Supabase Auth 环境变量未配置。");
 
-  const response = await fetch(`${url.replace(/\/$/, "")}/auth/v1/${path}`, {
+  const response = await fetch(`${url}/auth/v1/${path}`, {
     ...init,
     headers: {
       apikey: publishableKey,
@@ -32,7 +33,14 @@ export async function supabaseAuthRequest(path, init = {}) {
     },
   });
   const text = await response.text();
-  const payload = text ? JSON.parse(text) : {};
+  let payload = {};
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error(/^\s*<!doctype\s+html|^\s*<html/i.test(text)
+      ? "Supabase Auth 返回了网页而不是数据，请检查 SUPABASE_URL。"
+      : "Supabase Auth 返回的数据格式不正确。");
+  }
   if (!response.ok) throw new Error(readSupabaseError(payload));
   return payload;
 }

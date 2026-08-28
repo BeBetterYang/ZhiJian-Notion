@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createInitialTree } from "../core/tree";
 import type { WorkspaceSession } from "./auth";
-import { saveWorkspaceDocument, saveWorkspaceState } from "./serverApi";
+import { loadWorkspaceState, saveWorkspaceDocument, saveWorkspaceState } from "./serverApi";
 
 const expiringSession: WorkspaceSession = {
   email: "user@example.com",
@@ -64,7 +64,7 @@ describe("workspace server API session refresh", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({
         session: { ...expiringSession, accessToken: "shared-token", refreshToken: "next-refresh", expiresAt: 2000 },
       }), { status: 200 }))
-      .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+      .mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 })));
 
     await Promise.all([
       saveWorkspaceState(expiringSession, { nodes: [] }),
@@ -77,5 +77,29 @@ describe("workspace server API session refresh", () => {
     expect(calls.slice(1).every(([, init]) =>
       (init?.headers as Record<string, string>).Authorization === "Bearer shared-token",
     )).toBe(true);
+  });
+
+  it("reports an API routing error when workspace loading returns HTML", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(
+      "<!DOCTYPE html><html><body>Vercel fallback</body></html>",
+      { status: 200, headers: { "Content-Type": "text/html" } },
+    ));
+
+    await expect(loadWorkspaceState({
+      ...expiringSession,
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    })).rejects.toThrow("服务器 API 返回了网页而不是数据");
+  });
+
+  it("does not treat an HTML fallback as a successful save", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(
+      "<!DOCTYPE html><html><body>Vercel fallback</body></html>",
+      { status: 200, headers: { "Content-Type": "text/html" } },
+    ));
+
+    await expect(saveWorkspaceState({
+      ...expiringSession,
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    }, { nodes: [] })).rejects.toThrow("服务器 API 返回了网页而不是数据");
   });
 });

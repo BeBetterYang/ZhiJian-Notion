@@ -62,4 +62,23 @@ describe("outline document export", () => {
     expect(await treeToOutlineHtmlDocument(sampleTree(), true)).toContain("urn:schemas-microsoft-com:office:word");
     expect(outlineExportFileName(sampleTree(), "大纲.doc")).toBe("产品-规划-大纲.doc");
   });
+
+  it("lays the Word file out on A4 with indented paragraphs Word can render", async () => {
+    const tree = sampleTree();
+    tree.nodes.heading = { id: "heading", parentId: "todo", children: [], type: "heading", content: { text: "小节" }, props: { headingLevel: 3 } };
+    tree.nodes.todo.children.push("heading");
+    const doc = await treeToOutlineHtmlDocument(tree, true);
+
+    expect(doc).toContain("@page WordSection1{size:21.0cm 29.7cm");
+    expect(doc).toContain('<div class="WordSection1">');
+    expect(doc).toContain("<w:View>Print</w:View>");
+    // The row is a paragraph with a hanging indent, not a list item styled by CSS Word
+    // would drop, and a child sits one 18pt step further in.
+    expect(doc).toContain('style="margin-left:14pt;text-indent:-14pt"');
+    expect(doc).toContain('style="margin-left:32pt;text-indent:-14pt"');
+    expect(doc).toContain("☑");
+    expect(doc).not.toContain("<li");
+    expect(doc).not.toContain("linear-gradient");
+    expect(doc).not.toContain(":has(");
+  });
 });

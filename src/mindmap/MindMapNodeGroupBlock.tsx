@@ -428,7 +428,7 @@ function MindMapNodeEditor({
             // A table node has no text row of its own to hang a quote or a picture
             // off, and the caret is inside a cell: the insert buttons would act on
             // the table block from within it. The styling controls are the point.
-            <ZhiJianFormattingToolbar showStructuralControls={node.type !== "table"} />,
+            <ZhiJianFormattingToolbar showStructuralControls={node.type !== "table"} showClozeControl />,
             toolbarTarget,
           )
           : null}

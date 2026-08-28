@@ -1,4 +1,7 @@
 :root {
+  --zhijian-font-family: SourceSansPro, -apple-system, "PingFang SC", "Apple Color Emoji",
+    BlinkMacSystemFont, Helvetica, Arial, "Segoe UI Emoji", "Segoe UI Symbol",
+    "Microsoft YaHei", 微软雅黑, 黑体, Heiti, sans-serif, SimSun, 宋体, serif;
   /* One document seen two ways, so ink and paper are stated once here rather than
      per view: BlockNote's own defaults (#3f3f3f text, #7d797a quotes) and
      mind-elixir's are different greys, and a node that changes colour by being
@@ -25,9 +28,11 @@
   --outline-text-width: 720px;
   color: #1d2430;
   background: #f5f7f8;
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+  font-family: var(--zhijian-font-family);
+}
+
+:root .bn-root {
+  --bn-font-family: var(--zhijian-font-family);
 }
 
 * {
@@ -709,6 +714,27 @@ textarea {
   line-height: inherit;
 }
 
+.outline-panel .bn-block-content[data-content-type="heading"] {
+  --level: 24px;
+  font-size: 24px;
+  line-height: 1.4;
+}
+
+.outline-panel .bn-block-content[data-content-type="heading"][data-level="2"] {
+  --level: 21px;
+  font-size: 21px;
+}
+
+.outline-panel .bn-block-content[data-content-type="heading"][data-level="3"] {
+  --level: 18px;
+  font-size: 18px;
+}
+
+.outline-panel .bn-block-content[data-content-type="heading"] > :is(h1, h2, h3) {
+  font-size: inherit;
+  line-height: inherit;
+}
+
 .outline-panel .bn-block-content[data-content-type="paragraph"],
 .outline-panel .bn-block-content[data-content-type="checkListItem"] {
   font-size: 16px;
@@ -1025,6 +1051,23 @@ textarea {
   padding-right: 10px;
   gap: 1px;
   justify-content: flex-end;
+}
+
+/* BlockNote positions a heading side menu with fixed offsets derived from its
+   native 3em/2em/1.3em heading scale. The outline uses 24/21/18px headings, so
+   those offsets leave the whole control group below the first-line centre.
+   Move the group as one unit to preserve the alignment between more, collapse
+   and the draggable marker. */
+.outline-panel .bn-side-menu:has(.outline-heading-level-1) {
+  transform: translateY(-19.2px);
+}
+
+.outline-panel .bn-side-menu:has(.outline-heading-level-2) {
+  transform: translateY(-9.3px);
+}
+
+.outline-panel .bn-side-menu:has(.outline-heading-level-3) {
+  transform: translateY(-2.9px);
 }
 
 /* The two controls that sit in the gutter flow — more, then collapse — share
@@ -1879,6 +1922,61 @@ textarea {
 .mindmap-node-todo.is-checked .mindmap-node-rich-text {
   color: #73808a;
   text-decoration: line-through;
+}
+
+/* 挖空: a run that is present but unread. `color: transparent` rather than
+   `visibility` or a replaced blank, so the run keeps exactly the width its text
+   has — uncovering it cannot resize the node box or shift the branch it sits on.
+   The underline is drawn as a border on an inline box, because `text-decoration`
+   on transparent text inherits that transparency. */
+.mindmap-cloze {
+  color: transparent !important;
+  border-bottom: 2px solid #2383e2;
+  border-radius: 1px;
+  cursor: pointer;
+}
+
+/* Revealed — one run by a click, or every run by 一键显示 — keeps its underline so
+   the reader can still see what was hidden. `currentColor` restores whatever the
+   run's own colour was, since the blanking above overrode it. */
+.mindmap-cloze.is-revealed,
+.mindmap-canvas.is-cloze-revealed .mindmap-cloze {
+  color: currentColor !important;
+}
+
+/* 一键显示/隐藏挖空内容, portalled into mind-elixir's own layout switcher so it reads
+   as one more way of looking at the map. Borrows the switcher's colour and size. */
+.mindmap-cloze-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.mindmap-cloze-toggle.is-active {
+  color: #2383e2;
+}
+
+/* The mark travels as BlockNote's `code` style — see `CLOZE_STYLE` in
+   `outline/blockNoteAdapter.ts` — so every editor would otherwise dress a cloze as
+   inline code. Text stays readable while it is being written; only the map's
+   display layer blanks it. */
+.bn-container code,
+.mindmap-node-editor code,
+.bn-inline-content code {
+  padding: 0;
+  border-bottom: 2px solid #2383e2;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
 }
 
 /* The map's link popup is the outline's own `bn-link-toolbar`, so it brings its looks

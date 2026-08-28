@@ -15,7 +15,7 @@ export async function captureOutlinePng() {
   await document.fonts?.ready;
   const { toBlob } = await import("html-to-image");
   const width = Math.ceil(Math.max(element.scrollWidth, element.getBoundingClientRect().width));
-  const height = Math.ceil(Math.max(element.scrollHeight, element.getBoundingClientRect().height));
+  const height = outlineCaptureHeight(element);
   const pixelRatio = Math.min(2, 15_000 / Math.max(width, height));
   const blob = await toBlob(element, {
     backgroundColor: "#ffffff",
@@ -25,6 +25,13 @@ export async function captureOutlinePng() {
     pixelRatio,
     style: {
       height: `${height}px`,
+      // The reading column is centred on screen with `margin-inline: auto`, and Chrome
+      // reports that as the used value — 350px a side on a wide window. html-to-image
+      // copies computed styles onto its clone, where the box is exactly as wide as the
+      // picture, so those margins survive as real ones and push the whole document off
+      // the right edge. Stating zero here puts the column back in the frame, centred by
+      // the editor's own symmetric padding.
+      margin: "0",
       maxWidth: "none",
       overflow: "visible",
       width: `${width}px`,
@@ -36,6 +43,26 @@ export async function captureOutlinePng() {
   if (!blob) throw new Error("大纲图片生成失败。");
   return blob;
 }
+
+/**
+ * How tall the picture has to be to hold the document and nothing else.
+ *
+ * The editor is stretched to fill the panel (`min-height: 100%`) and keeps a run of
+ * empty space below the last row for clicking into, which in a picture is just blank
+ * paper — and in the PDF, an extra near-empty page. So the last row's own bottom is
+ * measured and given the same air as the top instead, falling back to the box when
+ * there is no row to measure.
+ */
+function outlineCaptureHeight(element: HTMLElement) {
+  const box = Math.max(element.scrollHeight, element.getBoundingClientRect().height);
+  const rows = element.querySelectorAll<HTMLElement>(".bn-editor > .bn-block-group > .bn-block-outer");
+  const last = rows[rows.length - 1];
+  if (!last) return Math.ceil(box);
+  const content = last.getBoundingClientRect().bottom - element.getBoundingClientRect().top;
+  return Math.ceil(Math.min(box, content + OUTLINE_CAPTURE_TAIL));
+}
+
+const OUTLINE_CAPTURE_TAIL = 24;
 
 /**
  * The map, photographed as it is drawn rather than re-drawn.
@@ -68,6 +95,7 @@ export async function captureMindMapPng() {
     pixelRatio,
     style: {
       height: `${height}px`,
+      margin: "0",
       transform: "none",
       transformOrigin: "0 0",
       width: `${width}px`,

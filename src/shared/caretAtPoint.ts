@@ -130,25 +130,24 @@ export function correctCaretAfterClick(editor: BlockNoteEditor, point: CaretPoin
   placeCaretAtPoint(editor, point);
 }
 
-/**
- * The same placement, made *instead of* the browser's rather than after it — the
- * caller pairs a `true` with `preventDefault()` on the press.
- *
- * Correcting the caret on `click` leaves the browser's own placement on screen
- * until the button comes back up: the caret is drawn at the start of the line and
- * then flicks to the end, and while the button is held it simply sits in the wrong
- * place. Claiming the press before its default action runs means the only caret
- * ever drawn is the right one.
- *
- * Nothing is claimed for a press that lands on a character, which leaves ordinary
- * clicks and drag-selection to the browser.
- */
-export function claimCaretBesideText(editor: BlockNoteEditor, point: CaretPoint) {
+/** Returns the line-end position only when the point is beside, not on, text. */
+export function caretPositionBesideText(editor: BlockNoteEditor, point: CaretPoint) {
   const target = caretTargetAtPoint(editor, point);
-  if (!target || target.onCharacter) return false;
-  editor._tiptapEditor.commands.setTextSelection(target.caret);
-  // Focusing the editor is one of the things the prevented press would have done.
-  editor._tiptapEditor.view.focus();
+  return !target || target.onCharacter ? null : target.caret;
+}
+
+/** Extends a text selection from a previously resolved line-end anchor. */
+export function extendSelectionFromCaret(
+  editor: BlockNoteEditor,
+  anchor: number,
+  point: CaretPoint,
+) {
+  const position = editor._tiptapEditor.view.posAtCoords({
+    left: point.x,
+    top: point.y,
+  });
+  if (!position) return false;
+  editor._tiptapEditor.commands.setTextSelection({ from: anchor, to: position.pos });
   return true;
 }
 

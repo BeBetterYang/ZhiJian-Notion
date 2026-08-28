@@ -43,7 +43,11 @@ import { resolveMindMapTextRange } from "./mindMapTextSelection";
 import { insertImageBlocks, insertNodeAttachmentBlocks } from "../shared/attachmentInsertion";
 import { saveImageAsset } from "../shared/imageAssetStore";
 import { zhijianDictionary } from "../shared/zhijianDictionary";
-import { claimCaretBesideText, correctCaretAfterClick } from "../shared/caretAtPoint";
+import {
+  caretPositionBesideText,
+  correctCaretAfterClick,
+  extendSelectionFromCaret,
+} from "../shared/caretAtPoint";
 import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 import { handleOutlineNodeKeyDown } from "./outlineNodeKeymap";
 import { collapsedOutlineCss } from "./outlineCollapse";
@@ -74,6 +78,15 @@ interface OutlineEditorProps {
   onFocusNode?: (nodeId: string) => void;
 }
 
+interface OutlineTextGesture {
+  startX: number;
+  startY: number;
+  anchor: number;
+  dragging: boolean;
+}
+
+const OUTLINE_TEXT_DRAG_THRESHOLD = 5;
+
 export function OutlineEditor({
   store,
   onSelectNode,
@@ -101,6 +114,9 @@ export function OutlineEditor({
   // read once the new projection is in, which is the first moment the block it names
   // exists to put the caret in.
   const pendingCaretNodeId = useRef<string | null>(null);
+  const textGesture = useRef<OutlineTextGesture | null>(null);
+  const suppressGestureClick = useRef(false);
+  const suppressGestureClickTimer = useRef(0);
   const [linkText, setLinkText] = useState<string | null>(null);
   const [rowMenu, setRowMenu] = useState<OutlineRowMenuState | null>(null);
   const searchVisibilityCss = useMemo(() => outlineSearchVisibilityCss(tree, visibleNodeIds, searchQuery), [searchQuery, tree, visibleNodeIds]);
@@ -131,6 +147,41 @@ export function OutlineEditor({
       }
     });
   }, [editor, onSelectNode]);
+
+  useEffect(() => {
+    const move = (event: MouseEvent) => {
+      const gesture = textGesture.current;
+      if (!gesture) return;
+      if (!gesture.dragging) {
+        const distance = Math.hypot(
+          event.clientX - gesture.startX,
+          event.clientY - gesture.startY,
+        );
+        if (distance < OUTLINE_TEXT_DRAG_THRESHOLD) return;
+        gesture.dragging = true;
+      }
+      extendSelectionFromCaret(editor, gesture.anchor, {
+        x: event.clientX,
+        y: event.clientY,
+      });
+    };
+    const finish = () => {
+      if (!textGesture.current) return;
+      textGesture.current = null;
+      suppressGestureClick.current = true;
+      window.clearTimeout(suppressGestureClickTimer.current);
+      suppressGestureClickTimer.current = window.setTimeout(() => {
+        suppressGestureClick.current = false;
+      }, 0);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", finish);
+    return () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", finish);
+      window.clearTimeout(suppressGestureClickTimer.current);
+    };
+  }, [editor]);
 
   useEffect(() => {
     const currentTree = blockNoteToTree(editor.document, tree);
@@ -226,7 +277,7 @@ export function OutlineEditor({
       <MindMapLinkToolbar />
       {showMindMapToolbar && mindMapToolbarTarget
         ? createPortal(
-            <ZhiJianFormattingToolbar onInsertQuote={onMindMapInsertQuote} />,
+            <ZhiJianFormattingToolbar showClozeControl onInsertQuote={onMindMapInsertQuote} />,
             mindMapToolbarTarget,
           )
         : null}
@@ -237,29 +288,40 @@ export function OutlineEditor({
     <section
       ref={panelRef}
       className="outline-panel"
-      // A node's row is as wide as the outline while its text is only as wide as
-      // itself, so clicking the empty part of a row is a click on the row and on no
-      // character — which the browser answers with the start of the line. Pressed
-      // level with the text, past its end, the caret belongs at the end.
-      //
-      // Claimed on the press, so the caret is never drawn at the start first: the
-      // browser's placement is the default action of this event, and preventing it
-      // is the only way to keep it from flashing there. Only a plain single press
-      // straight on a row's own text box is taken — a modified or repeated press
-      // means selection, and a press on a checkbox or a picture means that widget.
       onMouseDownCapture={(event) => {
-        if (event.button !== 0 || event.detail > 1) return;
-        if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) return;
         const target = event.target as Element;
         if (zoomedNodeId && target.closest(".bn-trailing-block")) {
           event.preventDefault();
           event.stopPropagation();
           return;
         }
-        if (!target.matches(".bn-block-content, .bn-inline-content")) return;
-        if (claimCaretBesideText(editor, { x: event.clientX, y: event.clientY })) {
-          event.preventDefault();
-        }
+        if (event.button !== 0 || event.detail !== 1) return;
+        if (event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) return;
+        const textSurface = target.closest<HTMLElement>(
+          ".bn-block-content, .bn-inline-content",
+        );
+        if (!textSurface || !panelRef.current?.contains(textSurface)) return;
+        if (
+          target.closest("a, button, input, textarea, select, table, .bn-visual-media-wrapper") ||
+          textSurface.closest('[data-content-type="table"], [data-content-type="image"]')
+        ) return;
+        const anchor = caretPositionBesideText(editor, {
+          x: event.clientX,
+          y: event.clientY,
+        });
+        if (anchor === null) return;
+        textGesture.current = {
+          startX: event.clientX,
+          startY: event.clientY,
+          anchor,
+          dragging: false,
+        };
+        // Prevent the browser's row-start fallback from flashing. Mouse movement
+        // is handled above from this exact line-end anchor, so selection remains
+        // available instead of competing with this default action.
+        event.preventDefault();
+        editor._tiptapEditor.view.focus();
+        editor._tiptapEditor.commands.setTextSelection(anchor);
       }}
       onClickCapture={(event) => {
         if (!zoomedNodeId || event.button !== 0) return;
@@ -275,9 +337,11 @@ export function OutlineEditor({
         if (created) editor.setTextCursorPosition(created, "start");
         editor.focus();
       }}
-      // Anything the press could not claim — a drag that ended where it started, a
-      // widget's own row — still gets the position it meant once the browser is done.
       onClick={(event) => {
+        if (suppressGestureClick.current) {
+          suppressGestureClick.current = false;
+          return;
+        }
         if (event.button !== 0 || !(event.target as Element).closest(".ProseMirror")) return;
         correctCaretAfterClick(editor, { x: event.clientX, y: event.clientY });
       }}
@@ -492,14 +556,17 @@ function OutlineRowMenuButton({ nodeId, rootId }: { nodeId: string; rootId: stri
   const editor = useBlockNoteEditor();
   const Components = useComponentsContext()!;
   const context = useContext(OutlineStoreContext);
+  const block = editor.getBlock(nodeId);
+  const headingLevel = block?.type === "heading"
+    ? (block.props as { level?: number }).level
+    : undefined;
 
   return (
     <Components.SideMenu.Button
-      className="bn-button outline-row-more-button"
+      className={`bn-button outline-row-more-button${headingLevel ? ` outline-heading-level-${headingLevel}` : ""}`}
       label="更多"
       icon={<RiMoreFill />}
       onClick={(event) => {
-        const block = editor.getBlock(nodeId);
         if (block) {
           editor.setTextCursorPosition(block, "end");
         }

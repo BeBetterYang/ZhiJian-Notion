@@ -3,17 +3,20 @@ import {
   FormattingToolbar,
   blockTypeSelectItems,
   getFormattingToolbarItems,
+  useActiveStyles,
   useBlockNoteEditor,
   useComponentsContext,
 } from "@blocknote/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { RiDoubleQuotesL, RiImage2Line, RiTable2 } from "react-icons/ri";
+import { RiDoubleQuotesL, RiEyeOffLine, RiImage2Line, RiTable2 } from "react-icons/ri";
 import { saveImageAsset } from "./imageAssetStore";
 import { insertImageBlocks, insertNodeAttachmentBlocks } from "./attachmentInsertion";
 
 interface ZhiJianFormattingToolbarProps {
   showStructuralControls?: boolean;
   hasExternalBody?: boolean;
+  /** 挖空 is a map-only study aid, so the outline's own toolbar leaves it out. */
+  showClozeControl?: boolean;
   onInsertQuote?: (nodeId: string, focusBlockId: string) => void;
 }
 
@@ -25,6 +28,7 @@ const hiddenFormattingToolbarItems = new Set([
 
 export function ZhiJianFormattingToolbar({
   showStructuralControls = true,
+  showClozeControl = false,
   onInsertQuote,
 }: ZhiJianFormattingToolbarProps = {}) {
   const editor = useBlockNoteEditor();
@@ -91,8 +95,37 @@ export function ZhiJianFormattingToolbar({
       {showStructuralControls ? (
         <InsertImageButton />
       ) : null}
+      {showClozeControl ? <ClozeButton /> : null}
       {defaultItems}
     </FormattingToolbar>
+  );
+}
+
+/**
+ * 挖空: hides the selected run on the map until it is clicked.
+ *
+ * The mark rides on BlockNote's `code` style, which is the one boolean style in its
+ * default schema that 枝间 offers nowhere else — see `CLOZE_STYLE` in
+ * `outline/blockNoteAdapter.ts` for why a mark of our own would not survive the next
+ * keystroke. Nothing about the text moves: the map paints the run transparent under a
+ * blue underline, and the editors leave it readable.
+ */
+function ClozeButton() {
+  const editor = useBlockNoteEditor();
+  const Components = useComponentsContext()!;
+  const active = useActiveStyles(editor);
+
+  return (
+    <Components.FormattingToolbar.Button
+      label="挖空"
+      mainTooltip="挖空所选文字"
+      icon={<RiEyeOffLine />}
+      isSelected={active.code === true}
+      onClick={() => {
+        editor.toggleStyles({ code: true });
+        editor.focus();
+      }}
+    />
   );
 }
 

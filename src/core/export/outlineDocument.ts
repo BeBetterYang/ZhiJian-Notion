@@ -23,6 +23,8 @@ export async function treeToOutlineHtmlDocument(tree: ZhiJianTree, word = false)
   const root = tree.nodes[tree.rootId];
   if (!root) throw new Error("文档根节点不存在。");
   const imageUrls = await resolveDocumentImageUrls(tree);
+  const title = escapeHtml(outlineExportTitle(tree));
+  if (word) return wordDocument(tree, root, imageUrls, title);
   const body = [
     `<main class="document">`,
     `<h1>${renderRichText(root.content)}</h1>`,
@@ -30,12 +32,74 @@ export async function treeToOutlineHtmlDocument(tree: ZhiJianTree, word = false)
     root.children.length ? `<ul class="outline">${root.children.map((id) => renderNode(tree, id, imageUrls)).join("")}</ul>` : "",
     `</main>`,
   ].join("");
-  const title = escapeHtml(outlineExportTitle(tree));
-  const namespaces = word
-    ? ' xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"'
-    : "";
-  return `<!doctype html><html${namespaces} lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${OUTLINE_EXPORT_CSS}</style></head><body>${body}</body></html>`;
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${OUTLINE_EXPORT_CSS}</style></head><body>${body}</body></html>`;
 }
+
+/**
+ * The Word file is the same document, laid out the way Word can actually lay it out.
+ *
+ * Word reads HTML through its own renderer, which knows nothing of `:has()`, CSS
+ * gradients, `calc()`, `min()` or generated content — so the screen's stylesheet
+ * reached it as a page with no bullets, no indent guides and a reading column as wide
+ * as whatever window Word felt like using, which is what "变形" was. So the rows are
+ * emitted as plain indented paragraphs with a real bullet character and a hanging
+ * indent, the sizes are stated in points, and the page itself is declared A4 with 2cm
+ * margins through `@page WordSection1` and the `mso` block Word looks for. Nothing in
+ * here relies on a feature Word will drop, so the file opens at a fixed measure and
+ * paginates on its own.
+ */
+function wordDocument(tree: ZhiJianTree, root: ZhiJianNode, imageUrls: Map<string, string>, title: string) {
+  const body = [
+    `<div class="WordSection1">`,
+    `<p class="doc-title">${renderRichText(root.content)}</p>`,
+    renderWordExtras(root, imageUrls, 0),
+    ...root.children.map((id) => renderWordNode(tree, id, imageUrls, 0)),
+    `</div>`,
+  ].join("");
+  return [
+    `<!doctype html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" lang="zh-CN">`,
+    `<head><meta charset="utf-8"><title>${title}</title>`,
+    `<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->`,
+    `<style>${WORD_EXPORT_CSS}</style></head>`,
+    `<body>${body}</body></html>`,
+  ].join("");
+}
+
+/** One paragraph per row, indented by depth; children follow their parent in order. */
+function renderWordNode(tree: ZhiJianTree, nodeId: string, imageUrls: Map<string, string>, depth: number): string {
+  const node = tree.nodes[nodeId];
+  if (!node) return "";
+  const indent = depth * WORD_INDENT_PT;
+  const rows = node.type === "table"
+    ? `<div style="margin:6pt 0 6pt ${indent + WORD_HANGING_PT}pt">${renderTable(node.props?.table)}</div>`
+    : `<p class="${node.type === "heading" ? `word-h${node.props?.headingLevel ?? 1}` : "word-row"}" style="margin-left:${indent + WORD_HANGING_PT}pt;text-indent:-${WORD_HANGING_PT}pt">`
+      + `<span class="marker">${node.type === "todo" ? (node.props?.checked ? "☑" : "☐") : "•"}&nbsp;</span>`
+      + `${renderRichText(node.content, node)}</p>`;
+  return rows
+    + renderWordExtras(node, imageUrls, indent + WORD_HANGING_PT)
+    + node.children.map((id) => renderWordNode(tree, id, imageUrls, depth + 1)).join("");
+}
+
+function renderWordExtras(node: ZhiJianNode, imageUrls: Map<string, string>, indent: number) {
+  const at = `margin-left:${indent}pt`;
+  return [
+    node.description ? `<p class="word-note" style="${at}">${renderRichText(node.description)}</p>` : "",
+    ...(node.blocks ?? []).map((block) => {
+      if (block.type === "quote") return `<p class="word-quote" style="${at}">${renderRichText(block.content)}</p>`;
+      const src = imageUrls.get(block.id) ?? "";
+      if (!src) return "";
+      const caption = block.image.caption?.trim();
+      // Only a width is given, so Word keeps the aspect ratio itself; the cap is the
+      // A4 text column (17cm ≈ 482pt) so a picture can never widen the page.
+      const width = Math.round(Math.min(block.image.previewWidth ?? 480, 620));
+      return `<p class="word-figure" style="${at}"><img src="${escapeAttribute(src)}" alt="${escapeAttribute(block.image.name ?? "图片")}" width="${width}"></p>`
+        + (caption ? `<p class="word-caption" style="${at}">${escapeHtml(caption)}</p>` : "");
+    }),
+  ].filter(Boolean).join("");
+}
+
+const WORD_INDENT_PT = 18;
+const WORD_HANGING_PT = 14;
 
 function renderNode(tree: ZhiJianTree, nodeId: string, imageUrls: Map<string, string>): string {
   const node = tree.nodes[nodeId];
@@ -165,7 +229,7 @@ const EXPORT_COLORS: Record<string, string> = {
  * only the text inside it is a heading — so each row kind carries the number.
  */
 const OUTLINE_EXPORT_CSS = `
-*{box-sizing:border-box}body{margin:0;background:#fff;color:#242831;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:16px;line-height:1.55}.document{width:min(900px,calc(100% - 64px));margin:48px auto 80px}.document>h1{font-size:34px;line-height:1.2;margin:0 0 24px;font-weight:700}
+*{box-sizing:border-box}body{margin:0;background:#fff;color:#242831;font-family:SourceSansPro,-apple-system,"PingFang SC","Apple Color Emoji",BlinkMacSystemFont,Helvetica,Arial,"Segoe UI Emoji","Segoe UI Symbol","Microsoft YaHei",微软雅黑,黑体,Heiti,sans-serif,SimSun,宋体,serif;font-size:16px;line-height:1.55}.document{width:min(900px,calc(100% - 64px));margin:48px auto 80px}.document>h1{font-size:34px;line-height:1.2;margin:0 0 24px;font-weight:700}
 .outline,.outline ul{list-style:none;margin:0;padding:0}
 .outline li{--dot:12.4px;position:relative;margin:6px 0;padding-left:38px}
 .outline li.heading-1{--dot:37.2px}.outline li.heading-2{--dot:24.8px}.outline li.heading-3{--dot:16.12px}.outline li.table{--dot:28.4px}
@@ -177,4 +241,31 @@ const OUTLINE_EXPORT_CSS = `
 .outline li>ul>li:last-child>ul::before{content:"";position:absolute;left:-25.5px;top:-7px;bottom:-7px;width:1px;background:#fff}
 .node-primary{min-height:1.55em}.node-primary.heading{font-weight:700}.outline li.heading-1>.node-primary{font-size:48px}.outline li.heading-2>.node-primary{font-size:32px}.outline li.heading-3>.node-primary{font-size:20.8px}
 .todo-box{display:inline-flex;width:16px;height:16px;margin-right:8px;border:1px solid #76777d;border-radius:3px;align-items:center;justify-content:center;font-size:12px;vertical-align:-1px}.node-extras{margin:5px 0 10px}.node-extras blockquote{margin:4px 0;padding-left:12px;border-left:2px solid #c7c8cc;color:#6f7076;font-size:14px}.node-extras figure{margin:10px 0}.node-extras img{display:block;max-width:min(560px,100%);max-height:420px;object-fit:contain}.node-extras figcaption{margin-top:5px;color:#777;font-size:13px}a{color:#1677d2;text-decoration:underline}table{border-collapse:collapse;margin:8px 0;max-width:100%}th,td{min-width:80px;padding:7px 9px;border:1px solid #d5d7dc;vertical-align:top}th{font-weight:650;background:#f6f7f8}@page{margin:20mm} @media print{.document{width:auto;margin:0}}
+`;
+
+/**
+ * Word's own stylesheet dialect: points everywhere, A4 declared as a named page
+ * section, and no selector or value Word will discard. The screen's 16px body is
+ * 12pt here, and the heading sizes carry over at the same ratio (48/32/20.8px →
+ * 36/24/15.5pt), so a document keeps its shape when it moves onto paper.
+ */
+const WORD_EXPORT_CSS = `
+@page WordSection1{size:21.0cm 29.7cm;margin:2.0cm 2.0cm 2.0cm 2.0cm}
+div.WordSection1{page:WordSection1}
+body{margin:0;color:#242831;font-family:"PingFang SC","Microsoft YaHei",宋体,Calibri,sans-serif;font-size:12.0pt;line-height:1.5}
+p{margin:0 0 6.0pt 0}
+p.doc-title{margin:0 0 14.0pt 0;font-size:25.5pt;font-weight:700;line-height:1.2}
+p.word-row{font-size:12.0pt}
+p.word-h1{font-size:36.0pt;font-weight:700;margin-top:12.0pt}
+p.word-h2{font-size:24.0pt;font-weight:700;margin-top:10.0pt}
+p.word-h3{font-size:15.5pt;font-weight:700;margin-top:8.0pt}
+span.marker{font-size:12.0pt;color:#686970}
+p.word-note,p.word-quote{color:#6f7076;font-size:10.5pt}
+p.word-quote{border-left:1.5pt solid #c7c8cc;padding-left:9.0pt}
+p.word-caption{color:#777777;font-size:9.5pt}
+p.word-figure{margin-bottom:8.0pt}
+a{color:#1677d2;text-decoration:underline}
+table{border-collapse:collapse;margin:6.0pt 0;mso-table-lspace:0pt;mso-table-rspace:0pt}
+th,td{padding:4.0pt 6.0pt;border:0.75pt solid #d5d7dc;vertical-align:top;font-size:11.0pt}
+th{font-weight:650;background:#f6f7f8}
 `;

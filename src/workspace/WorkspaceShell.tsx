@@ -367,7 +367,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     setDocumentFocusRequest({
       fileId: file.id,
       nodeId,
-      query: search,
+      query: "",
       requestId: Date.now(),
     });
     closeSearchMode();

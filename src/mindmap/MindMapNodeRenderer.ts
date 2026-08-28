@@ -9,6 +9,7 @@ import {
   type ZhiJianTableCell,
 } from "../core/tree";
 import { getCachedImageAssetUrl } from "../shared/imageAssetStore";
+import { CLOZE_CLASS } from "./mindMapCloze";
 
 export interface MindMapNodeMetadata {
   type: ZhiJianNodeType;
@@ -165,7 +166,12 @@ function renderRichTextHtml(content: RichTextContent, searchQuery = "") {
       colorDeclaration("background", span.marks?.backgroundColor),
     ].filter(Boolean).join(";");
     const attributes = `${paletteAttribute("data-text-color", span.marks?.textColor)}${paletteAttribute("data-background-color", span.marks?.backgroundColor)}${style ? ` style="${style}"` : ""}`;
-    const inner = `<span${attributes}>${renderHighlightedText(span.text, searchQuery)}</span>`;
+    // 挖空: the run keeps its place — the text is only made invisible, so revealing
+    // it cannot resize the node box or move the branch. The class is all the display
+    // layer says about it; whether it is currently revealed is a class the click
+    // handler toggles on this element. See `mindMapCloze.ts`.
+    const clozeClass = span.marks?.cloze ? ` class="${CLOZE_CLASS}"` : "";
+    const inner = `<span${clozeClass}${attributes}>${renderHighlightedText(span.text, searchQuery)}</span>`;
     return span.marks?.linkUrl ? `<a href="${escapeHtml(span.marks.linkUrl)}" target="_blank" rel="noreferrer">${inner}</a>` : inner;
   }).join("");
 }

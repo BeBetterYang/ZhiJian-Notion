@@ -168,6 +168,7 @@ function toBlockNoteContent(node: ZhiJianNode): PartialBlock["content"] {
       strike: marks?.strike ?? hasTextDecoration(style, "line-through"),
       textColor: marks?.textColor ?? style.color,
       backgroundColor: marks?.backgroundColor ?? style.backgroundColor,
+      [CLOZE_STYLE]: marks?.cloze,
     },
   };
   if (marks?.linkUrl ?? style.linkUrl) {
@@ -304,6 +305,18 @@ function hasTextDecoration(style: NodeVisualStyle, value: "underline" | "line-th
   return Boolean(style.textDecoration?.split(" ").includes(value) || style.textDecorationLine?.split(" ").includes(value));
 }
 
+/**
+ * 挖空 travels as BlockNote's own `code` style.
+ *
+ * A mark BlockNote does not know about is dropped by the very next keystroke, and
+ * teaching it a new one means a custom schema on every editor in the app. `code`
+ * is already in its default schema, is a plain boolean like the other marks, and
+ * nothing in 枝间 offers inline code — no toolbar button, no shortcut, no import
+ * path — so the slot is free. The stylesheet dresses it as a cloze rather than as
+ * code; see `.mindmap-cloze` and the `code` rules in `styles.css`.
+ */
+const CLOZE_STYLE = "code";
+
 function blockNoteStylesToMarks(styles: Record<string, unknown> | undefined): RichTextMarks | undefined {
   if (!styles) return undefined;
   const marks: RichTextMarks = {
@@ -313,6 +326,7 @@ function blockNoteStylesToMarks(styles: Record<string, unknown> | undefined): Ri
     strike: styles.strike === true || undefined,
     textColor: typeof styles.textColor === "string" && styles.textColor !== "default" ? styles.textColor : undefined,
     backgroundColor: typeof styles.backgroundColor === "string" && styles.backgroundColor !== "default" ? styles.backgroundColor : undefined,
+    cloze: styles[CLOZE_STYLE] === true || undefined,
   };
   return Object.values(marks).some(Boolean) ? marks : undefined;
 }
@@ -328,6 +342,7 @@ function spanToBlockNoteInline(span: RichTextSpan) {
       strike: span.marks?.strike,
       textColor: span.marks?.textColor,
       backgroundColor: span.marks?.backgroundColor,
+      [CLOZE_STYLE]: span.marks?.cloze,
     },
   };
   // A link on part of a row is a span like any other, and leaving `linkUrl` out here

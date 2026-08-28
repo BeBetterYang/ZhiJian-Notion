@@ -210,6 +210,20 @@ const MINDMAP_CHROME_SELECTOR = [
 ].join(", ");
 
 /**
+ * Everything mind-elixir draws *beside* the nodes: the arrow and summary shapes and
+ * the labels on them. mind-elixir owns their double click itself — `editArrowLabel`
+ * and `editSummary` — and none of them belongs to a node, so `mindMapPressTarget`
+ * answers null for them. Without this guard the map's own dblclick handler fell back
+ * to the last node press and opened *that* node's editor, which is how editing a
+ * summary or a connector label jumped to the previously edited node.
+ */
+const MINDMAP_ANNOTATION_SELECTOR = [".svg-label", ".topiclinks", ".summary"].join(", ");
+
+export function isMindMapAnnotationTarget(target: EventTarget | null) {
+  return target instanceof Element ? target.closest(MINDMAP_ANNOTATION_SELECTOR) !== null : false;
+}
+
+/**
  * True when a pointer event landed on empty canvas rather than on a node or a
  * control, which is the signal to drop the current selection.
  *
@@ -321,6 +335,7 @@ function marksSignature(marks?: RichTextMarks) {
     marks.italic ? "i" : "",
     marks.underline ? "u" : "",
     marks.strike ? "s" : "",
+    marks.cloze ? "c" : "",
     marks.textColor ?? "",
     marks.backgroundColor ?? "",
     marks.linkUrl ?? "",

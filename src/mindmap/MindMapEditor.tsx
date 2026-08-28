@@ -3,6 +3,7 @@ import MindElixir, { type MindElixirData, type NodeObj, type Operation, type Top
 import { zh_CN } from "mind-elixir/i18n";
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { createPortal } from "react-dom";
+import { RiEyeLine, RiEyeOffLine } from "react-icons/ri";
 import type { ZhiJianTree } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
 import { useTree } from "../core/treeStore/useTree";
@@ -18,8 +19,16 @@ import {
   readMindMapDecorations,
   sameMindMapDecorations,
 } from "./mindMapDecorations";
-import { displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, mindMapDisplayDragTopic, mindMapMeasuredSizeChanged, mindMapPressTarget, mindMapScaleFromTransform, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, unscaledMindMapSize, updateMindMapPointerSession, type EditingTarget, type MindMapMeasuredSize, type MindMapPointerSession, type MindMapPressTarget } from "./mindMapInteraction";
+import { displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, isMindMapAnnotationTarget, mindMapDisplayDragTopic, mindMapMeasuredSizeChanged, mindMapPressTarget, mindMapScaleFromTransform, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, unscaledMindMapSize, updateMindMapPointerSession, type EditingTarget, type MindMapMeasuredSize, type MindMapPointerSession, type MindMapPressTarget } from "./mindMapInteraction";
 import { MINDMAP_THEME } from "./mindMapTheme";
+import {
+  CLOZE_CLASS,
+  CLOZE_REVEALED_CLASS,
+  CLOZE_REVEAL_ALL_CLASS,
+  clozeAtEvent,
+  toggleClozeReveal,
+  treeHasClozeContent,
+} from "./mindMapCloze";
 import { MindMapLinkHoverTracker } from "./MindMapLinkHoverTracker";
 import { renderMindMapNodeDisplayHtml } from "./MindMapNodeRenderer";
 import { MindMapNodeContent } from "./MindMapNodeGroupBlock";
@@ -107,6 +116,22 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
   const contentHosts = useRef(new Map<string, HTMLDivElement>());
   const [contentTargets, setContentTargets] = useState<Array<{ id: string; host: HTMLElement }>>([]);
   const [editingTarget, setEditingTarget] = useState<EditingTarget>(null);
+  const [styleToolbarHost, setStyleToolbarHost] = useState<HTMLElement | null>(null);
+  const [revealAllCloze, setRevealAllCloze] = useState(false);
+  const hasCloze = treeHasClozeContent(tree);
+
+  /**
+   * 一键显示/隐藏挖空内容, which also settles the clozes revealed one by one: the two
+   * states are read from different places — a class on the canvas and a class per run
+   * — and leaving the individual ones on would make the button look like it had done
+   * nothing to them.
+   */
+  const toggleAllCloze = useCallback(() => {
+    containerRef.current
+      ?.querySelectorAll<HTMLElement>(`.${CLOZE_CLASS}.${CLOZE_REVEALED_CLASS}`)
+      .forEach((element) => element.classList.remove(CLOZE_REVEALED_CLASS));
+    setRevealAllCloze((revealed) => !revealed);
+  }, []);
 
   const collectTargets = useCallback(() => {
     const slots = Array.from(containerRef.current?.querySelectorAll<HTMLElement>("[data-zhijian-node-content]") ?? []);
@@ -290,6 +315,10 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       theme: MINDMAP_THEME,
     });
     mind.init(treeToMindElixir(initialTree.current, projectionOptionsRef.current));
+    // mind-elixir's own layout switcher, top left. 一键显示/隐藏挖空内容 belongs with it
+    // rather than in the app's toolbar: it is a way of looking at the map, like the
+    // three layouts next to it, and it only appears while the document has a cloze.
+    setStyleToolbarHost(containerRef.current.querySelector<HTMLElement>(".mind-elixir-toolbar.lt"));
     correctMindMapSummaryOffsets(mind, initialTree.current);
     if (initialViewportRef.current && !projectionOptionsRef.current.rootNodeId) {
       restoreMindMapViewport(mind, initialViewportRef.current);
@@ -588,6 +617,16 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     if (!container) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Element | null;
+      // 挖空: the one press on a node that is neither a selection nor an edit. It is
+      // answered here, ahead of everything else, because the reader may not have the
+      // node selected — and must not end up selecting it by uncovering a blank.
+      const cloze = event.button === 0 ? clozeAtEvent(target) : null;
+      if (cloze) {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleClozeReveal(cloze);
+        return;
+      }
       const shell = target?.closest<HTMLElement>(".mindmap-node-shell[data-node-id]");
       if (shell?.dataset.nodeId) {
         const selectedAtPointerDown = shell.closest("me-tpc")?.classList.contains("selected")
@@ -655,6 +694,13 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     };
     const onClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
+      // The cloze was uncovered on pointerdown; the click that follows it must not
+      // also select the node or open its editor.
+      if (clozeAtEvent(target)) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       // The state already changed on pointerdown. Suppress the native checkbox's
       // own click toggle so it cannot briefly paint the opposite state while the
       // store projection is replacing the display HTML.
@@ -700,6 +746,9 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     };
     const onDoubleClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
+      // A summary or a connector label is mind-elixir's to edit, and it belongs to no
+      // node — so the fallback below must not borrow the last node press for it.
+      if (isMindMapAnnotationTarget(target)) return;
       // Retargeted to the topic by the same pointer capture the click is, so the
       // second press is what says which cell or quote was double clicked.
       const press =
@@ -833,7 +882,22 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       {/* `bn-root` is here for BlockNote's colour palette, which the display layer
           borrows so a coloured run of text or table cell looks the same at rest as
           it does in the editor — see `.mindmap-canvas.bn-root` in `styles.css`. */}
-      <div className={`mindmap-canvas bn-root ${zoomedNodeId ? "is-focus-mode" : ""}`} ref={containerRef} />
+      <div className={`mindmap-canvas bn-root ${zoomedNodeId ? "is-focus-mode" : ""} ${revealAllCloze ? CLOZE_REVEAL_ALL_CLASS : ""}`} ref={containerRef} />
+      {hasCloze && styleToolbarHost
+        ? createPortal(
+          <button
+            type="button"
+            className={`mindmap-cloze-toggle ${revealAllCloze ? "is-active" : ""}`}
+            title={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"}
+            aria-label={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"}
+            aria-pressed={revealAllCloze}
+            onClick={toggleAllCloze}
+          >
+            {revealAllCloze ? <RiEyeLine /> : <RiEyeOffLine />}
+          </button>,
+          styleToolbarHost,
+        )
+        : null}
       {/* Hovering a link anywhere in the map — a node's own text, a quote or a table
           cell — opens the outline's link toolbar over it. The popup itself is rendered
           by `MindMapLinkToolbar`, inside the outline editor whose component it is. */}
