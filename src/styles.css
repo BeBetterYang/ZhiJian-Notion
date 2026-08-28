@@ -1888,6 +1888,44 @@ textarea {
   white-space: pre-wrap;
 }
 
+/* MindMap display text and the BlockNote editor that replaces it must resolve to
+   the same glyph metrics. BlockNote 0.54 hard-codes Inter on
+   `.bn-default-styles`, so `--bn-font-family` alone cannot make the edit layer use
+   the document font. It also switches ligatures off there, which reshaped English
+   pairs like "fi"/"ffi" the moment a node started being edited — hence every
+   font-* property is stated on both layers rather than only the family. Keep these
+   declarations explicit and map-scoped: outline typography and all node geometry
+   tokens remain untouched. */
+.mindmap-node-renderer,
+.mindmap-node-rich-text,
+.mindmap-node-editor .bn-default-styles,
+.mindmap-node-editor .bn-editor,
+.mindmap-node-editor .bn-inline-content {
+  font-family: var(--zhijian-font-family) !important;
+  font-size: var(--mindmap-font-size, 16px) !important;
+  font-style: var(--mindmap-font-style, normal);
+  font-weight: var(--mindmap-font-weight, 400);
+  line-height: var(--mindmap-line-height, 1.5) !important;
+  letter-spacing: 0;
+  font-synthesis: none;
+  font-variant-ligatures: normal;
+  font-kerning: auto;
+  text-rendering: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* The ink the edit layer writes in. BlockNote paints its text from
+   `--bn-colors-editor-text` on its own elements, so the node editor cannot simply
+   inherit the shell's colour — a node being edited was #3f3f3f while the same node
+   at rest was --zhijian-ink. Handed over as the token rather than as a `color`
+   declaration, so the checked-todo rule below (and any run with a real text colour)
+   still overrides it. Mirrors what `.outline-panel .bn-container` does. */
+.mindmap-node-editor,
+.mindmap-node-editor .bn-container {
+  --bn-colors-editor-text: var(--zhijian-ink);
+}
+
 /* A node holds one line box even with no text, so a freshly created node — or one
    whose last character was just deleted — does not grow by a whole line the moment
    the editor's empty paragraph takes over. `1lh` rather than a fixed height: the
@@ -1944,6 +1982,19 @@ textarea {
 }
 
 .mindmap-node-todo.is-checked .mindmap-node-rich-text {
+  color: #73808a;
+  text-decoration: line-through;
+}
+
+.mindmap-node-editor
+  .bn-block-content[data-content-type="checkListItem"]
+  .bn-inline-content {
+  color: inherit;
+}
+
+.mindmap-node-editor
+  .bn-block-content[data-content-type="checkListItem"][data-checked="true"]
+  .bn-inline-content {
   color: #73808a;
   text-decoration: line-through;
 }
@@ -2198,9 +2249,16 @@ textarea {
 .mindmap-node-editor .bn-block-content > h3,
 .mindmap-node-editor .bn-inline-content {
   font-size: var(--mindmap-font-size, 16px) !important;
-  font-style: inherit;
-  font-weight: inherit;
+  font-style: var(--mindmap-font-style, normal);
+  font-weight: var(--mindmap-font-weight, 400);
   line-height: var(--mindmap-line-height, 1.5) !important;
+  letter-spacing: 0;
+  font-synthesis: none;
+  font-variant-ligatures: normal;
+  font-kerning: auto;
+  text-rendering: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .mindmap-node-editor {
@@ -2388,12 +2446,14 @@ textarea {
   max-height: none;
 }
 
-/* The edit and display layers use the same checkbox box model above. Removing
-   BlockNote's row padding and fixed control wrapper keeps their baseline, row
-   height and checkbox position identical across the edit switch. */
+/* The edit and display layers use the same checkbox box model above. BlockNote's own
+   row padding is replaced by the one every other block content carries here — and
+   that the display layer's `.mindmap-node-primary` carries too — because zeroing it
+   left a todo's text and checkbox sitting 1.3px higher the moment editing started,
+   while every other node stayed put. */
 .mindmap-node-editor .bn-block-content[data-content-type="checkListItem"] {
   align-items: center;
-  padding: 0;
+  padding: 0.08em 0;
 }
 
 .mindmap-node-editor .bn-block-content[data-content-type="checkListItem"] > div:has(> input) {
