@@ -1,4 +1,3 @@
-import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 import type { BlockNoteEditor } from "@blocknote/core";
 import { SideMenuExtension } from "@blocknote/core/extensions";

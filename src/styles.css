@@ -1,5 +1,5 @@
 :root {
-  --zhijian-font-family: SourceSansPro, -apple-system, "PingFang SC", "Apple Color Emoji",
+  --zhijian-font-family: "Source Sans Pro", -apple-system, "PingFang SC", "Apple Color Emoji",
     BlinkMacSystemFont, Helvetica, Arial, "Segoe UI Emoji", "Segoe UI Symbol",
     "Microsoft YaHei", 微软雅黑, 黑体, Heiti, sans-serif, SimSun, 宋体, serif;
   /* One document seen two ways, so ink and paper are stated once here rather than

@@ -1,5 +1,5 @@
 :root {
-  --zhijian-font-family: SourceSansPro, -apple-system, "PingFang SC", "Apple Color Emoji", BlinkMacSystemFont, Helvetica, Arial, "Segoe UI Emoji", "Segoe UI Symbol", "Microsoft YaHei", 微软雅黑, 黑体, Heiti, sans-serif, SimSun, 宋体, serif;
+  --zhijian-font-family: "Source Sans Pro", -apple-system, "PingFang SC", "Apple Color Emoji", BlinkMacSystemFont, Helvetica, Arial, "Segoe UI Emoji", "Segoe UI Symbol", "Microsoft YaHei", 微软雅黑, 黑体, Heiti, sans-serif, SimSun, 宋体, serif;
   color: #37352f;
   background: #ffffff;
   font-family: var(--zhijian-font-family);
