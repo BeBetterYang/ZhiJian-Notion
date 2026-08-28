@@ -2,6 +2,14 @@
   --zhijian-font-family: "Source Sans Pro", -apple-system, "PingFang SC", "Apple Color Emoji",
     BlinkMacSystemFont, Helvetica, Arial, "Segoe UI Emoji", "Segoe UI Symbol",
     "Microsoft YaHei", 微软雅黑, 黑体, Heiti, sans-serif, SimSun, 宋体, serif;
+  --zhijian-type-body-size: 16px;
+  --zhijian-type-body-line-height: 1.5;
+  --zhijian-type-body-weight: 400;
+  --zhijian-type-heading-1-size: 22px;
+  --zhijian-type-heading-2-size: 20px;
+  --zhijian-type-heading-3-size: 18px;
+  --zhijian-type-heading-line-height: 1.4;
+  --zhijian-type-heading-weight: 400;
   /* One document seen two ways, so ink and paper are stated once here rather than
      per view: BlockNote's own defaults (#3f3f3f text, #7d797a quotes) and
      mind-elixir's are different greys, and a node that changes colour by being
@@ -188,6 +196,19 @@ textarea {
   width: 15px;
   height: 15px;
   flex: none;
+}
+
+.toolbar-submenu-wrap {
+  position: relative;
+}
+
+.toolbar-submenu-chevron {
+  margin-left: auto;
+}
+
+.toolbar-submenu {
+  top: -6px;
+  right: calc(100% + 6px);
 }
 
 .toolbar-menu-title {
@@ -700,6 +721,7 @@ textarea {
   > .bn-block
   > .bn-block-content {
   font-size: 34px;
+  font-weight: 700 !important;
   line-height: 1.2;
 }
 
@@ -715,19 +737,20 @@ textarea {
 }
 
 .outline-panel .bn-block-content[data-content-type="heading"] {
-  --level: 24px;
-  font-size: 24px;
-  line-height: 1.4;
+  --level: var(--zhijian-type-heading-1-size);
+  font-size: var(--zhijian-type-heading-1-size);
+  font-weight: var(--zhijian-type-heading-weight) !important;
+  line-height: var(--zhijian-type-heading-line-height);
 }
 
 .outline-panel .bn-block-content[data-content-type="heading"][data-level="2"] {
-  --level: 21px;
-  font-size: 21px;
+  --level: var(--zhijian-type-heading-2-size);
+  font-size: var(--zhijian-type-heading-2-size);
 }
 
 .outline-panel .bn-block-content[data-content-type="heading"][data-level="3"] {
-  --level: 18px;
-  font-size: 18px;
+  --level: var(--zhijian-type-heading-3-size);
+  font-size: var(--zhijian-type-heading-3-size);
 }
 
 .outline-panel .bn-block-content[data-content-type="heading"] > :is(h1, h2, h3) {
@@ -737,8 +760,9 @@ textarea {
 
 .outline-panel .bn-block-content[data-content-type="paragraph"],
 .outline-panel .bn-block-content[data-content-type="checkListItem"] {
-  font-size: 16px;
-  line-height: 1.5;
+  font-size: var(--zhijian-type-body-size);
+  font-weight: var(--zhijian-type-body-weight);
+  line-height: var(--zhijian-type-body-line-height);
 }
 
 .outline-panel .bn-block-content[data-content-type="quote"] {
@@ -812,8 +836,8 @@ textarea {
   /* Centred on the block's *first line*, which is where BlockNote centres its
      30px side menu (measured: menu top == block top for a 24px line). Centring on
      the block instead drifted the two apart on every row taller than one line —
-     by 24px on a three-row table. `1lh` rather than a constant because a heading's
-     line box is 48px or 72px, not 24px, and the handle follows it there. */
+     by 24px on a three-row table. `1lh` rather than a constant lets the marker
+     follow the shared body and heading line heights. */
   align-self: flex-start;
   flex: 0 0 6px;
   width: 6px;
@@ -893,7 +917,7 @@ textarea {
    because both of the content's pseudo-elements are taken — `::before` is the row's
    bullet and `::after` its placeholder. `1lh` is the reason it is on the content at
    all: the bullet is centred on the row's first line, and only here does that line
-   box measure itself, 24px on a body row and 72px on a title. */
+   box reflect the shared typography tokens. */
 .outline-panel
   .bn-block-group
   .bn-block-outer:has(> .bn-block > .bn-block-group)
@@ -1059,11 +1083,11 @@ textarea {
    Move the group as one unit to preserve the alignment between more, collapse
    and the draggable marker. */
 .outline-panel .bn-side-menu:has(.outline-heading-level-1) {
-  transform: translateY(-19.2px);
+  transform: translateY(-20.6px);
 }
 
 .outline-panel .bn-side-menu:has(.outline-heading-level-2) {
-  transform: translateY(-9.3px);
+  transform: translateY(-10px);
 }
 
 .outline-panel .bn-side-menu:has(.outline-heading-level-3) {
@@ -1957,6 +1981,78 @@ textarea {
   font-size: inherit;
   line-height: 1;
   cursor: pointer;
+}
+
+.mind-elixir-toolbar.lt > span {
+  display: none;
+}
+
+.mindmap-style-menu-wrap,
+.mindmap-style-submenu-wrap {
+  position: relative;
+}
+
+.mindmap-style-menu-trigger {
+  display: flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.mindmap-style-menu {
+  position: absolute;
+  z-index: 90;
+  top: -6px;
+  left: calc(100% + 12px);
+  width: 168px;
+  padding: 6px;
+  border: 1px solid rgba(55, 53, 47, 0.12);
+  border-radius: 6px;
+  background: #fff;
+  color: #37352f;
+  font-family: var(--zhijian-font-family);
+  font-size: 14px;
+  box-shadow: 0 8px 24px rgba(15, 15, 15, 0.14), 0 2px 5px rgba(15, 15, 15, 0.08);
+}
+
+.mindmap-style-menu button {
+  display: flex;
+  width: 100%;
+  height: 30px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.mindmap-style-menu button:hover,
+.mindmap-style-menu button.is-active {
+  background: rgba(55, 53, 47, 0.07);
+}
+
+.mindmap-style-menu button svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+.mindmap-style-submenu {
+  top: -6px;
+  left: calc(100% + 6px);
 }
 
 .mindmap-cloze-toggle.is-active {

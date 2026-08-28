@@ -73,6 +73,7 @@ type WorkspaceSearchResult =
   | { type: "file"; file: WorkspaceFile; path: string; titleMatch: boolean; matches: WorkspaceSearchMatch[] };
 
 const RECENT_SEARCHES_KEY = "zhijian.workspace.recent-searches.v1";
+const LAST_OPEN_FILE_KEY = "zhijian.workspace.last-open-file.v1";
 
 interface UserProfile {
   name: string;
@@ -189,15 +190,11 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         setProfileDraft(nextProfile);
         setNodes(nextNodes);
         const firstFile = nextNodes.find(isWorkspaceFile);
-        setActiveFileId((current) => nextNodes.some((node) => node.id === current && node.type === "file")
-          ? current
-          : firstFile?.id ?? "");
-        setSelectedMenuKey((current) => {
-          const currentId = current.split(":").at(-1);
-          return currentId && nextNodes.some((node) => node.id === currentId)
-            ? current
-            : firstFile ? `tree:${firstFile.id}` : "";
-        });
+        const rememberedFileId = loadLastOpenFileId(sessionRef.current.userId);
+        const restoredFile = nextNodes.find((node) => node.id === rememberedFileId && node.type === "file");
+        const nextActiveFileId = restoredFile?.id ?? firstFile?.id ?? "";
+        setActiveFileId(nextActiveFileId);
+        setSelectedMenuKey(nextActiveFileId ? `tree:${nextActiveFileId}` : "");
         setExpandedFolders(new Set(nextNodes.filter((node) => node.type === "folder").map((node) => node.id)));
         setServerStatus("");
         setServerAvailable(true);
@@ -221,6 +218,11 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       canceled = true;
     };
   }, [handleSessionRefresh, onLogout, session.userId]);
+
+  useEffect(() => {
+    if (!serverReady || !activeFileId) return;
+    saveLastOpenFileId(session.userId, activeFileId);
+  }, [activeFileId, serverReady, session.userId]);
 
   useEffect(() => {
     if (!serverReady || !serverAvailable || !activeFile || !activeDocumentStore) return;
@@ -1272,6 +1274,26 @@ function NodeMenu({ node, nodes, moveOpen, onRename, onMoveToggle, onMove, onFav
 
 function errorMessage(error: unknown) {
   return error instanceof Error && error.message ? error.message : "未知错误";
+}
+
+function lastOpenFileStorageKey(userId: string) {
+  return `${LAST_OPEN_FILE_KEY}:${userId}`;
+}
+
+function loadLastOpenFileId(userId: string) {
+  try {
+    return window.localStorage.getItem(lastOpenFileStorageKey(userId));
+  } catch {
+    return null;
+  }
+}
+
+function saveLastOpenFileId(userId: string, fileId: string) {
+  try {
+    window.localStorage.setItem(lastOpenFileStorageKey(userId), fileId);
+  } catch {
+    // Browser storage can be unavailable in private or restricted contexts.
+  }
 }
 
 function profileFromSession(session: WorkspaceSession): UserProfile {

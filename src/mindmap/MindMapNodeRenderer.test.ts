@@ -23,6 +23,27 @@ function textNode(spans: RichTextSpan[]): ZhiJianNode {
   };
 }
 
+function headingNode(level: 1 | 2 | 3): ZhiJianNode {
+  return {
+    ...textNode([{ text: `标题 ${level}` }]),
+    type: "heading",
+    props: { headingLevel: level },
+  };
+}
+
+describe("shared typography tokens", () => {
+  it.each([1, 2, 3] as const)("uses the shared heading %s metrics", (level) => {
+    const style = getMindMapNodeVisualStyle(headingNode(level), false);
+    expect(style.fontSize).toBe(`var(--zhijian-type-heading-${level}-size)`);
+    expect(style.lineHeight).toBe("var(--zhijian-type-heading-line-height)");
+    expect(style.fontWeight).toBe("var(--zhijian-type-heading-weight)");
+  });
+
+  it("keeps the center topic on its independent size", () => {
+    expect(getMindMapNodeVisualStyle(headingNode(1), true).fontSize).toBe("20px");
+  });
+});
+
 describe("renderMindMapNodeDisplayHtml table cells", () => {
   it("repeats the cell colours BlockNote's stylesheet paints, so a coloured cell survives leaving the editor", () => {
     const html = renderMindMapNodeDisplayHtml(
@@ -71,7 +92,7 @@ describe("marks belong to the run they were applied to", () => {
       false,
     );
 
-    expect(style.fontWeight).toBe("400");
+    expect(style.fontWeight).toBe("var(--zhijian-type-body-weight)");
     expect(style.fontStyle).toBeUndefined();
     expect(style.color).toBeUndefined();
   });

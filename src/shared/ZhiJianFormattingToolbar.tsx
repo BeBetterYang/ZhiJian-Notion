@@ -1,4 +1,10 @@
 import {
+  blockHasType,
+  type BlockSchema,
+  type InlineContentSchema,
+  type StyleSchema,
+} from "@blocknote/core";
+import {
   BlockTypeSelect,
   FormattingToolbar,
   blockTypeSelectItems,
@@ -6,9 +12,10 @@ import {
   useActiveStyles,
   useBlockNoteEditor,
   useComponentsContext,
+  useEditorState,
 } from "@blocknote/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { RiDoubleQuotesL, RiEyeOffLine, RiImage2Line, RiTable2 } from "react-icons/ri";
+import { RiDoubleQuotesL, RiEyeLine, RiEyeOffLine, RiImage2Line, RiTable2 } from "react-icons/ri";
 import { saveImageAsset } from "./imageAssetStore";
 import { insertImageBlocks, insertNodeAttachmentBlocks } from "./attachmentInsertion";
 
@@ -21,6 +28,7 @@ interface ZhiJianFormattingToolbarProps {
 }
 
 const hiddenFormattingToolbarItems = new Set([
+  "replaceFileButton",
   "textAlignLeftButton",
   "textAlignCenterButton",
   "textAlignRightButton",
@@ -96,8 +104,44 @@ export function ZhiJianFormattingToolbar({
         <InsertImageButton />
       ) : null}
       {showClozeControl ? <ClozeButton /> : null}
+      <ViewImageButton />
       {defaultItems}
     </FormattingToolbar>
+  );
+}
+
+function ViewImageButton() {
+  const editor = useBlockNoteEditor<BlockSchema, InlineContentSchema, StyleSchema>();
+  const Components = useComponentsContext()!;
+  const block = useEditorState({
+    editor,
+    selector: ({ editor }) => {
+      const selectedBlocks = editor.getSelection()?.blocks ?? [editor.getTextCursorPosition().block];
+      if (selectedBlocks.length !== 1) return undefined;
+      const selected = selectedBlocks[0];
+      return selected.type === "image" && blockHasType(selected, editor, "image", { url: "string" })
+        ? selected
+        : undefined;
+    },
+  });
+
+  if (!block) return null;
+
+  return (
+    <Components.FormattingToolbar.Button
+      className="bn-button"
+      label="查看图片"
+      mainTooltip="查看图片"
+      icon={<RiEyeLine />}
+      onClick={() => {
+        const open = (url: string) => window.open(url, "_blank", "noopener,noreferrer");
+        if (editor.resolveFileUrl) {
+          void editor.resolveFileUrl(block.props.url).then(open);
+        } else {
+          open(block.props.url);
+        }
+      }}
+    />
   );
 }
 

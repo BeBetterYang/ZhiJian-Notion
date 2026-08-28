@@ -29,16 +29,13 @@ export interface MindMapNodeVisualStyle {
   textDecoration?: string;
 }
 
-/**
- * The heading scale, keyed by level. It is deliberately flat — a map reads as a
- * shape first, and headings that tower over the body text break that shape. The
- * root carries the level-1 size, since it is the document title, and everything
- * that is not a heading sits at the body size. Both the display layer and the
- * in-node editor read this through `--mindmap-font-size`, so a node cannot change
- * size when it starts being edited.
- */
-const HEADING_FONT_SIZE = { 1: "20px", 2: "18px", 3: "17px" } as const;
-const BODY_FONT_SIZE = "16px";
+const HEADING_FONT_SIZE = {
+  1: "var(--zhijian-type-heading-1-size)",
+  2: "var(--zhijian-type-heading-2-size)",
+  3: "var(--zhijian-type-heading-3-size)",
+} as const;
+const BODY_FONT_SIZE = "var(--zhijian-type-body-size)";
+const ROOT_FONT_SIZE = "20px";
 
 /**
  * The node box's own typography. Deliberately blind to the text's marks: a mark
@@ -51,14 +48,18 @@ const BODY_FONT_SIZE = "16px";
 export function getMindMapNodeVisualStyle(node: ZhiJianNode, isRoot: boolean): MindMapNodeVisualStyle {
   const style = getNodeStyle(node.props?.style);
   const headingLevel = node.type === "heading" ? node.props?.headingLevel ?? 1 : undefined;
-  const fontSize = isRoot ? HEADING_FONT_SIZE[1] : headingLevel ? HEADING_FONT_SIZE[headingLevel] : BODY_FONT_SIZE;
+  const fontSize = isRoot ? ROOT_FONT_SIZE : headingLevel ? HEADING_FONT_SIZE[headingLevel] : BODY_FONT_SIZE;
 
   return {
     fontSize,
-    lineHeight: isRoot || node.type === "heading" ? "1.4" : "1.5",
+    lineHeight: isRoot || node.type === "heading"
+      ? "var(--zhijian-type-heading-line-height)"
+      : "var(--zhijian-type-body-line-height)",
     // Size alone carries the heading levels here; weight is left to the text's own
     // bold mark, so a heading is only heavy when the user made it heavy.
-    fontWeight: style.fontWeight ?? "400",
+    fontWeight: style.fontWeight ?? (node.type === "heading"
+      ? "var(--zhijian-type-heading-weight)"
+      : "var(--zhijian-type-body-weight)"),
     fontStyle: style.fontStyle,
     color: style.color,
     background: style.backgroundColor,

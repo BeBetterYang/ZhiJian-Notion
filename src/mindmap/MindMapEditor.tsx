@@ -3,6 +3,7 @@ import MindElixir, { type MindElixirData, type NodeObj, type Operation, type Top
 import { zh_CN } from "mind-elixir/i18n";
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { createPortal } from "react-dom";
+import { FiCheck, FiChevronRight, FiGitBranch } from "react-icons/fi";
 import { RiEyeLine, RiEyeOffLine } from "react-icons/ri";
 import type { ZhiJianTree } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
@@ -117,6 +118,21 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
   const [contentTargets, setContentTargets] = useState<Array<{ id: string; host: HTMLElement }>>([]);
   const [editingTarget, setEditingTarget] = useState<EditingTarget>(null);
   const [styleToolbarHost, setStyleToolbarHost] = useState<HTMLElement | null>(null);
+  const [styleMenuOpen, setStyleMenuOpen] = useState(false);
+  const [styleSubmenu, setStyleSubmenu] = useState<"layout" | "theme" | null>(null);
+  const [themeName, setThemeName] = useState<"zhijian" | "classic">("zhijian");
+
+  useEffect(() => {
+    if (!styleMenuOpen) return;
+    const close = (event: PointerEvent) => {
+      if (!(event.target as Element | null)?.closest(".mindmap-style-menu-wrap")) {
+        setStyleMenuOpen(false);
+        setStyleSubmenu(null);
+      }
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [styleMenuOpen]);
   const [revealAllCloze, setRevealAllCloze] = useState(false);
   const hasCloze = treeHasClozeContent(tree);
 
@@ -883,18 +899,67 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
           borrows so a coloured run of text or table cell looks the same at rest as
           it does in the editor — see `.mindmap-canvas.bn-root` in `styles.css`. */}
       <div className={`mindmap-canvas bn-root ${zoomedNodeId ? "is-focus-mode" : ""} ${revealAllCloze ? CLOZE_REVEAL_ALL_CLASS : ""}`} ref={containerRef} />
-      {hasCloze && styleToolbarHost
+      {styleToolbarHost
         ? createPortal(
-          <button
-            type="button"
-            className={`mindmap-cloze-toggle ${revealAllCloze ? "is-active" : ""}`}
-            title={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"}
-            aria-label={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"}
-            aria-pressed={revealAllCloze}
-            onClick={toggleAllCloze}
-          >
-            {revealAllCloze ? <RiEyeLine /> : <RiEyeOffLine />}
-          </button>,
+          <div className="mindmap-style-menu-wrap">
+            <button
+              type="button"
+              className="mindmap-style-menu-trigger"
+              title="导图样式"
+              aria-label="导图样式"
+              aria-expanded={styleMenuOpen}
+              onClick={() => {
+                setStyleMenuOpen((open) => !open);
+                setStyleSubmenu(null);
+              }}
+            >
+              <FiGitBranch />
+            </button>
+            {styleMenuOpen ? (
+              <div className="mindmap-style-menu" role="menu">
+                <div className="mindmap-style-submenu-wrap">
+                  <button type="button" role="menuitem" onClick={() => setStyleSubmenu(styleSubmenu === "layout" ? null : "layout")}>
+                    <span>导图样式</span><FiChevronRight />
+                  </button>
+                  {styleSubmenu === "layout" ? (
+                    <div className="mindmap-style-menu mindmap-style-submenu" role="menu">
+                      <button type="button" role="menuitem" onClick={() => styleToolbarHost.querySelector<HTMLElement>("#tbltl")?.click()}>向左布局</button>
+                      <button type="button" role="menuitem" onClick={() => styleToolbarHost.querySelector<HTMLElement>("#tbltr")?.click()}>向右布局</button>
+                      <button type="button" role="menuitem" onClick={() => styleToolbarHost.querySelector<HTMLElement>("#tblts")?.click()}>双向布局</button>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="mindmap-style-submenu-wrap">
+                  <button type="button" role="menuitem" onClick={() => setStyleSubmenu(styleSubmenu === "theme" ? null : "theme")}>
+                    <span>主题</span><FiChevronRight />
+                  </button>
+                  {styleSubmenu === "theme" ? (
+                    <div className="mindmap-style-menu mindmap-style-submenu" role="menu">
+                      <button type="button" role="menuitem" onClick={() => {
+                        mindRef.current?.changeTheme(MINDMAP_THEME);
+                        setThemeName("zhijian");
+                      }}><span>枝间主题</span>{themeName === "zhijian" ? <FiCheck /> : null}</button>
+                      <button type="button" role="menuitem" onClick={() => {
+                        mindRef.current?.changeTheme(MindElixir.THEME);
+                        setThemeName("classic");
+                      }}><span>经典主题</span>{themeName === "classic" ? <FiCheck /> : null}</button>
+                    </div>
+                  ) : null}
+                </div>
+                {hasCloze ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={revealAllCloze ? "is-active" : ""}
+                    onClick={toggleAllCloze}
+                  >
+                    {revealAllCloze ? <RiEyeLine /> : <RiEyeOffLine />}
+                    <span>{revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"}</span>
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+          </div>,
           styleToolbarHost,
         )
         : null}

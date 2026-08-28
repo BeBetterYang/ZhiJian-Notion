@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   FiChevronDown,
+  FiChevronRight,
   FiDownload,
   FiFileText,
   FiGitBranch,
@@ -91,6 +92,7 @@ export default function App({
   const toolbarMoreRef = useRef<HTMLDivElement>(null);
   const collapseMenuRef = useRef<HTMLDivElement>(null);
   const [toolbarMoreOpen, setToolbarMoreOpen] = useState(false);
+  const [importExportMenuOpen, setImportExportMenuOpen] = useState(false);
   const [collapseMenuOpen, setCollapseMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchFocusSignal, setSearchFocusSignal] = useState(0);
@@ -226,7 +228,10 @@ export default function App({
     if (!toolbarMoreOpen && !collapseMenuOpen) return;
     const closeMenu = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (!toolbarMoreRef.current?.contains(target)) setToolbarMoreOpen(false);
+      if (!toolbarMoreRef.current?.contains(target)) {
+        setToolbarMoreOpen(false);
+        setImportExportMenuOpen(false);
+      }
       if (!collapseMenuRef.current?.contains(target)) setCollapseMenuOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -368,6 +373,7 @@ export default function App({
 
   const runExport = (task: () => Promise<void>) => {
     setToolbarMoreOpen(false);
+    setImportExportMenuOpen(false);
     void task().catch((error) => setExportError(error instanceof Error ? error.message : "导出失败，请重试。"));
   };
 
@@ -396,9 +402,10 @@ export default function App({
         type="button"
         aria-label={activeView === "outline" ? "切换到思维导图" : "切换到大纲笔记"}
         title={activeView === "outline" ? "切换到思维导图" : "切换到大纲笔记"}
-        onClick={() => {
-          changeView(activeView === "outline" ? "mindmap" : "outline");
-          setToolbarMoreOpen(false);
+          onClick={() => {
+            changeView(activeView === "outline" ? "mindmap" : "outline");
+            setToolbarMoreOpen(false);
+            setImportExportMenuOpen(false);
         }}
       >
         {activeView === "outline" ? <FiGitBranch /> : <FiList />}
@@ -457,53 +464,68 @@ export default function App({
           aria-label="更多"
           title="更多"
           aria-expanded={toolbarMoreOpen}
-          onClick={() => setToolbarMoreOpen((open) => !open)}
+          onClick={() => {
+            setToolbarMoreOpen((open) => !open);
+            setImportExportMenuOpen(false);
+          }}
         >
           <FiMoreHorizontal />
         </button>
         {toolbarMoreOpen ? (
           <div className="toolbar-more-menu" role="menu">
-            <button
+            <div className="toolbar-submenu-wrap">
+              <button
               type="button"
               role="menuitem"
-              onClick={() => {
-                setToolbarMoreOpen(false);
-                importInputRef.current?.click();
-              }}
+              aria-haspopup="menu"
+              aria-expanded={importExportMenuOpen}
+              onClick={() => setImportExportMenuOpen((open) => !open)}
             >
               <FiUpload />
-              <span>导入 Markdown</span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setToolbarMoreOpen(false);
-                exportMarkdown();
-              }}
-            >
-              <FiDownload />
-              <span>导出 Markdown</span>
-            </button>
-            <div className="toolbar-menu-title">导出为</div>
-            <button type="button" role="menuitem" onClick={() => runExport(() => exportOutlineImage())}>
-              <FiImage /><span>大纲图片</span>
-            </button>
-            <button type="button" role="menuitem" onClick={() => runExport(() => exportMindMapImage())}>
-              <FiImage /><span>思维导图图片</span>
-            </button>
-            <button type="button" role="menuitem" onClick={() => runExport(() => exportOutlineImage(true))}>
-              <FiFileText /><span>大纲 PDF</span>
-            </button>
-            <button type="button" role="menuitem" onClick={() => runExport(() => exportMindMapImage(true))}>
-              <FiFileText /><span>思维导图 PDF</span>
-            </button>
-            <button type="button" role="menuitem" onClick={() => runExport(() => exportOutlineDocument(true))}>
-              <FiFileText /><span>大纲 Word</span>
-            </button>
-            <button type="button" role="menuitem" onClick={() => runExport(() => exportOutlineDocument(false))}>
-              <FiFileText /><span>大纲 HTML</span>
-            </button>
+              <span>导入</span>
+              <FiChevronRight className="toolbar-submenu-chevron" />
+              </button>
+              {importExportMenuOpen ? (
+                <div className="toolbar-more-menu toolbar-submenu" role="menu">
+                  <button type="button" role="menuitem" onClick={() => {
+                    setToolbarMoreOpen(false);
+                    setImportExportMenuOpen(false);
+                    importInputRef.current?.click();
+                  }}>
+                    <FiUpload /><span>导入</span>
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => {
+                    setToolbarMoreOpen(false);
+                    setImportExportMenuOpen(false);
+                    exportMarkdown();
+                  }}>
+                    <FiDownload /><span>导出 Markdown</span>
+                  </button>
+                  <div className="toolbar-menu-title">导出为</div>
+                  {activeView === "outline" ? <>
+                    <button type="button" role="menuitem" onClick={() => runExport(() => exportOutlineImage())}>
+                      <FiImage /><span>大纲图片</span>
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => runExport(() => exportOutlineImage(true))}>
+                      <FiFileText /><span>大纲 PDF</span>
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => runExport(() => exportOutlineDocument(true))}>
+                      <FiFileText /><span>大纲 Word</span>
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => runExport(() => exportOutlineDocument(false))}>
+                      <FiFileText /><span>大纲 HTML</span>
+                    </button>
+                  </> : <>
+                    <button type="button" role="menuitem" onClick={() => runExport(() => exportMindMapImage())}>
+                      <FiImage /><span>思维导图图片</span>
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => runExport(() => exportMindMapImage(true))}>
+                      <FiFileText /><span>思维导图 PDF</span>
+                    </button>
+                  </>}
+                </div>
+              ) : null}
+            </div>
           </div>
         ) : null}
       </div>
@@ -654,7 +676,7 @@ export default function App({
           onMouseDown={(event) => event.target === event.currentTarget && setPendingImport(null)}
         >
           <section className="zhijian-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="import-confirm-title">
-            <h2 id="import-confirm-title">导入 Markdown</h2>
+            <h2 id="import-confirm-title">导入</h2>
             <p>导入「{pendingImport.fileName}」会替换当前文档的全部内容，可用撤销恢复。</p>
             <footer>
               <button type="button" onClick={() => setPendingImport(null)}>取消</button>
