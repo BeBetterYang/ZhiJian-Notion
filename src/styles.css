@@ -736,7 +736,10 @@ textarea {
   .bn-block-outer:has(
     > .bn-block > .bn-block-content[data-content-type="quote"]
   )::before {
-  display: none;
+  /* The guide line runs *past* a quote rather than stopping at it: a note belongs
+     to the row above it, so the line the parent draws to its children has to cross
+     it. See the guide-line block further down. */
+  display: block;
 }
 
 /* Keep the root title visually distinct while restoring BlockNote's normal
@@ -834,6 +837,177 @@ textarea {
   > .bn-block
   > .bn-block-group {
   margin-left: 0;
+  margin-top: 16px;
+}
+
+/* ── The indent guide, drawn the way mubu draws it ────────────────────────────
+   One line per parent: it starts on the parent's first line, runs down past
+   everything that parent carries — the rest of its wrapped text, its note, its
+   pictures — and ends with the last line of its last child.
+
+   BlockNote instead gives each nested row a segment as tall as that row, which
+   broke in three places: nothing was drawn beside a multi-line parent's own text,
+   so the line started somewhere below the row it belongs to; a quote hid its
+   segment, leaving a gap in the middle of the line; and where the last child had
+   rows of its own the line ran on down beside them, past the child it was meant to
+   end on.
+
+   The rules below are the parent's own piece, the shared x position, and the stop
+   after the last child's text.
+
+   `--zhijian-guide-gap` is the air between the parent's bullet and the start of the
+   line: 12px measured from the bullet's centre, which on a body row is exactly where
+   the row's first line ends — where the line began before it was given a start of its
+   own. */
+.outline-panel {
+  --zhijian-guide-gap: 12px;
+}
+
+/* The parent's piece, painted as a background gradient rather than a pseudo-element
+   because both of the content's pseudo-elements are taken — `::before` is the row's
+   bullet and `::after` its placeholder. `1lh` is the reason it is on the content at
+   all: the bullet is centred on the row's first line, and only here does that line
+   box measure itself, 24px on a body row and 72px on a title. */
+.outline-panel
+  .bn-block-group
+  .bn-block-outer:has(> .bn-block > .bn-block-group)
+  > .bn-block
+  > .bn-block-content {
+  background-image: linear-gradient(
+    var(--bn-colors-side-menu),
+    var(--bn-colors-side-menu)
+  );
+  background-repeat: no-repeat;
+  /* 2.5px from the row's left edge centres the 1px line on the 6px bullet, whose own
+     centre is 3px in, and `1lh / 2 + 3px` is that bullet's centre line — the same
+     arithmetic the marker's own `margin-top` does, read back. The gap is added to
+     that centre, so the line starts clear of the dot instead of inside it. */
+  background-position: 2.5px calc(1lh / 2 + 3px + var(--zhijian-guide-gap));
+  background-size: 1px calc(100% - 1lh / 2 - 3px - var(--zhijian-guide-gap));
+}
+
+/* A heading's bullet sits below BlockNote's 18px `padding-top`, and a table's on
+   its first row rather than on a line of text — the two exceptions the marker
+   rules above already make. */
+.outline-panel
+  .bn-block-group
+  .bn-block-outer:has(> .bn-block > .bn-block-group)
+  > .bn-block
+  > .bn-block-content[data-content-type="heading"] {
+  background-position: 2.5px calc(1lh / 2 + 18px + var(--zhijian-guide-gap));
+  background-size: 1px calc(100% - 1lh / 2 - 18px - var(--zhijian-guide-gap));
+}
+
+.outline-panel
+  .bn-block-group
+  .bn-block-outer:has(> .bn-block > .bn-block-group)
+  > .bn-block
+  > .bn-block-content[data-content-type="table"] {
+  background-position: 2.5px calc(30px + var(--zhijian-guide-gap));
+  background-size: 1px calc(100% - 30px - var(--zhijian-guide-gap));
+}
+
+/* The root title draws no line to its children, so it draws no piece of one
+   either. */
+.outline-panel
+  .bn-editor
+  > .bn-block-group
+  > .bn-block-outer:first-child
+  > .bn-block
+  > .bn-block-content {
+  background-image: none;
+}
+
+/* One x for both halves, centred on the bullet: BlockNote's own `-20px` put the
+   segment two pixels to the right of the bullet it descends from, which showed as a
+   kink where the parent's piece met the children's. */
+.outline-panel .bn-block-group .bn-block-group > .bn-block-outer::before {
+  left: -21.5px;
+}
+
+/* The stop, at the end of the last child's own text. Every nested row's segment is
+   as tall as that row, so the line already reaches the bottom of the last one — but
+   a row is as tall as everything nested inside it, so where the last child carries a
+   note, a picture or children of its own the line ran on down beside them. That
+   stretch is painted back out in the canvas colour, over the child's nested rows,
+   which is exactly the region to lose: those rows are guided by the last child's own
+   line, one level to the right.
+
+   The eraser is hung on the nested group because the group's box *is* that region;
+   the group has to be positioned for `left` to be read from its own left edge rather
+   than from the row's. */
+.outline-panel .bn-block-group .bn-block-group {
+  position: relative;
+}
+
+.outline-panel
+  .bn-block-group
+  > .bn-block-outer:last-child
+  > .bn-block
+  > .bn-block-group::before {
+  content: "";
+  position: absolute;
+  left: -21.5px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--bn-colors-editor-background);
+}
+
+/* The root title's children are the one level not indented from their parent, so an
+   eraser hung there would sit in the same column as the lines those children draw to
+   their own children, and rub them out. There is no line at the root level to erase
+   in the first place. */
+.outline-panel
+  .bn-editor
+  > .bn-block-group
+  > .bn-block-outer:first-child
+  > .bn-block
+  > .bn-block-group
+  > .bn-block-outer:last-child
+  > .bn-block
+  > .bn-block-group::before {
+  content: none;
+}
+
+/* Nothing to guide, no line. A node whose nested rows are all notes and pictures —
+   attachments come ahead of children in the projection, so this is exactly the
+   node with no children — has no bullet down there for the line to reach, and
+   both halves of it go: the rows' own segments and the parent's piece above them. */
+.outline-panel
+  .bn-block-outer:not(
+    :has(
+      > .bn-block
+        > .bn-block-group
+        > .bn-block-outer
+        > .bn-block
+        > .bn-block-content:not([data-content-type="quote"]):not(
+            [data-content-type="image"]
+          )
+    )
+  )
+  > .bn-block
+  > .bn-block-group
+  > .bn-block-outer::before {
+  display: none;
+}
+
+.outline-panel
+  .bn-block-group
+  .bn-block-outer:has(> .bn-block > .bn-block-group):not(
+    :has(
+      > .bn-block
+        > .bn-block-group
+        > .bn-block-outer
+        > .bn-block
+        > .bn-block-content:not([data-content-type="quote"]):not(
+            [data-content-type="image"]
+          )
+    )
+  )
+  > .bn-block
+  > .bn-block-content {
+  background-image: none;
 }
 
 /* Keep BlockNote's native drag events, but place its transparent hit area on

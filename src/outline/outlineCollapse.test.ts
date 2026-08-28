@@ -31,6 +31,8 @@ describe("collapsedOutlineCss", () => {
     expect(css).toContain('.bn-block-outer[data-id="a"]) > .bn-block > .bn-block-content::before');
     // The row itself stays visible — only what hangs under it goes.
     expect(css).not.toContain('.bn-block-outer[data-id="a"]) { display: none; }');
+    // …including the piece of the indent guide the row paints towards them.
+    expect(css).toContain("background-image: none;");
   });
 
   it("ignores a collapsed row with nothing under it", () => {

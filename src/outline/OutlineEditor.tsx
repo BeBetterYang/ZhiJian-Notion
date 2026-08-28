@@ -253,20 +253,27 @@ export function OutlineEditor({
         const target = event.target as Element;
         if (zoomedNodeId && target.closest(".bn-trailing-block")) {
           event.preventDefault();
-          const focused = editor.getBlock(zoomedNodeId);
-          if (!focused) return;
-          const updated = editor.updateBlock(focused, {
-            children: [...focused.children, { type: "paragraph", content: "" }],
-          });
-          const created = updated.children.at(-1);
-          if (created) editor.setTextCursorPosition(created, "start");
-          editor.focus();
+          event.stopPropagation();
           return;
         }
         if (!target.matches(".bn-block-content, .bn-inline-content")) return;
         if (claimCaretBesideText(editor, { x: event.clientX, y: event.clientY })) {
           event.preventDefault();
         }
+      }}
+      onClickCapture={(event) => {
+        if (!zoomedNodeId || event.button !== 0) return;
+        if (!(event.target as Element).closest(".bn-trailing-block")) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const focused = editor.getBlock(zoomedNodeId);
+        if (!focused) return;
+        const updated = editor.updateBlock(focused, {
+          children: [...focused.children, { type: "paragraph", content: "" }],
+        });
+        const created = updated.children.at(-1);
+        if (created) editor.setTextCursorPosition(created, "start");
+        editor.focus();
       }}
       // Anything the press could not claim — a drag that ended where it started, a
       // widget's own row — still gets the position it meant once the browser is done.

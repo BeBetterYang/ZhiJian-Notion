@@ -86,14 +86,28 @@ const SUMMARY_DROP = 10;
 export function correctMindMapSummaryOffsets(mind: MindElixir, tree: ZhiJianTree) {
   (mind.summaries ?? []).forEach((summary) => {
     if (!tree.nodes[summary.parent]?.parentId) return;
-    // Both the bracket group and its label hang off `mind.nodes`, so one lookup
-    // root covers them; ids come from `crypto.randomUUID`, hence the escape.
-    const selector = CSS.escape(`s-${summary.id}`);
-    const group = mind.summarySvg.querySelector<SVGGElement>(`#${selector}`);
+    // ids come from the library's own generator, hence the escape.
+    const group = mind.summarySvg.querySelector<SVGGElement>(`#${CSS.escape(`s-${summary.id}`)}`);
     if (group) group.setAttribute("transform", `translate(0, ${-SUMMARY_DROP})`);
     const label = mind.labelContainer.querySelector<HTMLElement>(`#${CSS.escape(`label-s-${summary.id}`)}`);
-    // Absolutely positioned, so a negative margin moves it without disturbing the
-    // `top` the library recomputes from the label's own height on every render.
-    if (label) label.style.marginTop = `${-SUMMARY_DROP}px`;
+    if (label) liftLabel(label);
   });
+}
+
+/**
+ * Move a label up by shifting its `top` rather than its margin.
+ *
+ * The inline editor is a clone of the label whose style is rewritten down to
+ * `left`/`top`/`max-width` — a margin would be dropped there, which is why editing
+ * a summary put the box back at the position the label had been lifted out of.
+ *
+ * The library rewrites `top` from the label's own height on every render, so the
+ * value written is remembered and re-lifted only once per render.
+ */
+function liftLabel(label: HTMLElement) {
+  if (label.dataset.zjLiftedTop === label.style.top) return;
+  const top = Number.parseFloat(label.style.top);
+  if (!Number.isFinite(top)) return;
+  label.style.top = `${top - SUMMARY_DROP}px`;
+  label.dataset.zjLiftedTop = label.style.top;
 }

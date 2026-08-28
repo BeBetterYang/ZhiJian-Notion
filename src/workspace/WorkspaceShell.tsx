@@ -122,11 +122,25 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const selectCreatedNameOnFocus = useRef(false);
   const peekCloseTimer = useRef<number | null>(null);
   const documentStores = useRef(new Map<string, TreeStore>());
+  const sessionRef = useRef(session);
   const [serverReady, setServerReady] = useState(false);
   const [serverAvailable, setServerAvailable] = useState(false);
   const [serverStatus, setServerStatus] = useState("正在连接服务器...");
+
+  sessionRef.current = session;
+  const handleSessionRefresh = useCallback((nextSession: WorkspaceSession) => {
+    const currentSession = sessionRef.current;
+    if (
+      currentSession.accessToken === nextSession.accessToken &&
+      currentSession.refreshToken === nextSession.refreshToken &&
+      currentSession.expiresAt === nextSession.expiresAt
+    ) return;
+    sessionRef.current = nextSession;
+    onSessionRefresh(nextSession);
+  }, [onSessionRefresh]);
 
   const files = useMemo(() => nodes.filter(isWorkspaceFile), [nodes]);
   const activeFile = files.find((file) => file.id === activeFileId) ?? files[0];
@@ -159,13 +173,14 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
 
   useEffect(() => {
     let canceled = false;
+    const loadingSession = sessionRef.current;
     setServerReady(false);
     setServerAvailable(false);
     setServerStatus("正在连接服务器...");
-    void loadWorkspaceState(session, { onSessionRefresh })
+    void loadWorkspaceState(loadingSession, { onSessionRefresh: handleSessionRefresh })
       .then((state) => {
         if (canceled) return;
-        const nextProfile = normalizeUserProfile(state?.profile, session);
+        const nextProfile = normalizeUserProfile(state?.profile, sessionRef.current);
         const nextNodes = state?.nodes ?? [];
         documentStores.current = new Map(
           Object.entries(state?.documents ?? {}).map(([fileId, tree]) => [fileId, new TreeStore(tree)]),
@@ -205,7 +220,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     return () => {
       canceled = true;
     };
-  }, [onLogout, onSessionRefresh, session]);
+  }, [handleSessionRefresh, onLogout, session.userId]);
 
   useEffect(() => {
     if (!serverReady || !serverAvailable || !activeFile || !activeDocumentStore) return;
@@ -214,31 +229,31 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
-        void saveWorkspaceDocument(session, activeFile.id, tree, { onSessionRefresh })
+        void saveWorkspaceDocument(sessionRef.current, activeFile.id, tree, { onSessionRefresh: handleSessionRefresh })
           .catch((error) => setServerStatus(`文档保存到服务器失败：${errorMessage(error)}`));
       }, 400);
     });
     return () => {
       if (timer) {
         clearTimeout(timer);
-        void saveWorkspaceDocument(session, activeFile.id, activeDocumentStore.getSnapshot(), { onSessionRefresh })
+        void saveWorkspaceDocument(sessionRef.current, activeFile.id, activeDocumentStore.getSnapshot(), { onSessionRefresh: handleSessionRefresh })
           .catch((error) => setServerStatus(`文档保存到服务器失败：${errorMessage(error)}`));
       }
       unsubscribe();
     };
-  }, [activeDocumentStore, activeFile, onSessionRefresh, serverAvailable, serverReady, session]);
+  }, [activeDocumentStore, activeFile, handleSessionRefresh, serverAvailable, serverReady]);
 
   useEffect(() => {
     if (!serverReady || !serverAvailable) return;
     const timer = setTimeout(() => {
-      void saveWorkspaceState(session, {
+      void saveWorkspaceState(sessionRef.current, {
         profile: userProfile,
         nodes,
         documents: snapshotDocumentStores(documentStores.current),
-      }, { onSessionRefresh }).catch((error) => setServerStatus(`工作区保存到服务器失败：${errorMessage(error)}`));
+      }, { onSessionRefresh: handleSessionRefresh }).catch((error) => setServerStatus(`工作区保存到服务器失败：${errorMessage(error)}`));
     }, 500);
     return () => clearTimeout(timer);
-  }, [nodes, onSessionRefresh, serverAvailable, serverReady, session, userProfile]);
+  }, [handleSessionRefresh, nodes, serverAvailable, serverReady, userProfile]);
 
   useEffect(() => {
     if (!activeFile || !activeDocumentStore) return;
@@ -377,6 +392,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       }
       setRenamingId(result.node.id);
       setRenameValue(result.node.title);
+      selectCreatedNameOnFocus.current = true;
       return result.nodes;
     });
     setCreateMenuOpen(false);
@@ -396,6 +412,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   };
 
   const beginRename = (node: WorkspaceNode) => {
+    selectCreatedNameOnFocus.current = false;
     setRenamingId(node.id);
     setRenameValue(node.title);
     setMenuNodeId(null);
@@ -410,6 +427,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     }
     setNodes((current) => renameWorkspaceNode(current, renamingId, renameValue));
     setRenamingId(null);
+    selectCreatedNameOnFocus.current = false;
   };
 
   const requestDeleteNode = (node: WorkspaceNode) => {
@@ -540,10 +558,18 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               className="tree-rename-input"
               value={renameValue}
               onChange={(event) => setRenameValue(event.target.value)}
+              onFocus={(event) => {
+                if (!selectCreatedNameOnFocus.current) return;
+                selectCreatedNameOnFocus.current = false;
+                event.currentTarget.select();
+              }}
               onBlur={commitRename}
               onKeyDown={(event) => {
                 if (event.key === "Enter") commitRename();
-                if (event.key === "Escape") setRenamingId(null);
+                if (event.key === "Escape") {
+                  selectCreatedNameOnFocus.current = false;
+                  setRenamingId(null);
+                }
               }}
               autoFocus
             />

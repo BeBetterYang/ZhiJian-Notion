@@ -20,26 +20,105 @@ describe("caretPositionAtPoint", () => {
 });
 
 describe("placeCaretInTableCell", () => {
-  it("targets the clicked row and column rather than the final cell", () => {
-    const root = document.createElement("div");
-    root.innerHTML = `<div data-content-type="table"><table><tbody><tr><td><p>甲</p></td><td><p>乙</p></td></tr></tbody></table></div>`;
-    const setTextSelection = vi.fn();
-    const target = root.querySelectorAll("p")[0];
-    const editor = {
-      domElement: root,
-      _tiptapEditor: {
-        view: { posAtDOM: vi.fn((node: Node) => node === target ? 7 : 17) },
-        commands: { setTextSelection },
+  /**
+   * A two-by-two table as a document: `<table><tr><td><p>…</p></td>…`. Sizes follow
+   * ProseMirror's — a paragraph is its text plus its own two tokens, a cell is its
+   * paragraph plus two, and so on — so the positions the code counts are real ones.
+   */
+  function tableEditor(options: { table?: boolean } = {}) {
+    const paragraph = (text: string) => ({
+      type: { name: "paragraph" },
+      nodeSize: text.length + 2,
+      isTextblock: true,
+      childCount: 0,
+      firstChild: null,
+      text,
+    });
+    const cell = (text: string) => {
+      const child = paragraph(text);
+      return {
+        type: { name: "tableCell" },
+        nodeSize: child.nodeSize + 2,
+        isTextblock: false,
+        childCount: 1,
+        firstChild: child,
+        child: () => child,
+      };
+    };
+    const row = (...cells: ReturnType<typeof cell>[]) => ({
+      type: { name: "tableRow" },
+      nodeSize: cells.reduce((total, item) => total + item.nodeSize, 0) + 2,
+      isTextblock: false,
+      childCount: cells.length,
+      firstChild: cells[0],
+      child: (index: number) => cells[index],
+    });
+    const rows = [row(cell("甲乙"), cell("丙丁")), row(cell("戊己"), cell("庚辛"))];
+    const table = {
+      type: { name: "table" },
+      nodeSize: rows.reduce((total, item) => total + item.nodeSize, 0) + 2,
+      isTextblock: false,
+      childCount: rows.length,
+      firstChild: rows[0],
+      child: (index: number) => rows[index],
+    };
+    // The paragraph the node's own text lives in, ahead of the table.
+    const lead = paragraph("表格");
+    const children = options.table === false ? [lead] : [lead, table];
+    const doc = {
+      content: { size: children.reduce((total, item) => total + item.nodeSize, 0) + 2 },
+      descendants: (visit: (node: unknown, position: number) => boolean | void) => {
+        let position = 0;
+        for (const child of children) {
+          visit(child, position);
+          position += child.nodeSize;
+        }
       },
-      prosemirrorState: { doc: { content: { size: 30 } } },
+      // Every position handed to `resolve` here is inside a paragraph, which is what
+      // the code checks before it asks for the end.
+      resolve: (position: number) => ({
+        pos: position,
+        parent: { isTextblock: true },
+        end: () => position + 2,
+      }),
+    };
+    const setTextSelection = vi.fn();
+    const focus = vi.fn();
+    const editor = {
+      _tiptapEditor: { view: { focus, state: { doc } }, commands: { setTextSelection } },
+      prosemirrorState: { doc },
     } as unknown as BlockNoteEditor;
+    return { editor, setTextSelection, focus };
+  }
 
+  it("targets the clicked row and column rather than the final cell", () => {
+    const { editor, setTextSelection, focus } = tableEditor();
     expect(placeCaretInTableCell(editor, { row: 0, column: 0 })).toBe(true);
-    expect(setTextSelection).toHaveBeenCalledWith(8);
+    // Focusing is what would otherwise put the caret in the table's last cell, so
+    // it has to happen before the selection, not after it.
+    expect(focus).toHaveBeenCalled();
+    // The lead paragraph runs 0-4, the table opens at 4, its first row at 5, its
+    // first cell at 6, that cell's paragraph at 7, and its two characters end at 10.
+    expect(setTextSelection).toHaveBeenCalledWith(10);
+  });
+
+  it("lands at the end of the clicked cell's text", () => {
+    const { editor, setTextSelection } = tableEditor();
+    expect(placeCaretInTableCell(editor, { row: 1, column: 1 })).toBe(true);
+    expect(setTextSelection).toHaveBeenCalledWith(30);
   });
 
   it("does nothing when the requested cell no longer exists", () => {
-    const editor = { domElement: document.createElement("div") } as unknown as BlockNoteEditor;
+    const { editor, setTextSelection } = tableEditor();
     expect(placeCaretInTableCell(editor, { row: 4, column: 4 })).toBe(false);
+    expect(setTextSelection).not.toHaveBeenCalled();
+  });
+
+  it("reports back when the editor is not holding the table yet", () => {
+    // Which is what lets the caller wait a frame instead of falling through to the
+    // end of the table block — its last cell.
+    const { editor, focus } = tableEditor({ table: false });
+    expect(placeCaretInTableCell(editor, { row: 0, column: 0 })).toBe(false);
+    expect(focus).not.toHaveBeenCalled();
   });
 });

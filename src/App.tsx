@@ -3,13 +3,16 @@ import { createPortal } from "react-dom";
 import {
   FiChevronDown,
   FiDownload,
+  FiFileText,
   FiGitBranch,
+  FiImage,
   FiList,
   FiMoreHorizontal,
   FiSearch,
   FiUpload,
 } from "react-icons/fi";
 import { markdownFileName, markdownToTree, treeToMarkdown } from "./core/markdown/markdownDocument";
+import { outlineExportFileName, treeToOutlineHtmlDocument } from "./core/export/outlineDocument";
 import { createInitialTree, richTextToPlainText } from "./core/tree";
 import { TreeStore, attachTreePersistence, loadPersistedTree } from "./core/treeStore";
 import { useTree } from "./core/treeStore/useTree";
@@ -18,6 +21,7 @@ import type { MindMapTextSelection } from "./mindmap/MindMapEditor";
 import { OutlineEditor } from "./outline/OutlineEditor";
 import { zoomPath } from "./outline/outlineZoom";
 import type { DocumentViewState, MindMapViewportState } from "./shared/documentViewState";
+import { captureOutlinePng, downloadBlob, imageBlobToPdf } from "./shared/exportFiles";
 import { matchingNodeIds, replaceSearchMatch, searchVisibleNodeIds } from "./shared/treeSearch";
 import {
   isAppShortcut,
@@ -81,6 +85,7 @@ export default function App({
   // picture blocks, which it does through its own toolbar in the shared host.
   const [mindMapNodeToolbarActive, setMindMapNodeToolbarActive] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const mindMapExportImageRef = useRef<(() => Promise<Blob | null>) | null>(null);
   const toolbarMoreRef = useRef<HTMLDivElement>(null);
   const collapseMenuRef = useRef<HTMLDivElement>(null);
   const [toolbarMoreOpen, setToolbarMoreOpen] = useState(false);
@@ -99,6 +104,7 @@ export default function App({
     fileName: string;
     markdown: string;
   } | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [mindMapToolbarTarget, setMindMapToolbarTarget] = useState<HTMLDivElement | null>(null);
   const [mindMapTextSelection, setMindMapTextSelection] =
     useState<MindMapTextSelection | null>(null);
@@ -302,16 +308,49 @@ export default function App({
   }, [activeView, focusNodeRequest, tree.nodes]);
 
   const exportMarkdown = () => {
-    const url = URL.createObjectURL(
-      new Blob([treeToMarkdown(tree)], { type: "text/markdown;charset=utf-8" }),
+    downloadBlob(new Blob([treeToMarkdown(tree)], { type: "text/markdown;charset=utf-8" }), markdownFileName(tree));
+  };
+
+  const withExportView = async <T,>(view: "outline" | "mindmap", task: () => Promise<T>) => {
+    const previous = activeView;
+    if (previous !== view) {
+      setActiveView(view);
+      await waitForExportView(view, mindMapExportImageRef);
+    }
+    try {
+      return await task();
+    } finally {
+      if (previous !== view) setActiveView(previous);
+    }
+  };
+
+  const exportOutlineImage = async (pdf = false) => {
+    const image = await withExportView("outline", captureOutlinePng);
+    downloadBlob(pdf ? await imageBlobToPdf(image, "outline") : image, outlineExportFileName(tree, pdf ? "大纲.pdf" : "大纲.png"));
+  };
+
+  const exportMindMapImage = async (pdf = false) => {
+    const image = await withExportView("mindmap", async () => {
+      const exporter = mindMapExportImageRef.current;
+      if (!exporter) throw new Error("思维导图尚未准备好。");
+      const blob = await exporter();
+      if (!blob) throw new Error("思维导图图片生成失败。");
+      return blob;
+    });
+    downloadBlob(pdf ? await imageBlobToPdf(image, "mindmap") : image, outlineExportFileName(tree, pdf ? "思维导图.pdf" : "思维导图.png"));
+  };
+
+  const exportOutlineDocument = async (word: boolean) => {
+    const html = await treeToOutlineHtmlDocument(tree, word);
+    downloadBlob(
+      new Blob(["\ufeff", html], { type: word ? "application/msword;charset=utf-8" : "text/html;charset=utf-8" }),
+      outlineExportFileName(tree, word ? "大纲.doc" : "大纲.html"),
     );
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = markdownFileName(tree);
-    document.body.append(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
+  const runExport = (task: () => Promise<void>) => {
+    setToolbarMoreOpen(false);
+    void task().catch((error) => setExportError(error instanceof Error ? error.message : "导出失败，请重试。"));
   };
 
   const importMarkdown = async (file: File) => {
@@ -428,6 +467,25 @@ export default function App({
               <FiDownload />
               <span>导出 Markdown</span>
             </button>
+            <div className="toolbar-menu-title">导出为</div>
+            <button type="button" role="menuitem" onClick={() => runExport(() => exportOutlineImage())}>
+              <FiImage /><span>大纲图片</span>
+            </button>
+            <button type="button" role="menuitem" onClick={() => runExport(() => exportMindMapImage())}>
+              <FiImage /><span>思维导图图片</span>
+            </button>
+            <button type="button" role="menuitem" onClick={() => runExport(() => exportOutlineImage(true))}>
+              <FiFileText /><span>大纲 PDF</span>
+            </button>
+            <button type="button" role="menuitem" onClick={() => runExport(() => exportMindMapImage(true))}>
+              <FiFileText /><span>思维导图 PDF</span>
+            </button>
+            <button type="button" role="menuitem" onClick={() => runExport(() => exportOutlineDocument(true))}>
+              <FiFileText /><span>大纲 Word</span>
+            </button>
+            <button type="button" role="menuitem" onClick={() => runExport(() => exportOutlineDocument(false))}>
+              <FiFileText /><span>大纲 HTML</span>
+            </button>
           </div>
         ) : null}
       </div>
@@ -525,6 +583,9 @@ export default function App({
                 zoomedNodeId={zoomedNodeId}
                 initialViewport={initialViewState?.mindMapViewport}
                 onViewportChange={updateMindMapViewport}
+                onExportImageReady={(exportImage) => {
+                  mindMapExportImageRef.current = exportImage;
+                }}
                 onFocusRequestHandled={(requestId) => {
                   setMindMapFocusRequest((current) =>
                     current?.requestId === requestId ? null : current,
@@ -580,8 +641,34 @@ export default function App({
           </section>
         </div>
       ) : null}
+      {exportError ? (
+        <div className="zhijian-dialog-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setExportError(null)}>
+          <section className="zhijian-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="export-error-title">
+            <h2 id="export-error-title">导出失败</h2>
+            <p>{exportError}</p>
+            <footer><button type="button" className="primary" onClick={() => setExportError(null)}>知道了</button></footer>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
+}
+
+async function waitForExportView(
+  view: "outline" | "mindmap",
+  mindMapExportImageRef: { current: (() => Promise<Blob | null>) | null },
+) {
+  for (let frame = 0; frame < 120; frame += 1) {
+    const ready = view === "outline"
+      ? Boolean(document.querySelector(".editor-view.is-active .outline-panel .bn-container"))
+      : Boolean(mindMapExportImageRef.current);
+    if (ready) {
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+      return;
+    }
+    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+  }
+  throw new Error(view === "outline" ? "大纲视图尚未准备好。" : "思维导图尚未准备好。");
 }
 
 function nodeDepth(tree: ReturnType<TreeStore["getSnapshot"]>, nodeId: string) {

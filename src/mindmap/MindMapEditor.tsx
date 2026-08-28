@@ -7,6 +7,7 @@ import type { ZhiJianTree } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
 import { useTree } from "../core/treeStore/useTree";
 import type { MindMapViewportState } from "../shared/documentViewState";
+import { captureMindMapPng } from "../shared/exportFiles";
 import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 import { handleShortcutKeyDown } from "../shared/shortcuts";
 import { createMindMapStructureSignature, treeToMindElixir } from "./mindElixirAdapter";
@@ -17,7 +18,7 @@ import {
   readMindMapDecorations,
   sameMindMapDecorations,
 } from "./mindMapDecorations";
-import { displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, mindMapDisplayDragTopic, mindMapMeasuredSizeChanged, mindMapScaleFromTransform, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, unscaledMindMapSize, updateMindMapPointerSession, type EditingTarget, type MindMapMeasuredSize, type MindMapPointerSession } from "./mindMapInteraction";
+import { displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, mindMapDisplayDragTopic, mindMapMeasuredSizeChanged, mindMapPressTarget, mindMapScaleFromTransform, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, unscaledMindMapSize, updateMindMapPointerSession, type EditingTarget, type MindMapMeasuredSize, type MindMapPointerSession, type MindMapPressTarget } from "./mindMapInteraction";
 import { MINDMAP_THEME } from "./mindMapTheme";
 import { MindMapLinkHoverTracker } from "./MindMapLinkHoverTracker";
 import { renderMindMapNodeDisplayHtml } from "./MindMapNodeRenderer";
@@ -48,6 +49,7 @@ interface MindMapEditorProps {
   zoomedNodeId?: string | null;
   initialViewport?: MindMapViewportState;
   onViewportChange?: (viewport: MindMapViewportState) => void;
+  onExportImageReady?: (exportImage: (() => Promise<Blob | null>) | null) => void;
 }
 
 export interface MindMapTextSelection {
@@ -56,7 +58,7 @@ export interface MindMapTextSelection {
   to: number;
 }
 
-export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, onTextSelectionChange, onNodeToolbarActiveChange, onFocusNode, onExitFocus, selectedNodeId, toolbarTarget, focusRequest, focusNodeRequest = null, onFocusRequestHandled, searchQuery = "", visibleNodeIds = null, zoomedNodeId = null, initialViewport, onViewportChange }: MindMapEditorProps) {
+export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, onTextSelectionChange, onNodeToolbarActiveChange, onFocusNode, onExitFocus, selectedNodeId, toolbarTarget, focusRequest, focusNodeRequest = null, onFocusRequestHandled, searchQuery = "", visibleNodeIds = null, zoomedNodeId = null, initialViewport, onViewportChange, onExportImageReady }: MindMapEditorProps) {
   const tree = useTree(store);
   const containerRef = useRef<HTMLDivElement>(null);
   const mindRef = useRef<MindElixir | null>(null);
@@ -77,6 +79,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
   const onNodeToolbarRef = useRef(onNodeToolbarActiveChange);
   const onFocusNodeRef = useRef(onFocusNode);
   const onExitFocusRef = useRef(onExitFocus);
+  const onExportImageReadyRef = useRef(onExportImageReady);
   const selectedNodeRef = useRef(selectedNodeId);
   const lastSelectedNodeId = useRef<string | null>(selectedNodeId);
   const editingTargetRef = useRef<EditingTarget>(null);
@@ -91,9 +94,16 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
   treeRef.current = tree;
   onFocusNodeRef.current = onFocusNode;
   onExitFocusRef.current = onExitFocus;
+  onExportImageReadyRef.current = onExportImageReady;
   projectionOptionsRef.current = { searchQuery, visibleNodeIds, rootNodeId: zoomedNodeId };
   const beginNodeEditRef = useRef<(nodeId: string, focusBlockId?: string, focusPoint?: { x: number; y: number }, focusTableCell?: { row: number; column: number }) => void>(() => undefined);
   const pointerSession = useRef<MindMapPointerSession | null>(null);
+  // Kept past the click that consumes the session, because a double click's own
+  // event is reported on the topic too and its second press is the only record of
+  // which part of the node it aimed at.
+  const lastPress = useRef<MindMapPressTarget | null>(null);
+  const lastPressAt = useRef(0);
+  const pressBehindEditRef = useRef<(nodeId: string) => MindMapPressTarget | null>(() => null);
   const contentHosts = useRef(new Map<string, HTMLDivElement>());
   const [contentTargets, setContentTargets] = useState<Array<{ id: string; host: HTMLElement }>>([]);
   const [editingTarget, setEditingTarget] = useState<EditingTarget>(null);
@@ -286,7 +296,9 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     }
     mind.beginEdit = async (element) => {
       const nodeId = (element ?? mind.currentNode)?.nodeObj.id;
-      if (nodeId) beginNodeEditRef.current(nodeId);
+      if (!nodeId) return;
+      const press = pressBehindEditRef.current(nodeId);
+      beginNodeEditRef.current(nodeId, press?.blockId, press?.point, press?.tableCell);
     };
     // Everything that adds a node — Enter, Tab, the context menu — reaches for
     // mind-elixir's own inline input afterwards, which would lay a plain-text box
@@ -294,7 +306,18 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     // topic's opacity to 0). The node's own editor is the only editor here.
     mind.editTopic = (element) => {
       const nodeId = element?.nodeObj.id;
-      if (nodeId) beginNodeEditRef.current(nodeId);
+      if (!nodeId) return;
+      const press = pressBehindEditRef.current(nodeId);
+      beginNodeEditRef.current(nodeId, press?.blockId, press?.point, press?.tableCell);
+    };
+    // The summary's own label editor is a clone of the label positioned from it, so
+    // the lift has to be in place before it opens. On creation mind-elixir renders
+    // the summary and opens the editor before it reports the operation, so the
+    // `operation` listener is too late to catch that first box.
+    const editSummary = mind.editSummary.bind(mind);
+    mind.editSummary = (element) => {
+      correctMindMapSummaryOffsets(mind, treeRef.current);
+      editSummary(element);
     };
     queueMicrotask(collectTargets);
     mind.bus.addListener("operation", (operation: Operation) => {
@@ -369,7 +392,15 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     // when nothing changed, which is what keeps a drag from filling the undo stack.
     mind.bus.addListener("updateArrowDelta", () => scheduleSaveDecorations());
     mindRef.current = mind;
-    return () => { mind.destroy(); mindRef.current = null; };
+    // Photographed from the live canvas rather than through `mind.exportPng`, which
+    // re-draws the map from mind-elixir's own idea of a topic — plain text — and so
+    // knows nothing of the quotes, pictures and tables inside our nodes.
+    onExportImageReadyRef.current?.(() => captureMindMapPng());
+    return () => {
+      onExportImageReadyRef.current?.(null);
+      mind.destroy();
+      mindRef.current = null;
+    };
   }, [applyEditingTarget, collectTargets, onViewportChange]);
 
   const selectTreeNode = useCallback((nodeId: string) => {
@@ -410,6 +441,26 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     applyEditingTarget({ nodeId, focusBlockId, focusPoint, focusTableCell });
   }, [applyEditingTarget, selectMindElixirNode]);
   beginNodeEditRef.current = beginNodeEdit;
+
+  /**
+   * The press behind an edit mind-elixir is asking for, when there is one.
+   *
+   * mind-elixir detects double clicks itself, off its own `pointerup` timing, and
+   * asks for the edit from that handler — which runs *before* the app's click
+   * handler, so the app's own gesture path is skipped as "already editing" and its
+   * caret coordinates never arrive. Reading the press back here is what keeps a
+   * fast double click into a quote or a table cell landing where it was aimed;
+   * without it the editor opens with a node id alone, and a table's fallback caret
+   * is its first cell. Edits with no press behind them at all — Enter on a selected
+   * node, the context menu — must not borrow an older one, hence the freshness
+   * window, which is a little wider than the double-click interval.
+   */
+  const pressBehindEdit = useCallback((nodeId: string) => {
+    const press = lastPress.current;
+    if (!press || press.nodeId !== nodeId || Date.now() - lastPressAt.current > 600) return null;
+    return press;
+  }, []);
+  pressBehindEditRef.current = pressBehindEdit;
 
   const finishNodeEdit = useCallback(() => {
     applyEditingTarget(null);
@@ -542,6 +593,9 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
         const selectedAtPointerDown = shell.closest("me-tpc")?.classList.contains("selected")
           ? shell.dataset.nodeId
           : selectedNodeRef.current;
+        const press = mindMapPressTarget(target, { x: event.clientX, y: event.clientY });
+        lastPress.current = press;
+        lastPressAt.current = Date.now();
         pointerSession.current = {
           pointerId: event.pointerId,
           nodeId: shell.dataset.nodeId,
@@ -549,6 +603,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
           startX: event.clientX,
           startY: event.clientY,
           dragged: false,
+          press: press ?? undefined,
         };
       } else if (event.button === 0 && isBlankMindMapSurface(target)) {
         // Pointerdown, not click: this is the moment mind-elixir reads a gesture
@@ -621,45 +676,39 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
         if (topic) mindRef.current?.expandNode(topic as Topic);
         return;
       }
-      const shell = target?.closest<HTMLElement>(".mindmap-node-shell[data-node-id]");
-      const nodeId = shell?.dataset.nodeId;
-      if (!nodeId) return;
-      const session = pointerSession.current?.nodeId === nodeId ? pointerSession.current : null;
+      const session = pointerSession.current;
       pointerSession.current = null;
+      const releasedOn = target?.closest<HTMLElement>(".mindmap-node-shell[data-node-id]")?.dataset.nodeId;
+      // The press decides which node and which part of it the gesture is about; the
+      // release only decides what to do about it. MindElixir holds the pointer
+      // capture for the drag it might be starting, so the release is reported on the
+      // topic rather than on the display the press landed in.
+      const press =
+        session?.press && (!releasedOn || releasedOn === session.nodeId)
+          ? session.press
+          : mindMapPressTarget(target, { x: event.clientX, y: event.clientY });
+      if (!press) return;
       if (session?.dragged) {
         event.preventDefault();
         event.stopPropagation();
         return;
       }
-      const interactive = Boolean(target?.closest("a,button,input,select,textarea,[role=checkbox]"));
       const selectedBefore = session ? session.selectedNodeId : selectedNodeRef.current;
-      const action = displayClickAction(selectedBefore, editingTargetRef.current, nodeId, interactive, event.detail);
-      if (action === "select") selectMindElixirNode(nodeId);
-      if (action === "edit") {
-        const cell = target?.closest<HTMLElement>("td[data-table-row][data-table-column]");
-        beginNodeEdit(
-          nodeId,
-          target?.closest<HTMLElement>("[data-block-id]")?.dataset.blockId,
-          { x: event.clientX, y: event.clientY },
-          cell ? { row: Number(cell.dataset.tableRow), column: Number(cell.dataset.tableColumn) } : undefined,
-        );
-      }
+      const action = displayClickAction(selectedBefore, editingTargetRef.current, press.nodeId, press.interactive, event.detail);
+      if (action === "select") selectMindElixirNode(press.nodeId);
+      if (action === "edit") beginNodeEdit(press.nodeId, press.blockId, press.point, press.tableCell);
     };
     const onDoubleClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
-      const shell = target?.closest<HTMLElement>(".mindmap-node-shell[data-node-id]");
-      const nodeId = shell?.dataset.nodeId;
-      if (!nodeId || target?.closest("a,button,input,select,textarea,[role=checkbox]")) return;
+      // Retargeted to the topic by the same pointer capture the click is, so the
+      // second press is what says which cell or quote was double clicked.
+      const press =
+        mindMapPressTarget(target, { x: event.clientX, y: event.clientY }) ?? lastPress.current;
+      if (!press || press.interactive) return;
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      const cell = target?.closest<HTMLElement>("td[data-table-row][data-table-column]");
-      beginNodeEdit(
-        nodeId,
-        target?.closest<HTMLElement>("[data-block-id]")?.dataset.blockId,
-        { x: event.clientX, y: event.clientY },
-        cell ? { row: Number(cell.dataset.tableRow), column: Number(cell.dataset.tableColumn) } : undefined,
-      );
+      beginNodeEdit(press.nodeId, press.blockId, press.point, press.tableCell);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       // Undo has to be answered on the canvas too. mind-elixir's own history is

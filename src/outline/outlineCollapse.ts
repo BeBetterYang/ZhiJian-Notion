@@ -31,6 +31,13 @@ export function collapsedOutlineCss(tree: ZhiJianTree): string {
     // while the pointer is on the row, so the marker carries the state the rest of
     // the time, ringed the way a collapsed node is in the map.
     `.outline-panel :is(${blockSelectors(collapsed.map((node) => node.id))}) > .bn-block > .bn-block-content::before { box-shadow: 0 0 0 3px var(--zhijian-collapsed-ring); }`,
+    // With the children hidden there is nothing left for the indent guide to reach,
+    // so the piece of it the row paints for itself has to go too — otherwise a
+    // collapsed row trails a short line into empty space. The content class is
+    // repeated to out-specify the `:has(> .bn-block > .bn-block-group)` rule in
+    // styles.css, which the collapsed row still matches: the group is hidden, not
+    // removed.
+    `.outline-panel :is(${blockSelectors(collapsed.map((node) => node.id))}) > .bn-block > .bn-block-content.bn-block-content.bn-block-content { background-image: none; }`,
   ].join("\n");
 }
 

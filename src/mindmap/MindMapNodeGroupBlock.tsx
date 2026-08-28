@@ -58,6 +58,13 @@ export function MindMapNodeContent(props: MindMapNodeContentProps) {
   return props.editing ? <MindMapNodeEditor {...props} /> : null;
 }
 
+/**
+ * How many frames a cell-targeted caret waits for the editor to hold the table it
+ * was aimed at. A few frames covers the projection and its first layout without
+ * ever being long enough to be seen.
+ */
+const FOCUS_TABLE_ATTEMPTS = 5;
+
 function MindMapNodeEditor({
   node,
   store,
@@ -145,7 +152,8 @@ function MindMapNodeEditor({
       blockIds,
       focusBlockId ?? activeRequest?.focusBlockId,
     );
-    const frame = window.requestAnimationFrame(() => {
+    let frame = 0;
+    const place = (attempt: number) => {
       // Latched here rather than above, because the cleanup below can cancel this
       // frame before it ever runs. Selecting the node re-renders the app, which
       // hands this component a fresh `onFocusRequestHandled` and re-runs the
@@ -162,14 +170,23 @@ function MindMapNodeEditor({
         // click falls back to when its coordinates resolve to nothing — appending
         // is what the user is about to do in all three cases.
         const placedInTable = placeCaretInTableCell(editor, focusTableCell);
-        if (!placedInTable && !placeCaretAtPoint(editor, focusPoint)) {
-          editor.setTextCursorPosition(requestedBlockId, "end");
+        // A table the editor has not projected yet is worth waiting a frame for: the
+        // block's own "end" is its *last cell*, so giving up here would put the caret
+        // in the one place the click cannot have meant.
+        if (!placedInTable && focusTableCell && attempt < FOCUS_TABLE_ATTEMPTS) {
+          frame = window.requestAnimationFrame(() => place(attempt + 1));
+          return;
         }
-        // BlockNote's generic focus helper chooses the end of a table document.
-        // A cell-targeted selection is already exact, so focus ProseMirror without
-        // asking BlockNote to derive a second caret position over it.
-        if (placedInTable) editor._tiptapEditor.view.focus();
-        else editor.focus();
+        if (!placedInTable && !placeCaretAtPoint(editor, focusPoint)) {
+          // A table's own "end" is its *last* cell — the one place a click on it
+          // cannot have meant — so a table falls back to its first cell instead.
+          const table = editor.getBlock(requestedBlockId)?.type === "table";
+          editor.setTextCursorPosition(requestedBlockId, table ? "start" : "end");
+        }
+        // A cell-targeted placement has already focused the editor, and focusing it
+        // again through BlockNote would ask it to derive a second caret position over
+        // the exact one just set — over a table that lands in its last cell.
+        if (!placedInTable) editor.focus();
         if (activeRequest) onFocusRequestHandled(activeRequest.requestId);
       } catch {
         try {
@@ -179,7 +196,8 @@ function MindMapNodeEditor({
           // The requested block can disappear during the same edit transaction.
         }
       }
-    });
+    };
+    frame = window.requestAnimationFrame(() => place(0));
     return () => window.cancelAnimationFrame(frame);
   }, [blockIds, editor, focusBlockId, focusPoint, focusRequest, focusTableCell, node.id, onFocusRequestHandled]);
 

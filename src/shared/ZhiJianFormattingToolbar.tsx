@@ -17,6 +17,12 @@ interface ZhiJianFormattingToolbarProps {
   onInsertQuote?: (nodeId: string, focusBlockId: string) => void;
 }
 
+const hiddenFormattingToolbarItems = new Set([
+  "textAlignLeftButton",
+  "textAlignCenterButton",
+  "textAlignRightButton",
+]);
+
 export function ZhiJianFormattingToolbar({
   showStructuralControls = true,
   onInsertQuote,
@@ -55,7 +61,7 @@ export function ZhiJianFormattingToolbar({
     [editor],
   );
   const defaultItems = getFormattingToolbarItems(blockTypes).filter(
-    (item) => item.key !== "blockTypeSelect",
+    (item) => item.key !== "blockTypeSelect" && !hiddenFormattingToolbarItems.has(String(item.key)),
   );
 
   // The root block is the fixed document title. It remains editable as text,

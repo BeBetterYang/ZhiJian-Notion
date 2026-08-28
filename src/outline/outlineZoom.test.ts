@@ -54,6 +54,9 @@ describe("zoomedOutlineCss", () => {
   it("hides each ancestor's own row and its other children", () => {
     const css = zoomedOutlineCss(sampleTree(), "a1");
 
+    expect(css).toContain('.bn-block-outer[data-id="a2"]');
+    expect(css).toContain('.bn-block-outer[data-id="b"]');
+    expect(css).not.toMatch(/:is\([^}]*data-id="a1x"/);
     expect(css).toContain('[data-id="root"] > .bn-block > .bn-block-content { display: none; }');
     expect(css).toContain('[data-id="a"] > .bn-block > .bn-block-content { display: none; }');
     expect(css).toContain('[data-id="root"] > .bn-block > .bn-block-group > .bn-block-outer:not([data-id="a"]) { display: none; }');
@@ -66,8 +69,8 @@ describe("zoomedOutlineCss", () => {
   it("takes back the indent of every level it hid", () => {
     const css = zoomedOutlineCss(sampleTree(), "a1");
 
-    expect(css).toContain('[data-id="root"] > .bn-block > .bn-block-group { margin-left: 0; padding-left: 0; }');
-    expect(css).toContain('[data-id="a"] > .bn-block > .bn-block-group { margin-left: 0; padding-left: 0; }');
+    expect(css).toContain('[data-id="root"] > .bn-block > .bn-block-group { margin-left: 0; margin-top: 0; padding-left: 0; }');
+    expect(css).toContain('[data-id="a"] > .bn-block > .bn-block-group { margin-left: 0; margin-top: 0; padding-left: 0; }');
     expect(css).toContain('[data-id="a"]::before { display: none !important; }');
     expect(css).toContain('[data-id="a1"]::before { display: none !important; }');
   });
@@ -77,7 +80,7 @@ describe("zoomedOutlineCss", () => {
 
     expect(css).toContain('[data-id="a1"] > .bn-block > .bn-block-content { font-size: 34px; font-weight: 700; line-height: 1.2; }');
     expect(css).toContain('[data-id="a1"] > .bn-block > .bn-block-content::before { content: none !important; }');
-    expect(css).toContain('[data-id="a1"] > .bn-block > .bn-block-group { margin-left: 0; }');
+    expect(css).toContain('[data-id="a1"] > .bn-block > .bn-block-group { margin-left: 0; margin-top: 16px; }');
     expect(css).toContain('[data-id="a1"] > .bn-block > .bn-block-group > .bn-block-outer::before { display: none; }');
   });
 

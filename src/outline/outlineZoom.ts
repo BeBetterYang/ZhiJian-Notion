@@ -19,13 +19,20 @@ export function zoomedOutlineCss(tree: ZhiJianTree, zoomedNodeId: string | null)
   }
 
   const rules: string[] = [];
+  const visibleNodeIds = zoomVisibleNodeIds(tree, path);
+  const hiddenNodes = Object.keys(tree.nodes)
+    .filter((nodeId) => !visibleNodeIds.has(nodeId))
+    .map(block);
+  if (hiddenNodes.length) {
+    rules.push(`.outline-panel :is(${hiddenNodes.join(", ")}) { display: none !important; }`);
+  }
   for (let index = 0; index < path.length - 1; index += 1) {
     const ancestor = block(path[index]);
     const next = path[index + 1];
     rules.push(
       `.outline-panel ${ancestor} > .bn-block > .bn-block-content { display: none; }`,
       `.outline-panel ${ancestor} > .bn-block > .bn-block-group > .bn-block-outer:not([data-id="${escapeCssString(next)}"]) { display: none; }`,
-      `.outline-panel ${ancestor} > .bn-block > .bn-block-group { margin-left: 0; padding-left: 0; }`,
+      `.outline-panel ${ancestor} > .bn-block > .bn-block-group { margin-left: 0; margin-top: 0; padding-left: 0; }`,
       // The guide line belongs to a level that is no longer on screen.
       `.outline-panel ${block(next)}::before { display: none !important; }`,
     );
@@ -40,7 +47,7 @@ export function zoomedOutlineCss(tree: ZhiJianTree, zoomedNodeId: string | null)
     `.outline-panel ${zoomed} > .bn-block > .bn-block-content[data-content-type="heading"] > :is(h1, h2, h3) { font-size: inherit; line-height: inherit; }`,
     `.outline-panel ${zoomed} > .bn-block > .bn-block-content::before { content: none !important; }`,
     `.outline-panel ${zoomed} > .bn-block > .bn-block-content:has(.ProseMirror-trailingBreak:only-child)::after { content: "无标题" !important; }`,
-    `.outline-panel ${zoomed} > .bn-block > .bn-block-group { margin-left: 0; }`,
+    `.outline-panel ${zoomed} > .bn-block > .bn-block-group { margin-left: 0; margin-top: 16px; }`,
     `.outline-panel ${zoomed} > .bn-block > .bn-block-group > .bn-block-outer::before { display: none; }`,
   );
   return rules.join("\n");
@@ -62,6 +69,18 @@ export function zoomPath(tree: ZhiJianTree, zoomedNodeId: string | null): string
     current = tree.nodes[current]?.parentId ?? null;
   }
   return path;
+}
+
+function zoomVisibleNodeIds(tree: ZhiJianTree, path: string[]) {
+  const visible = new Set(path);
+  const pending = [...(tree.nodes[path.at(-1)!]?.children ?? [])];
+  while (pending.length) {
+    const nodeId = pending.pop()!;
+    if (visible.has(nodeId)) continue;
+    visible.add(nodeId);
+    pending.push(...(tree.nodes[nodeId]?.children ?? []));
+  }
+  return visible;
 }
 
 function block(id: string) {

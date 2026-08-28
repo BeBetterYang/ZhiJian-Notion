@@ -57,4 +57,25 @@ describe("workspace server API session refresh", () => {
       headers: expect.objectContaining({ Authorization: "Bearer retry-token" }),
     }));
   });
+
+  it("shares one refresh request between concurrent saves", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        session: { ...expiringSession, accessToken: "shared-token", refreshToken: "next-refresh", expiresAt: 2000 },
+      }), { status: 200 }))
+      .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+    await Promise.all([
+      saveWorkspaceState(expiringSession, { nodes: [] }),
+      saveWorkspaceDocument(expiringSession, "file-1", createInitialTree()),
+    ]);
+
+    const calls = vi.mocked(fetch).mock.calls;
+    expect(calls.filter(([input]) => input === "/api/auth/refresh")).toHaveLength(1);
+    expect(calls.filter(([input]) => String(input).startsWith("/api/workspace"))).toHaveLength(2);
+    expect(calls.slice(1).every(([, init]) =>
+      (init?.headers as Record<string, string>).Authorization === "Bearer shared-token",
+    )).toBe(true);
+  });
 });

@@ -33,6 +33,8 @@ interface WorkspaceApiOptions {
   onSessionRefresh?: (session: WorkspaceSession) => void;
 }
 
+let pendingSessionRefresh: Promise<WorkspaceSession> | null = null;
+
 export async function loadWorkspaceState(session: WorkspaceSession, options?: WorkspaceApiOptions): Promise<WorkspaceServerState | null> {
   const response = await workspaceFetch("/api/workspace", {}, session, options);
   if (response.status === 404) return null;
@@ -77,11 +79,20 @@ async function ensureFreshSession(session: WorkspaceSession, options?: Workspace
 }
 
 async function refreshSessionOrThrow(session: WorkspaceSession, options?: WorkspaceApiOptions) {
-  const result = await refreshWorkspaceSession(session);
-  if (!result.session) throw new WorkspaceApiError(result.error ?? "登录状态已过期，请重新登录。", 401);
-  saveWorkspaceSession(result.session);
-  options?.onSessionRefresh?.(result.session);
-  return result.session;
+  if (!pendingSessionRefresh) {
+    pendingSessionRefresh = refreshWorkspaceSession(session)
+      .then((result) => {
+        if (!result.session) throw new WorkspaceApiError(result.error ?? "登录状态已过期，请重新登录。", 401);
+        saveWorkspaceSession(result.session);
+        return result.session;
+      })
+      .finally(() => {
+        pendingSessionRefresh = null;
+      });
+  }
+  const refreshedSession = await pendingSessionRefresh;
+  options?.onSessionRefresh?.(refreshedSession);
+  return refreshedSession;
 }
 
 function authHeaders(session: WorkspaceSession, headers?: HeadersInit) {

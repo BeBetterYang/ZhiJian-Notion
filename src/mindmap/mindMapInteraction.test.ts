@@ -9,6 +9,7 @@ import {
   isMindMapGeometryEditorElement,
   mindMapDisplayDragTopic,
   mindMapMeasuredSizeChanged,
+  mindMapPressTarget,
   mindMapScaleFromTransform,
   mindMapUpdateMode,
   nodeDocumentSignature,
@@ -77,6 +78,40 @@ describe("mindMapDisplayDragTopic", () => {
     document.body.innerHTML = `<me-tpc><div class="mindmap-node-display"><input class="mindmap-node-checkbox"></div><div class="mindmap-node-editor"><span>编辑</span></div></me-tpc>`;
     expect(mindMapDisplayDragTopic(document.querySelector("input"))).toBeNull();
     expect(mindMapDisplayDragTopic(document.querySelector(".mindmap-node-editor span"))).toBeNull();
+  });
+});
+
+describe("mindMapPressTarget", () => {
+  it("names the node, the block and the table cell the press landed in", () => {
+    document.body.innerHTML = `
+      <div class="mindmap-node-shell" data-node-id="t1">
+        <div class="mindmap-node-display" data-block-id="t1">
+          <table><tr>
+            <td data-table-row="1" data-table-column="2"><span>C2</span></td>
+          </tr></table>
+        </div>
+      </div>`;
+    const press = mindMapPressTarget(document.querySelector("td span"), { x: 12, y: 34 });
+    expect(press).toEqual({
+      nodeId: "t1",
+      blockId: "t1",
+      tableCell: { row: 1, column: 2 },
+      point: { x: 12, y: 34 },
+      interactive: false,
+    });
+  });
+
+  it("marks a press on a link as the link's own gesture", () => {
+    document.body.innerHTML = `
+      <div class="mindmap-node-shell" data-node-id="n2">
+        <div class="mindmap-node-display" data-block-id="n2"><a href="#">链接</a></div>
+      </div>`;
+    expect(mindMapPressTarget(document.querySelector("a"), { x: 0, y: 0 })?.interactive).toBe(true);
+  });
+
+  it("reports nothing for a press outside every node", () => {
+    document.body.innerHTML = `<div class="map-container"></div>`;
+    expect(mindMapPressTarget(document.querySelector(".map-container"), { x: 0, y: 0 })).toBeNull();
   });
 });
 

@@ -22,6 +22,8 @@ export interface MindMapPointerSession {
   startX: number;
   startY: number;
   dragged: boolean;
+  /** What the press aimed at, for the click that follows it. */
+  press?: MindMapPressTarget;
 }
 
 export function updateMindMapPointerSession(
@@ -229,6 +231,45 @@ export function mindMapDisplayDragTopic(target: EventTarget | null) {
   if (!(target instanceof Element) || !target.closest(".mindmap-node-display")) return null;
   if (target.closest("a,button,input,select,textarea,[role=checkbox]")) return null;
   return target.closest<HTMLElement>("me-tpc");
+}
+
+/**
+ * Everything a press on a node's display says about what the user aimed at.
+ *
+ * Read on the press rather than on the release, because the release cannot be
+ * trusted to say it. Handing the press to MindElixir is what lets an unselected
+ * node be dragged from its own text (see `mindMapDisplayDragTopic`), and MindElixir
+ * captures the pointer on the topic — which retargets the click that follows to
+ * `me-tpc`, an element *above* the display. A handler reading the node out of the
+ * click's own target therefore found nothing at all and dropped the gesture, which
+ * is how clicking a selected node stopped opening its editor.
+ */
+export interface MindMapPressTarget {
+  nodeId: string;
+  blockId?: string;
+  tableCell?: { row: number; column: number };
+  point: { x: number; y: number };
+  /** A link or a control, which owns the gesture itself. */
+  interactive: boolean;
+}
+
+export function mindMapPressTarget(
+  target: EventTarget | null,
+  point: { x: number; y: number },
+): MindMapPressTarget | null {
+  if (!(target instanceof Element)) return null;
+  const nodeId = target.closest<HTMLElement>(".mindmap-node-shell[data-node-id]")?.dataset.nodeId;
+  if (!nodeId) return null;
+  const cell = target.closest<HTMLElement>("td[data-table-row][data-table-column]");
+  return {
+    nodeId,
+    blockId: target.closest<HTMLElement>("[data-block-id]")?.dataset.blockId,
+    tableCell: cell
+      ? { row: Number(cell.dataset.tableRow), column: Number(cell.dataset.tableColumn) }
+      : undefined,
+    point,
+    interactive: Boolean(target.closest("a,button,input,select,textarea,[role=checkbox]")),
+  };
 }
 
 const UNIT = "\u001f";
