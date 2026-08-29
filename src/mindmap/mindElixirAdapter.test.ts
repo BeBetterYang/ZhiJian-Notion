@@ -1,9 +1,21 @@
 import type { NodeObj } from "mind-elixir";
 import { describe, expect, it } from "vitest";
 import { createInitialTree } from "../core/tree";
-import { createMindMapStructureSignature, treeToMindElixir } from "./mindElixirAdapter";
+import { assignGroupedSideDirections, createMindMapStructureSignature, treeToMindElixir } from "./mindElixirAdapter";
 
 describe("mindElixirAdapter", () => {
+  it("groups the first half of main branches on the right in side layout", () => {
+    const children = Array.from({ length: 6 }, (_, index) => ({ id: String(index + 1), topic: String(index + 1) })) as NodeObj[];
+    assignGroupedSideDirections(children);
+    expect(children.map((child) => child.direction)).toEqual([1, 1, 1, 0, 0, 0]);
+  });
+
+  it("keeps the extra branch on the right for an odd branch count", () => {
+    const children = Array.from({ length: 5 }, (_, index) => ({ id: String(index + 1), topic: String(index + 1) })) as NodeObj[];
+    assignGroupedSideDirections(children);
+    expect(children.map((child) => child.direction)).toEqual([1, 1, 1, 0, 0]);
+  });
+
   it("projects one domain node with quote and images as one visual node", () => {
     const tree = createInitialTree();
     tree.nodes.web.blocks = [

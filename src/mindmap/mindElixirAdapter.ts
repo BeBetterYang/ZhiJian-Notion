@@ -61,12 +61,26 @@ export function treeToMindElixir(tree: ZhiJianTree, options: MindElixirProjectio
   // `init` and `refresh` read them straight off the data and re-render them, so a
   // structural rebuild — or a switch to the outline and back, which is an `init`
   // over a fresh instance — no longer leaves the map's own annotations behind.
+  const nodeData = visit(tree.nodes[rootId]);
+  assignGroupedSideDirections(nodeData.children ?? []);
   return {
-    nodeData: visit(tree.nodes[rootId]),
+    nodeData,
     direction: MindElixir.RIGHT,
     summaries: visibleSummaries(tree, rootId, options.visibleNodeIds),
     arrows: visibleArrows(tree, rootId, options.visibleNodeIds),
   };
+}
+
+/**
+ * MindElixir alternates unspecified main branches left/right in SIDE mode. Keep
+ * document order readable instead: the first half stays together on the right,
+ * followed by the second half on the left.
+ */
+export function assignGroupedSideDirections(children: NodeObj[]) {
+  const rightCount = Math.ceil(children.length / 2);
+  children.forEach((child, index) => {
+    child.direction = index < rightCount ? MindElixir.RIGHT : MindElixir.LEFT;
+  });
 }
 
 /**
