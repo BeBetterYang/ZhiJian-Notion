@@ -687,10 +687,13 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
       if (nodeId && event.button === 0) {
         event.preventDefault();
         event.stopPropagation();
+        if (readOnlyRef.current) return;
         const node = storeRef.current.getNode(nodeId);
         if (node?.type !== "todo") return;
         storeRef.current.updateProps(nodeId, { checked: !(node.props?.checked ?? false) });
-        selectTreeNode(nodeId);
+        onActiveRef.current(false);
+        onTextSelectionRef.current(null);
+        onNodeToolbarRef.current(false);
         return;
       }
 
