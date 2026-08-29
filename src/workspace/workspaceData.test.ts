@@ -9,7 +9,9 @@ import {
   markFileOpened,
   moveWorkspaceNode,
   placeWorkspaceNode,
+  restoreWorkspaceTrashEntry,
   searchFiles,
+  trashWorkspaceNode,
 } from "./workspaceData";
 
 describe("workspace tree helpers", () => {
@@ -49,6 +51,23 @@ describe("workspace tree helpers", () => {
     const deleted = deleteWorkspaceNode(duplicated.nodes, duplicated.node!.id);
     expect(deleted).toHaveLength(initialNodes.length);
     vi.restoreAllMocks();
+  });
+
+  it("moves a subtree to trash and restores it", () => {
+    const trashed = trashWorkspaceNode(initialNodes, "product");
+    expect(trashed.nodes.some((node) => node.id === "product-plan")).toBe(false);
+    expect(trashed.entry?.nodes.map((node) => node.id)).toContain("web-roadmap");
+
+    const restored = restoreWorkspaceTrashEntry(trashed.nodes, trashed.entry!);
+    expect(restored.find((node) => node.id === "product-plan")?.parentId).toBe("product");
+    expect(restored.find((node) => node.id === "product")?.parentId).toBeNull();
+  });
+
+  it("restores an item at the root when its original folder no longer exists", () => {
+    const trashed = trashWorkspaceNode(initialNodes, "product-plan");
+    const withoutParent = deleteWorkspaceNode(trashed.nodes, "product");
+    const restored = restoreWorkspaceTrashEntry(withoutParent, trashed.entry!);
+    expect(restored.find((node) => node.id === "product-plan")?.parentId).toBeNull();
   });
 
   it("moves an opened file to the top of recent ordering", () => {

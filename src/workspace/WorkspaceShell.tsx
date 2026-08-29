@@ -25,6 +25,7 @@ import {
   FiSliders,
   FiStar,
   FiTrash2,
+  FiRotateCcw,
   FiX,
 } from "react-icons/fi";
 import { FaStar } from "react-icons/fa";
@@ -42,7 +43,6 @@ import {
   childNodes,
   canMoveNode,
   createWorkspaceNode,
-  deleteWorkspaceNode,
   duplicateWorkspaceNode,
   folderPath,
   isWorkspaceFile,
@@ -50,10 +50,13 @@ import {
   moveWorkspaceNode,
   placeWorkspaceNode,
   renameWorkspaceNode,
+  restoreWorkspaceTrashEntry,
+  trashWorkspaceNode,
   type DropMode,
   type WorkspaceFile,
   type WorkspaceFolder,
   type WorkspaceNode,
+  type WorkspaceTrashEntry,
 } from "./workspaceData";
 
 interface WorkspaceShellProps {
@@ -90,6 +93,9 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const [headerToolbarTarget, setHeaderToolbarTarget] = useState<HTMLDivElement | null>(null);
   const [focusBreadcrumbState, setFocusBreadcrumbState] = useState<FocusBreadcrumbState | null>(null);
   const [nodes, setNodes] = useState<WorkspaceNode[]>([]);
+  const [trash, setTrash] = useState<WorkspaceTrashEntry[]>([]);
+  const [trashOpen, setTrashOpen] = useState(false);
+  const [selectedTrashIds, setSelectedTrashIds] = useState(() => new Set<string>());
   const [activeFileId, setActiveFileId] = useState("");
   const [selectedMenuKey, setSelectedMenuKey] = useState("");
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
@@ -188,6 +194,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         setUserProfile(nextProfile);
         setProfileDraft(nextProfile);
         setNodes(nextNodes);
+        setTrash(state?.trash ?? []);
         const firstFile = nextNodes.find(isWorkspaceFile);
         const rememberedFileId = loadLastOpenFileId(sessionRef.current.userId);
         const restoredFile = nextNodes.find((node) => node.id === rememberedFileId && node.type === "file");
@@ -206,6 +213,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
           return;
         }
         setNodes([]);
+        setTrash([]);
         setActiveFileId("");
         setSelectedMenuKey("");
         documentStores.current = new Map();
@@ -250,11 +258,12 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       void saveWorkspaceState(sessionRef.current, {
         profile: userProfile,
         nodes,
+        trash,
         documents: snapshotDocumentStores(documentStores.current),
       }, { onSessionRefresh: handleSessionRefresh }).catch((error) => setServerStatus(`工作区保存到服务器失败：${errorMessage(error)}`));
     }, 500);
     return () => clearTimeout(timer);
-  }, [handleSessionRefresh, nodes, serverAvailable, serverReady, userProfile]);
+  }, [handleSessionRefresh, nodes, serverAvailable, serverReady, trash, userProfile]);
 
   useEffect(() => {
     if (!activeFile || !activeDocumentStore) return;
@@ -441,8 +450,10 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const confirmDeleteNode = () => {
     const node = deleteTarget;
     if (!node) return;
-    const next = deleteWorkspaceNode(nodes, node.id);
+    const result = trashWorkspaceNode(nodes, node.id);
+    const next = result.nodes;
     setNodes(next);
+    if (result.entry) setTrash((current) => [result.entry!, ...current]);
     if (node.id === selectedFolderId) {
       setSelectedFolderId(null);
       setSelectedMenuKey(`tree:${activeFileId}`);
@@ -453,10 +464,24 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       setSelectedMenuKey(`tree:${nextFileId}`);
     }
     setMenuNodeId(null);
-    if (node.type === "file") {
-      documentStores.current.delete(node.id);
-    }
     setDeleteTarget(null);
+  };
+
+  const restoreTrashEntries = (entryIds: Set<string>) => {
+    const entries = trash.filter((entry) => entryIds.has(entry.id));
+    setNodes((current) => entries.reduce(restoreWorkspaceTrashEntry, current));
+    setTrash((current) => current.filter((entry) => !entryIds.has(entry.id)));
+    setSelectedTrashIds(new Set());
+  };
+
+  const permanentlyDeleteTrashEntries = (entryIds: Set<string>) => {
+    trash
+      .filter((entry) => entryIds.has(entry.id))
+      .flatMap((entry) => entry.nodes)
+      .filter(isWorkspaceFile)
+      .forEach((file) => documentStores.current.delete(file.id));
+    setTrash((current) => current.filter((entry) => !entryIds.has(entry.id)));
+    setSelectedTrashIds(new Set());
   };
 
   const duplicateNode = (node: WorkspaceNode) => {
@@ -625,6 +650,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               <div className="account-menu">
                 <div className="account-summary"><strong>{userProfile.name}</strong><span>{userProfile.email}</span></div>
                 <button type="button" onClick={() => openSettings()}><FiSettings />设置</button>
+                <button type="button" onClick={() => { setTrashOpen(true); setSelectedTrashIds(new Set()); setAccountOpen(false); }}><FiTrash2 />回收站</button>
                 <button type="button" onClick={onLogout}><FiLogOut />退出登录</button>
               </div>
             ) : null}
@@ -850,15 +876,45 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         >
           <section className="workspace-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-confirm-title">
             <button type="button" className="workspace-dialog-close icon-button" onClick={() => setDeleteTarget(null)} aria-label="关闭确认"><FiX /></button>
-            <h2 id="delete-confirm-title">删除{deleteTarget.type === "folder" ? "文件夹" : "文档"}？</h2>
+            <h2 id="delete-confirm-title">移到回收站？</h2>
             <p>
               确定要删除「{deleteTarget.title || "无标题"}」吗？
-              {deleteTarget.type === "folder" ? " 文件夹内的文档和子文件夹也会一起删除。" : " 删除后将无法在当前工作区继续访问这个文档。"}
+              {deleteTarget.type === "folder" ? " 文件夹内的文档和子文件夹也会一起移入回收站。" : " 可稍后在回收站中恢复。"}
             </p>
             <footer>
               <button type="button" onClick={() => setDeleteTarget(null)}>取消</button>
-              <button type="button" className="danger" onClick={confirmDeleteNode}>删除</button>
+              <button type="button" className="danger" onClick={confirmDeleteNode}>移到回收站</button>
             </footer>
+          </section>
+        </div>
+      ) : null}
+      {trashOpen ? (
+        <div className="workspace-dialog-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setTrashOpen(false)}>
+          <section className="trash-dialog" role="dialog" aria-modal="true" aria-labelledby="trash-title">
+            <header>
+              <div><h2 id="trash-title">回收站</h2><p>{trash.length ? `${trash.length} 个项目` : "回收站为空"}</p></div>
+              <button type="button" className="icon-button" onClick={() => setTrashOpen(false)} aria-label="关闭回收站"><FiX /></button>
+            </header>
+            <div className="trash-toolbar">
+              <label><input type="checkbox" checked={trash.length > 0 && selectedTrashIds.size === trash.length} onChange={(event) => setSelectedTrashIds(event.target.checked ? new Set(trash.map((entry) => entry.id)) : new Set())} />全选</label>
+              <span />
+              <button type="button" disabled={!selectedTrashIds.size} onClick={() => restoreTrashEntries(selectedTrashIds)}><FiRotateCcw />恢复</button>
+              <button type="button" className="danger" disabled={!selectedTrashIds.size} onClick={() => permanentlyDeleteTrashEntries(selectedTrashIds)}><FiTrash2 />彻底删除</button>
+              <button type="button" className="danger" disabled={!trash.length} onClick={() => permanentlyDeleteTrashEntries(new Set(trash.map((entry) => entry.id)))}>清空回收站</button>
+            </div>
+            <div className="trash-list">
+              {trash.map((entry) => {
+                const root = entry.nodes.find((node) => node.id === entry.id);
+                if (!root) return null;
+                return <label className="trash-item" key={entry.id}>
+                  <input type="checkbox" checked={selectedTrashIds.has(entry.id)} onChange={() => setSelectedTrashIds((current) => { const next = new Set(current); if (next.has(entry.id)) next.delete(entry.id); else next.add(entry.id); return next; })} />
+                  {root.type === "folder" ? <FiFolder /> : <FiFileText />}
+                  <span><strong>{root.title || "无标题"}</strong><small>{new Date(entry.deletedAt).toLocaleString("zh-CN")}</small></span>
+                  <button type="button" title="恢复" aria-label={`恢复${root.title}`} onClick={(event) => { event.preventDefault(); restoreTrashEntries(new Set([entry.id])); }}><FiRotateCcw /></button>
+                  <button type="button" className="danger" title="彻底删除" aria-label={`彻底删除${root.title}`} onClick={(event) => { event.preventDefault(); permanentlyDeleteTrashEntries(new Set([entry.id])); }}><FiTrash2 /></button>
+                </label>;
+              })}
+            </div>
           </section>
         </div>
       ) : null}

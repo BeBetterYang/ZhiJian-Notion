@@ -28,6 +28,7 @@ import {
   CLOZE_REVEAL_ALL_CLASS,
   clozeAtEvent,
   toggleClozeReveal,
+  treeHasClozeContent,
 } from "./mindMapCloze";
 import { MindMapLinkHoverTracker } from "./MindMapLinkHoverTracker";
 import { renderMindMapNodeDisplayHtml } from "./MindMapNodeRenderer";
@@ -131,6 +132,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     return () => document.removeEventListener("pointerdown", close);
   }, [styleSubmenu]);
   const [revealAllCloze, setRevealAllCloze] = useState(false);
+  const hasCloze = treeHasClozeContent(tree);
 
   /**
    * 一键显示/隐藏挖空内容, which also settles the clozes revealed one by one: the two
@@ -914,7 +916,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
             <div className="mindmap-style-menu-buttons">
               <button type="button" className="mindmap-style-menu-trigger" title="导图样式" aria-label="导图样式" aria-expanded={styleSubmenu === "layout"} onClick={() => setStyleSubmenu(styleSubmenu === "layout" ? null : "layout")}><FiGitBranch /></button>
               <button type="button" className="mindmap-style-menu-trigger" title="主题" aria-label="主题" aria-expanded={styleSubmenu === "theme"} onClick={() => setStyleSubmenu(styleSubmenu === "theme" ? null : "theme")}><FiDroplet /></button>
-              <button type="button" className={`mindmap-style-menu-trigger ${revealAllCloze ? "is-active" : ""}`} title={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"} aria-label={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"} aria-pressed={revealAllCloze} onClick={toggleAllCloze}>{revealAllCloze ? <RiEyeLine /> : <RiEyeOffLine />}</button>
+              {hasCloze ? <button type="button" className={`mindmap-style-menu-trigger ${revealAllCloze ? "is-active" : ""}`} title={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"} aria-label={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"} aria-pressed={revealAllCloze} onClick={toggleAllCloze}>{revealAllCloze ? <RiEyeLine /> : <RiEyeOffLine />}</button> : null}
             </div>
             {styleSubmenu === "layout" ? (
               <div className="mindmap-style-menu" role="menu">
@@ -926,7 +928,6 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
             {styleSubmenu === "theme" ? (
               <div className="mindmap-style-menu" role="menu">
                 <button type="button" role="menuitem" onClick={() => { mindRef.current?.changeTheme(MINDMAP_THEME); setThemeName("zhijian"); setStyleSubmenu(null); }}><span>枝间主题</span>{themeName === "zhijian" ? <FiCheck /> : null}</button>
-                <button type="button" role="menuitem" onClick={() => { mindRef.current?.changeTheme(MindElixir.THEME); setThemeName("classic"); setStyleSubmenu(null); }}><span>经典主题</span>{themeName === "classic" ? <FiCheck /> : null}</button>
               </div>
             ) : null}
           </div>,

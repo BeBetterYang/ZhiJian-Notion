@@ -19,6 +19,12 @@ export interface WorkspaceFile {
 export type WorkspaceNode = WorkspaceFolder | WorkspaceFile;
 export type DropMode = "before" | "inside" | "after";
 
+export interface WorkspaceTrashEntry {
+  id: string;
+  deletedAt: number;
+  nodes: WorkspaceNode[];
+}
+
 export const initialNodes: WorkspaceNode[] = [
   { id: "product", title: "产品", type: "folder", parentId: null, order: 0 },
   { id: "work", title: "工作", type: "folder", parentId: null, order: 1 },
@@ -152,6 +158,29 @@ export function deleteWorkspaceNode(nodes: WorkspaceNode[], nodeId: string) {
   const deleted = descendantIds(nodes, nodeId);
   deleted.add(nodeId);
   return normalizeOrders(nodes.filter((node) => !deleted.has(node.id)));
+}
+
+export function trashWorkspaceNode(nodes: WorkspaceNode[], nodeId: string) {
+  const deleted = descendantIds(nodes, nodeId);
+  deleted.add(nodeId);
+  const trashedNodes = nodes.filter((node) => deleted.has(node.id));
+  if (!trashedNodes.length) return { nodes, entry: null };
+  return {
+    nodes: normalizeOrders(nodes.filter((node) => !deleted.has(node.id))),
+    entry: { id: nodeId, deletedAt: Date.now(), nodes: trashedNodes } satisfies WorkspaceTrashEntry,
+  };
+}
+
+export function restoreWorkspaceTrashEntry(nodes: WorkspaceNode[], entry: WorkspaceTrashEntry) {
+  const restoredIds = new Set(entry.nodes.map((node) => node.id));
+  const root = entry.nodes.find((node) => node.id === entry.id);
+  if (!root) return nodes;
+  const parentId = root.parentId && (nodes.some((node) => node.id === root.parentId) || restoredIds.has(root.parentId))
+    ? root.parentId
+    : null;
+  const shifted = nodes.map((node) => node.parentId === parentId ? { ...node, order: node.order + 1 } : node);
+  const restored = entry.nodes.map((node) => node.id === root.id ? { ...node, parentId, order: 0 } : node);
+  return normalizeOrders([...shifted, ...restored]);
 }
 
 export function duplicateWorkspaceNode(nodes: WorkspaceNode[], nodeId: string) {

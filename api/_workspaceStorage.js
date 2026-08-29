@@ -25,7 +25,7 @@ export function sendJson(response, status, body) {
 }
 
 export async function readWorkspace(email) {
-  const rows = await supabaseRequest(`${TABLE}?email=eq.${encodeURIComponent(email)}&select=profile,nodes,documents`, {
+  const rows = await supabaseRequest(`${TABLE}?email=eq.${encodeURIComponent(email)}&select=profile,nodes,trash,documents`, {
     method: "GET",
   });
   const record = Array.isArray(rows) ? rows[0] : null;
@@ -33,6 +33,7 @@ export async function readWorkspace(email) {
   return {
     profile: record.profile ?? undefined,
     nodes: record.nodes ?? undefined,
+    trash: record.trash ?? undefined,
     documents: record.documents ?? undefined,
   };
 }
@@ -43,6 +44,7 @@ export async function upsertWorkspace(email, patch) {
     email,
     profile: patch.profile ?? current?.profile ?? null,
     nodes: patch.nodes ?? current?.nodes ?? null,
+    trash: patch.trash ?? current?.trash ?? null,
     documents: patch.documents ?? current?.documents ?? null,
     updated_at: new Date().toISOString(),
   };

@@ -18,6 +18,7 @@ export default async function handler(request, response) {
       await upsertWorkspace(user.email, {
         profile: body.profile,
         nodes: body.nodes,
+        trash: body.trash,
         documents: body.documents,
       });
       return sendJson(response, 200, { ok: true });

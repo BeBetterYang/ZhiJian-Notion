@@ -5,7 +5,7 @@ import {
   shouldRefreshWorkspaceSession,
   type WorkspaceSession,
 } from "./auth";
-import type { WorkspaceNode } from "./workspaceData";
+import type { WorkspaceNode, WorkspaceTrashEntry } from "./workspaceData";
 
 export interface WorkspaceProfile {
   name: string;
@@ -16,6 +16,7 @@ export interface WorkspaceProfile {
 export interface WorkspaceServerState {
   profile?: WorkspaceProfile;
   nodes?: WorkspaceNode[];
+  trash?: WorkspaceTrashEntry[];
   documents?: Record<string, ZhiJianTree>;
 }
 
