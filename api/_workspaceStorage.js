@@ -240,7 +240,13 @@ async function storageRequest(path, init, raw = false) {
 async function serviceRequest(url, init, raw = false) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseProjectUrl(process.env.SUPABASE_URL) || !serviceRoleKey) throw new Error("Supabase 环境变量未配置。");
-  const request = () => fetch(url, { ...init, headers: { ...serviceKeyHeaders(serviceRoleKey), ...(init.headers ?? {}) } });
+  // fetch labels a string body as text/plain, which PostgREST refuses with PGRST102; Storage
+  // uploads pass their own content type and are left alone.
+  const jsonContentType = typeof init.body === "string" ? { "Content-Type": "application/json" } : {};
+  const request = () => fetch(url, {
+    ...init,
+    headers: { ...serviceKeyHeaders(serviceRoleKey), ...jsonContentType, ...(init.headers ?? {}) },
+  });
   let response = await request();
   let body = raw ? Buffer.from(await response.arrayBuffer()) : await response.text();
   if (!response.ok && !raw && isJwtIssuedAtFutureError(body)) {
