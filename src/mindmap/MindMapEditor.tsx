@@ -59,6 +59,10 @@ interface MindMapEditorProps {
   zoomedNodeId?: string | null;
   initialViewport?: MindMapViewportState;
   onViewportChange?: (viewport: MindMapViewportState) => void;
+  initialDirection?: 0 | 1 | 2;
+  onDirectionChange?: (direction: 0 | 1 | 2) => void;
+  initialTheme?: "zhijian";
+  onThemeChange?: (theme: "zhijian") => void;
   onExportImageReady?: (exportImage: (() => Promise<Blob | null>) | null) => void;
 }
 
@@ -68,7 +72,7 @@ export interface MindMapTextSelection {
   to: number;
 }
 
-export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, onTextSelectionChange, onNodeToolbarActiveChange, onFocusNode, onExitFocus, selectedNodeId, toolbarTarget, focusRequest, focusNodeRequest = null, onFocusRequestHandled, searchQuery = "", visibleNodeIds = null, zoomedNodeId = null, initialViewport, onViewportChange, onExportImageReady }: MindMapEditorProps) {
+export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, onTextSelectionChange, onNodeToolbarActiveChange, onFocusNode, onExitFocus, selectedNodeId, toolbarTarget, focusRequest, focusNodeRequest = null, onFocusRequestHandled, searchQuery = "", visibleNodeIds = null, zoomedNodeId = null, initialViewport, onViewportChange, initialDirection = MindElixir.RIGHT, onDirectionChange, initialTheme = "zhijian", onThemeChange, onExportImageReady }: MindMapEditorProps) {
   const tree = useTree(store);
   const containerRef = useRef<HTMLDivElement>(null);
   const mindRef = useRef<MindElixir | null>(null);
@@ -77,6 +81,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
   const structureSignature = useRef(createMindMapStructureSignature(tree, visibleNodeIds, zoomedNodeId));
   const projectionOptionsRef = useRef({ searchQuery, visibleNodeIds, rootNodeId: zoomedNodeId });
   const initialViewportRef = useRef(initialViewport);
+  const directionRef = useRef<0 | 1 | 2>(initialDirection);
   // A flag rather than the deferred map itself: whatever the map looked like when
   // the structural change arrived, it is out of date by the time the edit ends —
   // the node has been typed into since, and Enter may have inserted a node through
@@ -90,6 +95,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
   const onFocusNodeRef = useRef(onFocusNode);
   const onExitFocusRef = useRef(onExitFocus);
   const onExportImageReadyRef = useRef(onExportImageReady);
+  const onDirectionChangeRef = useRef(onDirectionChange);
   const selectedNodeRef = useRef(selectedNodeId);
   const lastSelectedNodeId = useRef<string | null>(selectedNodeId);
   const editingTargetRef = useRef<EditingTarget>(null);
@@ -105,6 +111,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
   onFocusNodeRef.current = onFocusNode;
   onExitFocusRef.current = onExitFocus;
   onExportImageReadyRef.current = onExportImageReady;
+  onDirectionChangeRef.current = onDirectionChange;
   projectionOptionsRef.current = { searchQuery, visibleNodeIds, rootNodeId: zoomedNodeId };
   const beginNodeEditRef = useRef<(nodeId: string, focusBlockId?: string, focusPoint?: { x: number; y: number }, focusTableCell?: { row: number; column: number }) => void>(() => undefined);
   const pointerSession = useRef<MindMapPointerSession | null>(null);
@@ -119,7 +126,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
   const [editingTarget, setEditingTarget] = useState<EditingTarget>(null);
   const [styleToolbarHost, setStyleToolbarHost] = useState<HTMLElement | null>(null);
   const [styleSubmenu, setStyleSubmenu] = useState<"layout" | "theme" | null>(null);
-  const [themeName, setThemeName] = useState<"zhijian" | "classic">("zhijian");
+  const [themeName, setThemeName] = useState<"zhijian">(initialTheme);
 
   useEffect(() => {
     if (!styleSubmenu) return;
@@ -165,7 +172,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
     if (!mind) return;
     structureSignature.current = signature;
     suppressOperation.current = true;
-    mind.refresh(data);
+    mind.refresh({ ...data, direction: directionRef.current });
     mind.clearHistory?.();
     correctMindMapSummaryOffsets(mind, treeRef.current);
     queueMicrotask(() => {
@@ -328,7 +335,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       // anything passed alongside.
       theme: MINDMAP_THEME,
     });
-    mind.init(treeToMindElixir(initialTree.current, projectionOptionsRef.current));
+    mind.init({ ...treeToMindElixir(initialTree.current, projectionOptionsRef.current), direction: directionRef.current });
     // mind-elixir's own layout switcher, top left. 一键显示/隐藏挖空内容 belongs with it
     // rather than in the app's toolbar: it is a way of looking at the map, like the
     // three layouts next to it, and it only appears while the document has a cloze.
@@ -425,7 +432,13 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       const viewport = readMindMapViewport(mind);
       if (viewport) onViewportChange?.(viewport);
     });
-    mind.bus.addListener("changeDirection", () => window.requestAnimationFrame(collectTargets));
+    mind.bus.addListener("changeDirection", (direction: number) => {
+      if (direction === MindElixir.LEFT || direction === MindElixir.RIGHT || direction === MindElixir.SIDE) {
+        directionRef.current = direction;
+        onDirectionChangeRef.current?.(direction);
+      }
+      window.requestAnimationFrame(collectTargets);
+    });
     // Every re-render of the annotations ends here, whichever caused it — a layout
     // pass, a refresh, or creating one — so this is the one place the summary lift
     // has to be applied from.
@@ -927,7 +940,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
             ) : null}
             {styleSubmenu === "theme" ? (
               <div className="mindmap-style-menu" role="menu">
-                <button type="button" role="menuitem" onClick={() => { mindRef.current?.changeTheme(MINDMAP_THEME); setThemeName("zhijian"); setStyleSubmenu(null); }}><span>枝间主题</span>{themeName === "zhijian" ? <FiCheck /> : null}</button>
+                <button type="button" role="menuitem" onClick={() => { mindRef.current?.changeTheme(MINDMAP_THEME); setThemeName("zhijian"); onThemeChange?.("zhijian"); setStyleSubmenu(null); }}><span>枝间主题</span>{themeName === "zhijian" ? <FiCheck /> : null}</button>
               </div>
             ) : null}
           </div>,

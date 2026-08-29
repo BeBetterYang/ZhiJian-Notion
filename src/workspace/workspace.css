@@ -54,10 +54,10 @@ button { color: inherit; }
 .login-logo { width: 104px; height: 104px; display: block; margin: 0 auto 18px; border-radius: 24px; object-fit: cover; }
 .login-heading h1 { margin: 0; color: #2f3437; font-size: 26px; line-height: 1.25; font-weight: 700; letter-spacing: 0; }
 .login-heading p { margin: 7px 0 0; color: #787774; font-size: 13px; }
-.login-form { display: flex; flex-direction: column; gap: 14px; }
-.auth-form-item { display: flex; flex-direction: column; gap: 6px; }
-.auth-form-label { color: #45433e; font-size: 12px; line-height: 18px; font-weight: 500; }
-.auth-input { position: relative; width: 100%; height: 34px; display: flex; align-items: center; padding: 0 10px; border-radius: 6px; background: #f7f7f5; color: #37352f; box-shadow: inset 0 0 0 1px rgba(55, 53, 47, 0.16); cursor: text; transition: box-shadow 120ms ease, background 120ms ease; }
+.login-form { display: flex; flex-direction: column; gap: 16px; }
+.auth-form-item { display: flex; flex-direction: column; gap: 8px; }
+.auth-form-label { color: #45433e; font-size: 12px; line-height: 16px; font-weight: 500; }
+.auth-input { position: relative; width: 100%; height: 40px; display: flex; align-items: center; padding: 10px 16px; border-radius: 8px; background: transparent; color: #37352f; box-shadow: 0 1px 2px rgba(15, 15, 15, 0.12), inset 0 0 0 1px rgba(55, 53, 47, 0.16); cursor: text; transition: box-shadow 120ms ease, background 120ms ease; }
 .auth-input:focus-within { background: #fff; box-shadow: inset 0 0 0 1px rgba(35, 131, 226, 0.85), 0 0 0 1px rgba(35, 131, 226, 0.28); }
 .auth-input input { min-width: 0; height: 100%; flex: 1; padding: 0; border: 0; outline: 0; background: transparent; color: inherit; font-size: 14px; }
 .auth-input input::placeholder { color: rgba(55, 53, 47, 0.46); }
@@ -69,9 +69,10 @@ button { color: inherit; }
 .text-button { padding: 2px 0; border: 0; background: transparent; color: #2383e2; font-size: 12px; font-weight: 600; cursor: pointer; }
 .text-button:hover { text-decoration: underline; }
 .form-error, .form-notice { min-height: 16px; margin-top: -4px; font-size: 12px; }
+.form-error:empty, .form-notice:empty { display: none; }
 .form-error { color: #eb5757; }
 .form-notice { color: #448361; }
-.primary-button { height: 36px; border: 1px solid rgba(15, 15, 15, 0.08); border-radius: 4px; background: #2383e2; color: #fff; font-size: 14px; font-weight: 600; box-shadow: 0 1px 2px rgba(15, 15, 15, 0.12); cursor: pointer; transition: background 120ms ease; }
+.primary-button { width: 100%; height: 40px; margin-top: 6px; padding: 0 12px; border: 1px solid rgba(15, 15, 15, 0.08); border-radius: 8px; background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.05)), #2383e2; color: #fff; font-size: 14px; line-height: 1; font-weight: 500; box-shadow: 0 1px 2px rgba(15, 15, 15, 0.12); cursor: pointer; transition: background 120ms ease; }
 .primary-button:hover { background: #1d75c9; }
 .primary-button:disabled { background: #d8e8f8; color: rgba(255, 255, 255, 0.82); cursor: default; }
 .auth-switch { margin: 5px 0 0; color: #8b8a85; font-size: 12px; text-align: center; }
@@ -81,9 +82,9 @@ button { color: inherit; }
 .login-panel.is-register .login-logo { width: 60px; height: 60px; margin: 0 0 18px; border-radius: 14px; }
 .login-panel.is-register .login-heading p { font-size: 14px; }
 .login-panel.is-register .login-form { gap: 16px; }
-.login-panel.is-register .auth-form-label { font-size: 13px; font-weight: 600; }
-.login-panel.is-register .auth-input { height: 38px; }
-.login-panel.is-register .primary-button { height: 38px; margin-top: 2px; }
+.login-panel.is-register .auth-form-label { font-size: 12px; line-height: 16px; font-weight: 500; }
+.login-panel.is-register .auth-input { height: 40px; }
+.login-panel.is-register .primary-button { height: 40px; margin-top: 6px; }
 
 .workspace-shell-ui {
   --sidebar-width: 252px;
