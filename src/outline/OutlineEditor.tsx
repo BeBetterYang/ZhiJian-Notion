@@ -62,6 +62,7 @@ import {
 } from "../shared/shortcuts";
 
 interface OutlineEditorProps {
+  readOnly?: boolean;
   store: TreeStore;
   onSelectNode: (nodeId: string) => void;
   mindMapNodeId: string | null;
@@ -88,6 +89,7 @@ interface OutlineTextGesture {
 const OUTLINE_TEXT_DRAG_THRESHOLD = 5;
 
 export function OutlineEditor({
+  readOnly = false,
   store,
   onSelectNode,
   mindMapNodeId,
@@ -246,6 +248,7 @@ export function OutlineEditor({
   const editorView = (
     <BlockNoteView
       editor={editor}
+      editable={!readOnly}
       theme="light"
       formattingToolbar={false}
       sideMenu={false}
@@ -264,12 +267,12 @@ export function OutlineEditor({
         }
       }}
     >
-      <FormattingToolbarController
+      {!readOnly ? <FormattingToolbarController
         formattingToolbar={() => <ZhiJianFormattingToolbar />}
-      />
-      <SideMenuController sideMenu={RootProtectedSideMenu} />
-      <OutlineRowMenuPortal />
-      <ZhiJianSlashMenu />
+      /> : null}
+      {!readOnly ? <SideMenuController sideMenu={RootProtectedSideMenu} /> : null}
+      {!readOnly ? <OutlineRowMenuPortal /> : null}
+      {!readOnly ? <ZhiJianSlashMenu /> : null}
       {/* The map's links open this same editor's link toolbar, which is why it hangs
           here: BlockNote's components and dictionary come from this view. It shows
           nothing until the map reports a hover, and the map is only mounted in its own
@@ -289,6 +292,7 @@ export function OutlineEditor({
       ref={panelRef}
       className="outline-panel"
       onMouseDownCapture={(event) => {
+        if (readOnly) return;
         const target = event.target as Element;
         if (zoomedNodeId && target.closest(".bn-trailing-block")) {
           event.preventDefault();

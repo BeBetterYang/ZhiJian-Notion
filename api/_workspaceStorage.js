@@ -66,7 +66,7 @@ export async function upsertWorkspaceDocument(email, fileId, tree) {
   await upsertWorkspace(email, { documents: nextDocuments });
 }
 
-async function supabaseRequest(path, init) {
+export async function supabaseRequest(path, init) {
   const url = supabaseProjectUrl(process.env.SUPABASE_URL);
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceRoleKey) {

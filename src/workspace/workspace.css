@@ -354,6 +354,22 @@ button { color: inherit; }
 .trash-item small { color: #9b9a97; font-size: 12px; }
 .trash-item > button { width: 28px; height: 28px; padding: 0; }
 .trash-item > button svg { width: 14px; height: 14px; }
+.share-dialog { width: min(440px, calc(100vw - 48px)); padding: 20px; border: 1px solid rgba(55, 53, 47, 0.12); border-radius: 10px; background: #fff; color: #37352f; box-shadow: 0 24px 70px rgba(15, 15, 15, 0.24), 0 2px 8px rgba(15, 15, 15, 0.08); }
+.share-dialog > header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.share-dialog h2 { margin: 0; font-size: 20px; line-height: 1.35; }
+.share-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid rgba(55, 53, 47, 0.09); border-bottom: 1px solid rgba(55, 53, 47, 0.09); }
+.share-toggle-row > span { display: flex; flex-direction: column; gap: 3px; }
+.share-toggle-row strong { font-size: 14px; font-weight: 600; }
+.share-toggle-row small { color: #8b8a85; font-size: 12px; }
+.share-toggle-row input { width: 32px; height: 18px; accent-color: #2383e2; }
+.share-error { margin: 12px 0 0; color: #eb5757; font-size: 13px; }
+.share-loading { padding: 24px 0 8px; color: #8b8a85; font-size: 13px; text-align: center; }
+.share-link-row { display: flex; gap: 8px; margin-top: 16px; }
+.share-link-row input { min-width: 0; height: 34px; flex: 1; padding: 0 9px; border: 1px solid rgba(55, 53, 47, 0.14); border-radius: 5px; outline: 0; color: #55534e; font: inherit; font-size: 13px; }
+.share-link-row button { height: 34px; flex: none; padding: 0 11px; border: 0; border-radius: 5px; background: #2383e2; color: #fff; font-size: 13px; cursor: pointer; }
+.share-qr { display: flex; align-items: center; flex-direction: column; gap: 8px; padding-top: 18px; color: #8b8a85; font-size: 12px; }
+.share-qr img { width: 196px; height: 196px; }
+.workspace-import-error { position: fixed; right: 16px; bottom: 16px; z-index: 200; max-width: 360px; }
 
 @media (max-width: 720px) {
   .login-screen { padding: 20px 22px; }
@@ -384,6 +400,7 @@ button { color: inherit; }
   .trash-dialog { width: 100%; max-height: calc(100vh - 24px); }
   .trash-toolbar { flex-wrap: wrap; }
   .trash-toolbar > span { display: none; }
+  .share-dialog { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

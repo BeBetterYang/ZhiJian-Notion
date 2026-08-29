@@ -29,14 +29,18 @@ import {
   FiX,
 } from "react-icons/fi";
 import { FaStar } from "react-icons/fa";
+import QRCode from "qrcode";
 import App, { type FocusBreadcrumbState } from "../App";
 import { createInitialTree, plainTextContent, richTextToPlainText, type ZhiJianNode, type ZhiJianTree } from "../core/tree";
 import { TreeStore } from "../core/treeStore";
 import type { WorkspaceSession } from "./auth";
 import {
   loadWorkspaceState,
+  loadDocumentShare,
   saveWorkspaceDocument,
   saveWorkspaceState,
+  updateDocumentShare,
+  type WorkspaceDocumentShare,
   WorkspaceApiError,
 } from "./serverApi";
 import {
@@ -88,6 +92,11 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const [profileDraft, setProfileDraft] = useState<UserProfile>(() => profileFromSession(session));
   const [newPassword, setNewPassword] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareState, setShareState] = useState<WorkspaceDocumentShare>({ enabled: false });
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareError, setShareError] = useState("");
+  const [shareQrCode, setShareQrCode] = useState("");
   const [settingsView, setSettingsView] = useState<SettingsView>("account");
   const [settingsEdit, setSettingsEdit] = useState<SettingsEdit>(null);
   const [headerToolbarTarget, setHeaderToolbarTarget] = useState<HTMLDivElement | null>(null);
@@ -341,6 +350,45 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     setSettingsView(view);
     setSettingsOpen(true);
     setAccountOpen(false);
+  };
+
+  const shareUrl = shareState.enabled && shareState.token
+    ? `${window.location.origin}/share.html?token=${encodeURIComponent(shareState.token)}`
+    : "";
+
+  const openShare = async () => {
+    if (!activeFile) return;
+    setShareOpen(true);
+    setShareLoading(true);
+    setShareError("");
+    try {
+      setShareState(await loadDocumentShare(sessionRef.current, activeFile.id, { onSessionRefresh: handleSessionRefresh }));
+    } catch (error) {
+      setShareError(errorMessage(error));
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!shareUrl) {
+      setShareQrCode("");
+      return;
+    }
+    void QRCode.toDataURL(shareUrl, { width: 196, margin: 1, color: { dark: "#37352f", light: "#ffffff" } }).then(setShareQrCode);
+  }, [shareUrl]);
+
+  const toggleShare = async (enabled: boolean) => {
+    if (!activeFile) return;
+    setShareLoading(true);
+    setShareError("");
+    try {
+      setShareState(await updateDocumentShare(sessionRef.current, activeFile.id, enabled, { onSessionRefresh: handleSessionRefresh }));
+    } catch (error) {
+      setShareError(errorMessage(error));
+    } finally {
+      setShareLoading(false);
+    }
   };
 
   const updateAvatar = (file?: File) => {
@@ -808,6 +856,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               toolbarTarget={headerToolbarTarget}
               onFocusBreadcrumbChange={setFocusBreadcrumbState}
               viewStateStorageKey={documentViewStorageKey(activeFile.id)}
+              onShare={() => void openShare()}
               focusNodeRequest={
                 documentFocusRequest?.fileId === activeFile.id
                   ? documentFocusRequest
@@ -865,6 +914,22 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                 </div>
               )}
             </div>
+          </section>
+        </div>
+      ) : null}
+      {shareOpen ? (
+        <div className="workspace-dialog-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShareOpen(false)}>
+          <section className="share-dialog" role="dialog" aria-modal="true" aria-labelledby="share-title">
+            <header><h2 id="share-title">分享文档</h2><button type="button" className="icon-button" onClick={() => setShareOpen(false)} aria-label="关闭分享"><FiX /></button></header>
+            <label className="share-toggle-row">
+              <span><strong>文档开启分享</strong><small>使用链接或扫描二维码即可访问</small></span>
+              <input type="checkbox" checked={shareState.enabled} disabled={shareLoading} onChange={(event) => void toggleShare(event.target.checked)} />
+            </label>
+            {shareError ? <p className="share-error" role="alert">{shareError}</p> : null}
+            {shareLoading ? <div className="share-loading">正在更新分享设置…</div> : shareUrl ? <>
+              <div className="share-link-row"><input value={shareUrl} readOnly aria-label="文档分享链接" /><button type="button" onClick={() => void navigator.clipboard.writeText(shareUrl)}>复制链接</button></div>
+              <div className="share-qr">{shareQrCode ? <img src={shareQrCode} alt="文档分享二维码" /> : null}<span>扫描二维码查看文档</span></div>
+            </> : null}
           </section>
         </div>
       ) : null}

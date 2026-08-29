@@ -1,11 +1,13 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { ServerResponse } from "node:http";
 import { loadEnv, type Connect } from "vite";
 
 const DATA_DIR = path.resolve(".zhijian-server-data", "users");
+const SHARES_FILE = path.resolve(".zhijian-server-data", "shares.json");
 const REGISTRATION_CODE = "nihaozhijian";
 
 export default defineConfig(({ mode }) => {
@@ -17,6 +19,7 @@ export default defineConfig(({ mode }) => {
         input: {
           editor: "index.html",
           workspace: "workspace.html",
+          share: "share.html",
         },
       },
     },
@@ -30,6 +33,19 @@ export default defineConfig(({ mode }) => {
 
 function workspaceServerPlugin(appEnv: Record<string, string>) {
   const attachApi = (middlewares: Connect.Server) => {
+    middlewares.use("/api/shares", async (request, response, next) => {
+      if (request.method !== "GET") return next();
+      const token = decodeURIComponent(request.url?.slice(1).split("?")[0] ?? "");
+      const share = (await readLocalShares()).find((item) => item.token === token && item.enabled);
+      if (!share) return sendJson(response, 404, { error: "分享链接不存在或已关闭。" });
+      const workspace = withoutViewState(await readUserRecord(share.ownerEmail));
+      const tree = readRecord(workspace?.documents)[share.fileId];
+      const nodes = Array.isArray(workspace?.nodes) ? workspace.nodes : [];
+      const file = nodes.find((node) => readRecord(node).id === share.fileId);
+      if (!tree || !file) return sendJson(response, 404, { error: "分享的文档已不存在。" });
+      return sendJson(response, 200, { token, title: String(readRecord(file).title || "无标题"), tree });
+    });
+
     middlewares.use("/api/auth", async (request, response, next) => {
       try {
         if (request.method !== "POST") return next();
@@ -75,6 +91,36 @@ function workspaceServerPlugin(appEnv: Record<string, string>) {
     middlewares.use("/api/workspace", async (request, response, next) => {
       try {
         const user = await requireAuthenticatedUser(appEnv, request);
+        if (request.url?.startsWith("/shares/")) {
+          const fileId = decodeURIComponent(request.url.slice("/shares/".length).split("?")[0] ?? "");
+          const shares = await readLocalShares();
+          const current = shares.find((item) => item.ownerEmail === user.email && item.fileId === fileId);
+          if (request.method === "GET") return sendJson(response, 200, current ? { token: current.token, enabled: current.enabled } : { enabled: false });
+          if (request.method === "PUT") {
+            const body = await readJsonBody(request);
+            const next = { token: current?.token ?? randomUUID(), ownerEmail: user.email, fileId, enabled: body.enabled === true };
+            await writeLocalShares([...shares.filter((item) => !(item.ownerEmail === user.email && item.fileId === fileId)), next]);
+            return sendJson(response, 200, { token: next.token, enabled: next.enabled });
+          }
+        }
+
+        if (request.url === "/import-share" && request.method === "POST") {
+          const body = await readJsonBody(request);
+          const share = (await readLocalShares()).find((item) => item.token === body.token && item.enabled);
+          if (!share) return sendJson(response, 404, { error: "分享链接不存在或已关闭。" });
+          const source = withoutViewState(await readUserRecord(share.ownerEmail));
+          const tree = readRecord(source?.documents)[share.fileId];
+          const sourceNodes = Array.isArray(source?.nodes) ? source.nodes : [];
+          const sourceFile = sourceNodes.find((node) => readRecord(node).id === share.fileId);
+          if (!tree || !sourceFile) return sendJson(response, 404, { error: "分享的文档已不存在。" });
+          const current = withoutViewState(await readUserRecord(user.email)) ?? {};
+          const id = `file-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+          const nodes = (Array.isArray(current.nodes) ? current.nodes : []).map((node) => readRecord(node).parentId === null ? { ...readRecord(node), order: Number(readRecord(node).order) + 1 } : node);
+          nodes.push({ id, title: String(readRecord(sourceFile).title || "无标题"), type: "file", parentId: null, order: 0, favorite: false, openedAt: Date.now() });
+          await writeUserRecord(user.email, { ...current, nodes, documents: { ...readRecord(current.documents), [id]: tree }, updatedAt: Date.now() });
+          return sendJson(response, 200, { ok: true, fileId: id });
+        }
+
         if (request.method === "GET") {
           const record = await readUserRecord(user.email);
           return sendJson(response, 200, withoutViewState(record) ?? {});
@@ -101,6 +147,7 @@ function workspaceServerPlugin(appEnv: Record<string, string>) {
             ...current,
             profile: body.profile ?? current?.profile,
             nodes: body.nodes ?? current?.nodes,
+            trash: body.trash ?? current?.trash,
             documents: body.documents ?? current?.documents,
             updatedAt: Date.now(),
           };
@@ -233,6 +280,16 @@ async function readUserRecord(email: string) {
 async function writeUserRecord(email: string, record: Record<string, unknown>) {
   await mkdir(DATA_DIR, { recursive: true });
   await writeFile(userFilePath(email), JSON.stringify(record, null, 2), "utf8");
+}
+
+interface LocalShareRecord { token: string; ownerEmail: string; fileId: string; enabled: boolean }
+async function readLocalShares(): Promise<LocalShareRecord[]> {
+  try { return JSON.parse(await readFile(SHARES_FILE, "utf8")) as LocalShareRecord[]; } catch { return []; }
+}
+
+async function writeLocalShares(shares: LocalShareRecord[]) {
+  await mkdir(path.dirname(SHARES_FILE), { recursive: true });
+  await writeFile(SHARES_FILE, JSON.stringify(shares, null, 2), "utf8");
 }
 
 function userFilePath(email: string) {

@@ -10,6 +10,7 @@ import {
   FiList,
   FiMoreHorizontal,
   FiSearch,
+  FiShare2,
   FiUpload,
 } from "react-icons/fi";
 import { markdownFileName, markdownToTree, treeToMarkdown } from "./core/markdown/markdownDocument";
@@ -44,6 +45,8 @@ interface AppProps {
     query: string;
     requestId: number;
   } | null;
+  onShare?: () => void;
+  readOnly?: boolean;
 }
 
 export interface FocusBreadcrumbItem {
@@ -66,6 +69,8 @@ export default function App({
   onFocusBreadcrumbChange,
   viewStateStorageKey,
   focusNodeRequest = null,
+  onShare,
+  readOnly = false,
 }: AppProps) {
   const viewStateKey = viewStateStorageKey ?? DEFAULT_VIEW_STATE_STORAGE_KEY;
   const [initialViewState] = useState(() => loadDocumentViewState(viewStateKey));
@@ -459,6 +464,7 @@ export default function App({
       >
         <FiSearch />
       </button>
+      {onShare ? <button className="toolbar-icon-button toolbar-more-button" type="button" aria-label="分享" title="分享" onClick={onShare}><FiShare2 /></button> : null}
       <div className="toolbar-more-wrap" ref={toolbarMoreRef}>
         <button
           className="toolbar-icon-button toolbar-more-button"
@@ -475,14 +481,14 @@ export default function App({
         </button>
         {toolbarMoreOpen ? (
           <div className="toolbar-more-menu" role="menu">
-            <button type="button" role="menuitem" onClick={() => {
+            {!readOnly ? <button type="button" role="menuitem" onClick={() => {
               setToolbarMoreOpen(false);
               setExportMenuOpen(false);
               importInputRef.current?.click();
             }}>
               <FiUpload />
               <span>导入</span>
-            </button>
+            </button> : null}
             <div className="toolbar-submenu-wrap">
               <button
                 type="button"
@@ -560,6 +566,7 @@ export default function App({
         >
           <div className="pane-title">大纲</div>
           <OutlineEditor
+            readOnly={readOnly}
             store={store}
             onSelectNode={handleOutlineSelect}
             mindMapNodeId={activeView === "mindmap" ? selectedNodeId : null}
@@ -602,6 +609,7 @@ export default function App({
           <div className="mindmap-pane-body">
             {activeView === "mindmap" ? (
               <MindMapEditor
+                readOnly={readOnly}
                 store={store}
                 onSelectNode={(nodeId) => {
                   setSelectedNodeId(nodeId);
@@ -654,6 +662,7 @@ export default function App({
       </div>
       {searchOpen ? (
         <SearchPanel
+          allowReplace={!readOnly}
           query={searchQuery}
           replacement={replaceText}
           focusSignal={searchFocusSignal}
@@ -781,7 +790,7 @@ function ExpandCollapseIcon() {
   );
 }
 
-function SearchPanel({ query, replacement, focusSignal, onQueryChange, onReplacementChange, onClose, onPrevious, onNext, onReplace, onReplaceAll }: {
+function SearchPanel({ query, replacement, focusSignal, onQueryChange, onReplacementChange, onClose, onPrevious, onNext, onReplace, onReplaceAll, allowReplace = true }: {
   query: string;
   replacement: string;
   /** Bumped by every 文档内搜索 (Ctrl F), including one pressed while this is open. */
@@ -793,6 +802,7 @@ function SearchPanel({ query, replacement, focusSignal, onQueryChange, onReplace
   onNext: () => void;
   onReplace: () => void;
   onReplaceAll: () => void;
+  allowReplace?: boolean;
 }) {
   const [replaceOpen, setReplaceOpen] = useState(false);
   const queryRef = useRef<HTMLInputElement>(null);
@@ -807,18 +817,18 @@ function SearchPanel({ query, replacement, focusSignal, onQueryChange, onReplace
   return (
     <section className={`search-replace-panel ${replaceOpen ? "is-replace-open" : ""}`} role="dialog" aria-label="查找替换">
       <div className="search-row">
-        <button
+        {allowReplace ? <button
           type="button"
           className="search-mode-button"
           aria-expanded={replaceOpen}
           onClick={() => setReplaceOpen((open) => !open)}
         >
           查找 <FiChevronDown />
-        </button>
+        </button> : <span className="search-mode-button">查找</span>}
         <input ref={queryRef} value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索关键词" />
         <button type="button" className="search-close icon-button" aria-label="关闭查找" onClick={onClose}>×</button>
       </div>
-      {replaceOpen ? (
+      {allowReplace && replaceOpen ? (
         <>
           <div className="search-row">
             <button type="button" className="search-mode-button">替换为</button>

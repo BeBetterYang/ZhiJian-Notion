@@ -35,6 +35,7 @@ import { renderMindMapNodeDisplayHtml } from "./MindMapNodeRenderer";
 import { MindMapNodeContent } from "./MindMapNodeGroupBlock";
 
 interface MindMapEditorProps {
+  readOnly?: boolean;
   store: TreeStore;
   onSelectNode: (nodeId: string | null) => void;
   onSelectionActiveChange: (active: boolean) => void;
@@ -72,7 +73,7 @@ export interface MindMapTextSelection {
   to: number;
 }
 
-export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, onTextSelectionChange, onNodeToolbarActiveChange, onFocusNode, onExitFocus, selectedNodeId, toolbarTarget, focusRequest, focusNodeRequest = null, onFocusRequestHandled, searchQuery = "", visibleNodeIds = null, zoomedNodeId = null, initialViewport, onViewportChange, initialDirection = MindElixir.RIGHT, onDirectionChange, initialTheme = "zhijian", onThemeChange, onExportImageReady }: MindMapEditorProps) {
+export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelectionActiveChange, onTextSelectionChange, onNodeToolbarActiveChange, onFocusNode, onExitFocus, selectedNodeId, toolbarTarget, focusRequest, focusNodeRequest = null, onFocusRequestHandled, searchQuery = "", visibleNodeIds = null, zoomedNodeId = null, initialViewport, onViewportChange, initialDirection = MindElixir.RIGHT, onDirectionChange, initialTheme = "zhijian", onThemeChange, onExportImageReady }: MindMapEditorProps) {
   const tree = useTree(store);
   const containerRef = useRef<HTMLDivElement>(null);
   const mindRef = useRef<MindElixir | null>(null);
@@ -303,7 +304,7 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
       // One direction, like an outline read left to right. `SIDE` would split the
       // root's children between the two sides, which reads as two maps.
       direction: MindElixir.RIGHT,
-      editable: true,
+      editable: !readOnly,
       contextMenu: {
         locale: zh_CN,
         focus: false,
@@ -493,9 +494,10 @@ export function MindMapEditor({ store, onSelectNode, onSelectionActiveChange, on
   }, [applyEditingTarget]);
 
   const beginNodeEdit = useCallback((nodeId: string, focusBlockId?: string, focusPoint?: { x: number; y: number }, focusTableCell?: { row: number; column: number }) => {
+    if (readOnly) return;
     selectMindElixirNode(nodeId);
     applyEditingTarget({ nodeId, focusBlockId, focusPoint, focusTableCell });
-  }, [applyEditingTarget, selectMindElixirNode]);
+  }, [applyEditingTarget, readOnly, selectMindElixirNode]);
   beginNodeEditRef.current = beginNodeEdit;
 
   /**

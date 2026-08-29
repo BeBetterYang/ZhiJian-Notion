@@ -20,6 +20,11 @@ export interface WorkspaceServerState {
   documents?: Record<string, ZhiJianTree>;
 }
 
+export interface WorkspaceDocumentShare {
+  token?: string;
+  enabled: boolean;
+}
+
 export class WorkspaceApiError extends Error {
   constructor(
     message: string,
@@ -59,6 +64,30 @@ export async function saveWorkspaceDocument(session: WorkspaceSession, fileId: s
   }, session, options);
   if (!response.ok) throw new WorkspaceApiError(await readApiError(response, "无法保存文档到服务器。"), response.status);
   await readJsonResponse(response, "服务器未返回有效的文档保存结果。");
+}
+
+export async function loadDocumentShare(session: WorkspaceSession, fileId: string, options?: WorkspaceApiOptions): Promise<WorkspaceDocumentShare> {
+  const response = await workspaceFetch(`/api/workspace/shares/${encodeURIComponent(fileId)}`, {}, session, options);
+  if (!response.ok) throw new WorkspaceApiError(await readApiError(response, "无法读取文档分享设置。"), response.status);
+  return readJsonResponse(response, "服务器返回的分享设置格式不正确。") as Promise<WorkspaceDocumentShare>;
+}
+
+export async function updateDocumentShare(session: WorkspaceSession, fileId: string, enabled: boolean, options?: WorkspaceApiOptions): Promise<WorkspaceDocumentShare> {
+  const response = await workspaceFetch(`/api/workspace/shares/${encodeURIComponent(fileId)}`, {
+    method: "PUT",
+    body: JSON.stringify({ enabled }),
+  }, session, options);
+  if (!response.ok) throw new WorkspaceApiError(await readApiError(response, "无法更新文档分享设置。"), response.status);
+  return readJsonResponse(response, "服务器返回的分享设置格式不正确。") as Promise<WorkspaceDocumentShare>;
+}
+
+export async function importSharedDocument(session: WorkspaceSession, token: string, options?: WorkspaceApiOptions) {
+  const response = await workspaceFetch("/api/workspace/import-share", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  }, session, options);
+  if (!response.ok) throw new WorkspaceApiError(await readApiError(response, "无法保存分享文档。"), response.status);
+  return readJsonResponse(response, "服务器返回的保存结果格式不正确。") as Promise<{ ok: boolean; fileId: string }>;
 }
 
 async function workspaceFetch(input: RequestInfo | URL, init: RequestInit, session: WorkspaceSession, options?: WorkspaceApiOptions) {
