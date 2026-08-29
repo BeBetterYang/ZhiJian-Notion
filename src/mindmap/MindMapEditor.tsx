@@ -97,6 +97,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
   const onExitFocusRef = useRef(onExitFocus);
   const onExportImageReadyRef = useRef(onExportImageReady);
   const onDirectionChangeRef = useRef(onDirectionChange);
+  const readOnlyRef = useRef(readOnly);
   const selectedNodeRef = useRef(selectedNodeId);
   const lastSelectedNodeId = useRef<string | null>(selectedNodeId);
   const editingTargetRef = useRef<EditingTarget>(null);
@@ -113,6 +114,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
   onExitFocusRef.current = onExitFocus;
   onExportImageReadyRef.current = onExportImageReady;
   onDirectionChangeRef.current = onDirectionChange;
+  readOnlyRef.current = readOnly;
   projectionOptionsRef.current = { searchQuery, visibleNodeIds, rootNodeId: zoomedNodeId };
   const beginNodeEditRef = useRef<(nodeId: string, focusBlockId?: string, focusPoint?: { x: number; y: number }, focusTableCell?: { row: number; column: number }) => void>(() => undefined);
   const pointerSession = useRef<MindMapPointerSession | null>(null);
@@ -373,6 +375,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
     queueMicrotask(collectTargets);
     mind.bus.addListener("operation", (operation: Operation) => {
       if (suppressOperation.current) return;
+      if (readOnlyRef.current) return;
       // 摘要 and 连接 report on this same bus, and their `obj.id` is the
       // annotation's own id — treating it as a node id would select a node that
       // does not exist. They are stored whole instead, off the instance.
@@ -799,6 +802,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
       beginNodeEdit(press.nodeId, press.blockId, press.point, press.tableCell);
     };
     const onKeyDown = (event: KeyboardEvent) => {
+      if (readOnlyRef.current) return;
       // Undo has to be answered on the canvas too. mind-elixir's own history is
       // off — the tree is the single source of truth — and its keymap swallows
       // every key it does not use, so nothing else here would see the shortcut.
@@ -824,6 +828,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
     // Aiming the event at the topic is the whole fix; mind-elixir also wants
     // `button === 2`, which a `contextmenu` event does not carry on every browser.
     const onContextMenu = (event: MouseEvent) => {
+      if (readOnlyRef.current) return;
       const target = event.target as Element | null;
       const topic = target?.closest<HTMLElement>("me-tpc");
       // The topic itself, or the blank surface: mind-elixir already handles both.

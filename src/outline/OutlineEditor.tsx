@@ -254,6 +254,9 @@ export function OutlineEditor({
       sideMenu={false}
       slashMenu={false}
       onChange={() => {
+        if (readOnly) {
+          return;
+        }
         if (applyingExternalChange.current) {
           return;
         }
@@ -328,6 +331,7 @@ export function OutlineEditor({
         editor._tiptapEditor.commands.setTextSelection(anchor);
       }}
       onClickCapture={(event) => {
+        if (readOnly) return;
         if (!zoomedNodeId || event.button !== 0) return;
         if (!(event.target as Element).closest(".bn-trailing-block")) return;
         event.preventDefault();
@@ -342,6 +346,7 @@ export function OutlineEditor({
         editor.focus();
       }}
       onClick={(event) => {
+        if (readOnly) return;
         if (suppressGestureClick.current) {
           suppressGestureClick.current = false;
           return;
@@ -350,6 +355,7 @@ export function OutlineEditor({
         correctCaretAfterClick(editor, { x: event.clientX, y: event.clientY });
       }}
       onKeyDownCapture={(event) => {
+        if (readOnly) return;
         if (handleTreeHistoryKeyDown(event.nativeEvent, store)) return;
         if (
           handleShortcutKeyDown(event.nativeEvent, {
@@ -398,6 +404,7 @@ export function OutlineEditor({
         type="file"
         accept="image/*"
         multiple
+        disabled={readOnly}
         onChange={async (event) => {
           const files = Array.from(event.target.files ?? []);
           event.target.value = "";
