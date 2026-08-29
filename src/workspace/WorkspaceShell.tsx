@@ -26,11 +26,13 @@ import {
   FiStar,
   FiTrash2,
   FiRotateCcw,
+  FiUpload,
   FiX,
 } from "react-icons/fi";
 import { FaStar } from "react-icons/fa";
 import App, { type FocusBreadcrumbState } from "../App";
 import { createInitialTree, plainTextContent, richTextToPlainText, type ZhiJianNode, type ZhiJianTree } from "../core/tree";
+import { markdownImportTitle, markdownToTree } from "../core/markdown/markdownDocument";
 import { TreeStore } from "../core/treeStore";
 import type { WorkspaceSession } from "./auth";
 import {
@@ -147,6 +149,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const selectCreatedNameOnFocus = useRef(false);
   const peekCloseTimer = useRef<number | null>(null);
   const documentStores = useRef(new Map<string, TreeStore>());
@@ -563,6 +566,53 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     setCreateMenuOpen(false);
   };
 
+  /**
+   * 批量导入：每个文件各自成为一篇文档，放在当前文档所在的层级里。逐个 createWorkspaceNode
+   * 会把新节点插到最前面，所以倒着建，最终顺序仍是用户在选择框里看到的顺序。
+   * 新文档必须马上写一次服务器——自动保存只盯着打开着的那一篇，不然没点开过的导入内容
+   * 刷新后就没了。
+   */
+  const importDocuments = async (files: File[]) => {
+    setCreateMenuOpen(false);
+    const parsed: Array<{ title: string; tree: ZhiJianTree }> = [];
+    const failed: string[] = [];
+    for (const file of files) {
+      try {
+        const fallbackTitle = markdownImportTitle(file.name);
+        const tree = markdownToTree(await file.text(), { fallbackTitle });
+        const root = tree.nodes[tree.rootId];
+        const title = root ? richTextToPlainText(root.content).trim() : "";
+        parsed.push({ title: title || fallbackTitle || "无标题", tree });
+      } catch {
+        failed.push(file.name);
+      }
+    }
+    setServerStatus(failed.length ? `${failed.length} 个文件导入失败：${failed.join("、")}` : "");
+    if (!parsed.length) return;
+
+    const targetParent = activeFile?.parentId ?? null;
+    let nextNodes = nodes;
+    const created: Array<{ fileId: string; tree: ZhiJianTree }> = [];
+    for (const document of [...parsed].reverse()) {
+      const result = createWorkspaceNode(nextNodes, "file", targetParent);
+      if (!result.node) continue;
+      const fileId = result.node.id;
+      nextNodes = result.nodes.map((node) => node.id === fileId ? { ...node, title: document.title } : node);
+      created.unshift({ fileId, tree: document.tree });
+    }
+    if (!created.length) return;
+
+    created.forEach(({ fileId, tree }) => {
+      documentStores.current.set(fileId, new TreeStore(tree));
+      if (serverAvailable) void persistDocument(fileId, tree);
+    });
+    setNodes(nextNodes);
+    if (targetParent) setExpandedFolders((expanded) => new Set(expanded).add(targetParent));
+    setActiveFileId(created[0].fileId);
+    setSelectedMenuKey(`tree:${created[0].fileId}`);
+    setSelectedFolderId(null);
+  };
+
   const toggleQuickSection = (section: QuickSection) => {
     setExpandedQuickSections((current) => {
       const next = new Set(current);
@@ -924,7 +974,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
             />
           ) : (
             <section className="workspace-files" aria-labelledby="workspace-files-title">
-              <div className="section-label" id="workspace-files-title">工作空间</div>
+              <div className="section-label" id="workspace-files-title">我的文档</div>
               {serverReady ? renderTree(null) : <WorkspaceLoading label="正在加载工作区" compact />}
             </section>
           )}
@@ -932,8 +982,20 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         <div className="sidebar-bottom-action">
           <div className="create-wrap">
             <button type="button" className="sidebar-new-button" aria-expanded={createMenuOpen} onClick={() => setCreateMenuOpen((open) => !open)}><FiPlus /><span>新增</span></button>
-            {createMenuOpen ? <div className="create-menu"><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file")}><FiFilePlus />新增文档</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("folder")}><FiFolderPlus />新增文件夹</button></div> : null}
+            {createMenuOpen ? <div className="create-menu"><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file")}><FiFilePlus />新增文档</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("folder")}><FiFolderPlus />新增文件夹</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => importInputRef.current?.click()}><FiUpload />导入文档</button></div> : null}
           </div>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".md,.markdown,.txt,text/markdown"
+            multiple
+            hidden
+            onChange={(event) => {
+              const files = Array.from(event.target.files ?? []);
+              event.target.value = "";
+              if (files.length) void importDocuments(files);
+            }}
+          />
         </div>
         <div className="sidebar-resizer" role="separator" aria-label="调整侧栏宽度" aria-orientation="vertical" onPointerDown={resizeSidebar} />
       </aside>
@@ -978,6 +1040,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               onFocusBreadcrumbChange={setFocusBreadcrumbState}
               viewStateStorageKey={documentViewStorageKey(activeFile.id)}
               onShare={() => void openShare()}
+              onImportDocuments={(files) => void importDocuments(files)}
               focusNodeRequest={
                 documentFocusRequest?.fileId === activeFile.id
                   ? documentFocusRequest

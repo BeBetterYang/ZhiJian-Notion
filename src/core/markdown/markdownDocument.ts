@@ -48,6 +48,11 @@ export function markdownFileName(tree: ZhiJianTree) {
   return `${sanitizeFileName(title || DEFAULT_TITLE)}.md`;
 }
 
+/** 导入时文件名顶替标题：没有 `# ` 那一行的 Markdown 只能靠它命名。 */
+export function markdownImportTitle(fileName: string) {
+  return fileName.replace(/\.(md|markdown|txt)$/i, "").trim();
+}
+
 export function treeToMarkdown(tree: ZhiJianTree): string {
   const root = tree.nodes[tree.rootId];
   if (!root) {

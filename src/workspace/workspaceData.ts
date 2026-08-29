@@ -135,8 +135,13 @@ export function placeWorkspaceNode(nodes: WorkspaceNode[], nodeId: string, targe
   return moveWorkspaceNode(nodes, nodeId, target.parentId, targetIndex + (mode === "after" ? 1 : 0));
 }
 
+let idSequence = 0;
+
 function makeId(type: WorkspaceNode["type"], suffix = "") {
-  return `${type}-${Date.now().toString(36)}${suffix}`;
+  // Date.now() 只有毫秒精度，批量导入会在同一毫秒里连着建好几个节点；再拼一个自增序号，
+  // 否则两篇文档会共用一个 id，也就共用同一份文档内容。
+  idSequence += 1;
+  return `${type}-${Date.now().toString(36)}-${idSequence.toString(36)}${suffix}`;
 }
 
 export function createWorkspaceNode(nodes: WorkspaceNode[], type: WorkspaceNode["type"], parentId: string | null = null) {

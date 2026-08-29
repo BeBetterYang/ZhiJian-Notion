@@ -13,7 +13,7 @@ import {
   FiShare2,
   FiUpload,
 } from "react-icons/fi";
-import { markdownFileName, markdownToTree, treeToMarkdown } from "./core/markdown/markdownDocument";
+import { markdownFileName, markdownImportTitle, markdownToTree, treeToMarkdown } from "./core/markdown/markdownDocument";
 import { outlineExportFileName, treeToOutlineHtmlDocument } from "./core/export/outlineDocument";
 import { createInitialTree, richTextToPlainText } from "./core/tree";
 import { TreeStore, attachTreePersistence, loadPersistedTree } from "./core/treeStore";
@@ -55,6 +55,11 @@ interface AppProps {
     requestId: number;
   } | null;
   onShare?: () => void;
+  /**
+   * 由工作区提供：一次选中多个文件时，它们各自成为一篇新文档，而不是挤进当前这一篇。
+   * 没有这个回调（分享页、独立预览）时导入只接受单个文件。
+   */
+  onImportDocuments?: (files: File[]) => void;
   readOnly?: boolean;
 }
 
@@ -79,6 +84,7 @@ export default function App({
   viewStateStorageKey,
   focusNodeRequest = null,
   onShare,
+  onImportDocuments,
   readOnly = false,
 }: AppProps) {
   const viewStateKey = viewStateStorageKey ?? DEFAULT_VIEW_STATE_STORAGE_KEY;
@@ -397,8 +403,7 @@ export default function App({
   const importMarkdown = async (file: File) => {
     const markdown = await file.text();
     // The file name stands in for the title when the document has no `# ` line.
-    const fallbackTitle = file.name.replace(/\.(md|markdown|txt)$/i, "");
-    setPendingImport({ fallbackTitle, fileName: file.name, markdown });
+    setPendingImport({ fallbackTitle: markdownImportTitle(file.name), fileName: file.name, markdown });
   };
 
   const confirmImportMarkdown = () => {
@@ -551,11 +556,15 @@ export default function App({
         ref={importInputRef}
         type="file"
         accept=".md,.markdown,.txt,text/markdown"
+        multiple={Boolean(onImportDocuments)}
         hidden
         onChange={(event) => {
-          const file = event.target.files?.[0];
+          const files = Array.from(event.target.files ?? []);
           event.target.value = "";
-          if (file) void importMarkdown(file);
+          if (!files.length) return;
+          // 单个文件仍然是"导入到当前文档"，多选则整批变成新文档，免得后面的内容互相覆盖。
+          if (files.length > 1 && onImportDocuments) onImportDocuments(files);
+          else void importMarkdown(files[0]);
         }}
       />
     </div>
