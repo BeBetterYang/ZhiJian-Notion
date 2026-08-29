@@ -48,26 +48,50 @@ function createNodeFromMind(obj: NodeObj, store: TreeStore) {
   });
 }
 
+/**
+ * A drop next to another node, reported *after* MindElixir has already reordered its
+ * own copy of the tree.
+ *
+ * So the anchor's index cannot be read from `toObj.parent.children` — by the time this
+ * runs the dragged node is sitting in that list too, and using it made the store
+ * disagree with what the map was showing: dragging a node before its previous sibling
+ * computed the sibling's new index (1) and put the node back where it started, and with
+ * three children the node landed one slot past the anchor. The map kept the drop, the
+ * store kept the old order, and the next projection — a reload, or a trip through the
+ * outline — took the move back.
+ *
+ * The store's own list is the one that decides, and `moveNode` splices into it with the
+ * dragged node already taken out, so the anchor is looked up in that same list.
+ */
 function moveNodesFromMind(
   name: "moveNodeIn" | "moveNodeBefore" | "moveNodeAfter",
   objs: NodeObj[],
   toObj: NodeObj,
   store: TreeStore,
 ) {
+  if (name === "moveNodeIn") {
+    objs.forEach((obj) => {
+      if (store.getNode(obj.id)) store.moveNode(obj.id, toObj.id);
+    });
+    return;
+  }
+  const parentId = store.getNode(toObj.id)?.parentId;
+  if (!parentId) {
+    return;
+  }
   objs.forEach((obj, offset) => {
     if (!store.getNode(obj.id)) {
       return;
     }
-    if (name === "moveNodeIn") {
-      store.moveNode(obj.id, toObj.id);
+    const siblings = (store.getNode(parentId)?.children ?? []).filter((id) => id !== obj.id);
+    const anchor = siblings.indexOf(toObj.id);
+    if (anchor < 0) {
       return;
     }
-    const parentId = toObj.parent?.id;
-    if (!parentId) {
-      return;
-    }
-    const toIndex = getIndexInParent(toObj);
-    store.moveNode(obj.id, parentId, name === "moveNodeBefore" ? toIndex + offset : toIndex + 1 + offset);
+    // Dropping several nodes before the anchor needs no offset: each one is inserted
+    // immediately ahead of the anchor, whose index the next lookup already finds moved
+    // along. Dropping them after it does, or the second would land ahead of the first.
+    store.moveNode(obj.id, parentId, name === "moveNodeBefore" ? anchor : anchor + 1 + offset);
   });
 }
 

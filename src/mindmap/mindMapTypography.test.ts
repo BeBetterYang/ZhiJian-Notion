@@ -96,4 +96,19 @@ describe("mind map display/editor typography", () => {
     ).toContain("padding: 0.08em 0");
     expect(declarationsFor(".mindmap-node-primary")).toContain("padding: 0.08em 0");
   });
+
+  it("uses one stable row box for todo display and editing", () => {
+    const display = declarationsFor(".mindmap-node-todo");
+    const editor = declarationsFor('.mindmap-node-editor .bn-block-content[data-content-type="checkListItem"]');
+    for (const declarations of [display, editor]) {
+      expect(declarations).toContain("display: flex");
+      expect(declarations).toContain("align-items: center");
+      expect(declarations).toContain("min-height: 1lh");
+      expect(declarations).toContain("line-height: inherit");
+    }
+    const paragraph = declarationsFor('.mindmap-node-editor .bn-block-content[data-content-type="checkListItem"] p');
+    expect(paragraph).toContain("margin: 0");
+    expect(paragraph).toContain("padding: 0");
+    expect(paragraph).toContain("line-height: inherit");
+  });
 });

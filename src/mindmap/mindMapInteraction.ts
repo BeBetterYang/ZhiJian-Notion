@@ -248,6 +248,13 @@ export function mindMapDisplayDragTopic(target: EventTarget | null) {
 }
 
 /**
+ * On the canvas while a node is being dragged. It stands the display layer down for
+ * hit-testing, because MindElixir looks for the drop target with `elementFromPoint`
+ * and accepts nothing but a topic element — see the rule in `styles.css`.
+ */
+export const MINDMAP_DRAGGING_CLASS = "is-node-dragging";
+
+/**
  * Everything a press on a node's display says about what the user aimed at.
  *
  * Read on the press rather than on the release, because the release cannot be

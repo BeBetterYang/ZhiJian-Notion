@@ -770,6 +770,10 @@ textarea {
   line-height: 1.5;
 }
 
+.outline-panel .bn-block-content[data-content-type="table"] th {
+  font-weight: 400;
+}
+
 /* `.bn-block-content` is a flex row and BlockNote's `min-width: 2px` rule covers
    only p/h/li, so an empty blockquote measured zero pixels wide: there was nothing
    to click and no caret to place. Filling the row gives the quote a line of its
@@ -1952,9 +1956,11 @@ textarea {
 }
 
 .mindmap-node-todo {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   min-width: 0;
+  min-height: 1lh;
+  line-height: inherit;
 }
 
 .mindmap-node-checkbox,
@@ -2043,6 +2049,12 @@ textarea {
   position: relative;
 }
 
+.mindmap-style-menu-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .mindmap-style-menu-trigger {
   display: flex;
   width: 20px;
@@ -2055,6 +2067,13 @@ textarea {
   color: inherit;
   font-size: 18px;
   cursor: pointer;
+}
+
+.mindmap-style-menu-trigger:hover,
+.mindmap-style-menu-trigger[aria-expanded="true"],
+.mindmap-style-menu-trigger.is-active {
+  border-radius: 4px;
+  background: rgba(55, 53, 47, 0.08);
 }
 
 .mindmap-style-menu {
@@ -2217,6 +2236,20 @@ textarea {
 .mindmap-node-renderer *,
 .mindmap-node-editor * {
   pointer-events: auto;
+}
+
+/* While a node is being dragged, the whole display layer stands down for hit-testing.
+   MindElixir finds the drop target with `elementFromPoint` a little above and below the
+   pointer and accepts the hit only when its tag is exactly `ME-TPC`; the library keeps
+   that true with `me-tpc > * { pointer-events: none }`, which the rule above deliberately
+   overrides so clicks can reach checkboxes, links, cloze runs and table cells. Measured
+   on a node with the display live, only 3 of the 13 pixels in MindElixir's probe band
+   resolved to `ME-TPC` (the topic's own padding above the text) — the other 10 answered a
+   span, `canMove` refused, and no `.insert-preview` was ever painted, which is what made
+   dropping above or below a node feel broken. Inert during the drag, all 13 resolve. */
+.mindmap-canvas.is-node-dragging .mindmap-node-shell,
+.mindmap-canvas.is-node-dragging .mindmap-node-shell * {
+  pointer-events: none;
 }
 
 /* Selectable inside the editor only — the display copy stays a drag handle, see the
@@ -2452,7 +2485,10 @@ textarea {
    left a todo's text and checkbox sitting 1.3px higher the moment editing started,
    while every other node stayed put. */
 .mindmap-node-editor .bn-block-content[data-content-type="checkListItem"] {
+  display: flex;
   align-items: center;
+  min-height: 1lh;
+  line-height: inherit;
   padding: 0.08em 0;
 }
 
@@ -2460,6 +2496,14 @@ textarea {
   display: flex;
   align-items: center;
   height: auto;
+  min-height: 1lh;
+  line-height: inherit;
+}
+
+.mindmap-node-editor .bn-block-content[data-content-type="checkListItem"] p {
+  margin: 0;
+  padding: 0;
+  line-height: inherit;
 }
 
 @container (max-width: 828px) {

@@ -56,6 +56,15 @@ describe("WorkspaceShell session refresh", () => {
     serverMocks.saveWorkspaceState.mockReset().mockResolvedValue(undefined);
   });
 
+  it("does not show a connection status while server data is loading", () => {
+    serverMocks.loadWorkspaceState.mockReturnValue(new Promise(() => undefined));
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+
+    expect(screen.queryByText("正在连接服务器...")).not.toBeInTheDocument();
+    expect(screen.getByText("正在加载服务器数据")).toBeInTheDocument();
+  });
+
   it("restores the last opened file for the signed-in user", async () => {
     const secondTree = createInitialTree();
     secondTree.nodes[secondTree.rootId].content.text = "第二个文档";

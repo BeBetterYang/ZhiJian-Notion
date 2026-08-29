@@ -28,6 +28,7 @@ export function ZhiJianSlashMenu() {
   return (
     <SuggestionMenuController
       triggerCharacter="/"
+      portalElement={null}
       getItems={async (query) =>
         filterSuggestionItems(
           getDefaultReactSlashMenuItems(editor)

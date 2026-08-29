@@ -92,7 +92,8 @@ export default function App({
   const toolbarMoreRef = useRef<HTMLDivElement>(null);
   const collapseMenuRef = useRef<HTMLDivElement>(null);
   const [toolbarMoreOpen, setToolbarMoreOpen] = useState(false);
-  const [importExportMenuOpen, setImportExportMenuOpen] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const mindMapViewportRef = useRef(initialViewState?.mindMapViewport);
   const [collapseMenuOpen, setCollapseMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchFocusSignal, setSearchFocusSignal] = useState(0);
@@ -230,7 +231,7 @@ export default function App({
       const target = event.target as Node;
       if (!toolbarMoreRef.current?.contains(target)) {
         setToolbarMoreOpen(false);
-        setImportExportMenuOpen(false);
+        setExportMenuOpen(false);
       }
       if (!collapseMenuRef.current?.contains(target)) setCollapseMenuOpen(false);
     };
@@ -249,6 +250,7 @@ export default function App({
   }, [collapseMenuOpen, toolbarMoreOpen]);
 
   const updateMindMapViewport = useCallback((viewport: MindMapViewportState) => {
+    mindMapViewportRef.current = viewport;
     persistViewStatePatch({ mindMapViewport: viewport });
   }, [persistViewStatePatch]);
 
@@ -373,7 +375,7 @@ export default function App({
 
   const runExport = (task: () => Promise<void>) => {
     setToolbarMoreOpen(false);
-    setImportExportMenuOpen(false);
+    setExportMenuOpen(false);
     void task().catch((error) => setExportError(error instanceof Error ? error.message : "导出失败，请重试。"));
   };
 
@@ -405,7 +407,7 @@ export default function App({
           onClick={() => {
             changeView(activeView === "outline" ? "mindmap" : "outline");
             setToolbarMoreOpen(false);
-            setImportExportMenuOpen(false);
+            setExportMenuOpen(false);
         }}
       >
         {activeView === "outline" ? <FiGitBranch /> : <FiList />}
@@ -466,42 +468,42 @@ export default function App({
           aria-expanded={toolbarMoreOpen}
           onClick={() => {
             setToolbarMoreOpen((open) => !open);
-            setImportExportMenuOpen(false);
+            setExportMenuOpen(false);
           }}
         >
           <FiMoreHorizontal />
         </button>
         {toolbarMoreOpen ? (
           <div className="toolbar-more-menu" role="menu">
-            <div className="toolbar-submenu-wrap">
-              <button
-              type="button"
-              role="menuitem"
-              aria-haspopup="menu"
-              aria-expanded={importExportMenuOpen}
-              onClick={() => setImportExportMenuOpen((open) => !open)}
-            >
+            <button type="button" role="menuitem" onClick={() => {
+              setToolbarMoreOpen(false);
+              setExportMenuOpen(false);
+              importInputRef.current?.click();
+            }}>
               <FiUpload />
               <span>导入</span>
-              <FiChevronRight className="toolbar-submenu-chevron" />
+            </button>
+            <div className="toolbar-submenu-wrap">
+              <button
+                type="button"
+                role="menuitem"
+                aria-haspopup="menu"
+                aria-expanded={exportMenuOpen}
+                onClick={() => setExportMenuOpen((open) => !open)}
+              >
+                <FiDownload />
+                <span>导出</span>
+                <FiChevronRight className="toolbar-submenu-chevron" />
               </button>
-              {importExportMenuOpen ? (
+              {exportMenuOpen ? (
                 <div className="toolbar-more-menu toolbar-submenu" role="menu">
                   <button type="button" role="menuitem" onClick={() => {
                     setToolbarMoreOpen(false);
-                    setImportExportMenuOpen(false);
-                    importInputRef.current?.click();
-                  }}>
-                    <FiUpload /><span>导入</span>
-                  </button>
-                  <button type="button" role="menuitem" onClick={() => {
-                    setToolbarMoreOpen(false);
-                    setImportExportMenuOpen(false);
+                    setExportMenuOpen(false);
                     exportMarkdown();
                   }}>
                     <FiDownload /><span>导出 Markdown</span>
                   </button>
-                  <div className="toolbar-menu-title">导出为</div>
                   {activeView === "outline" ? <>
                     <button type="button" role="menuitem" onClick={() => runExport(() => exportOutlineImage())}>
                       <FiImage /><span>大纲图片</span>
@@ -621,7 +623,7 @@ export default function App({
                 searchQuery={searchQuery}
                 visibleNodeIds={visibleSearchNodeIds}
                 zoomedNodeId={zoomedNodeId}
-                initialViewport={initialViewState?.mindMapViewport}
+                initialViewport={mindMapViewportRef.current}
                 onViewportChange={updateMindMapViewport}
                 onExportImageReady={(exportImage) => {
                   mindMapExportImageRef.current = exportImage;

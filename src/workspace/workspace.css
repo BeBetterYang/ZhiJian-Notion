@@ -122,7 +122,7 @@ button { color: inherit; }
 .account-menu > button:hover, .create-menu > button:hover, .node-menu > button:hover { background: rgba(55, 53, 47, 0.07); }
 .server-status { margin: 0 14px 8px; padding: 7px 9px; border-radius: 5px; background: rgba(241, 190, 76, 0.16); color: #8f6b1d; font-size: 12px; line-height: 1.45; }
 
-.sidebar-actions { display: flex; flex-direction: column; gap: 1px; padding: 2px 8px 9px; }
+.sidebar-actions { display: flex; flex-direction: column; gap: 4px; padding: 4px 8px 11px; }
 .sidebar-search-wrap { position: relative; }
 .sidebar-search { height: 34px; display: flex; align-items: center; gap: 8px; margin-bottom: 4px; padding: 0 8px; border: 1px solid rgba(55, 53, 47, 0.13); border-radius: 6px; background: rgba(255, 255, 255, 0.72); color: #787774; }
 .sidebar-search:focus-within { border-color: rgba(35, 131, 226, 0.7); box-shadow: 0 0 0 1px rgba(35, 131, 226, 0.35); }
@@ -156,7 +156,7 @@ button { color: inherit; }
 .sidebar-action > span { min-width: 0; flex: 1; }
 
 .sidebar-scroll { min-height: 0; flex: 1; overflow-x: hidden; overflow-y: auto; padding: 2px 8px 22px; scrollbar-width: thin; scrollbar-color: rgba(55, 53, 47, 0.16) transparent; }
-.workspace-files { display: flex; min-width: 0; flex-direction: column; }
+.workspace-files { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
 .global-search-results { display: flex; min-width: 0; flex-direction: column; gap: 6px; padding: 4px 0 18px; }
 .global-search-count { padding: 6px 8px 8px; color: #787774; font-size: 13px; }
 .global-search-item { position: relative; min-width: 0; border-radius: 5px; }

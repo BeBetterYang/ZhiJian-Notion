@@ -14,7 +14,6 @@ import {
   FiFileText,
   FiFolder,
   FiFolderPlus,
-  FiHome,
   FiLink,
   FiLogOut,
   FiMenu,
@@ -129,7 +128,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const sessionRef = useRef(session);
   const [serverReady, setServerReady] = useState(false);
   const [serverAvailable, setServerAvailable] = useState(false);
-  const [serverStatus, setServerStatus] = useState("正在连接服务器...");
+  const [serverStatus, setServerStatus] = useState("");
 
   sessionRef.current = session;
   const handleSessionRefresh = useCallback((nextSession: WorkspaceSession) => {
@@ -177,7 +176,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     const loadingSession = sessionRef.current;
     setServerReady(false);
     setServerAvailable(false);
-    setServerStatus("正在连接服务器...");
+    setServerStatus("");
     void loadWorkspaceState(loadingSession, { onSessionRefresh: handleSessionRefresh })
       .then((state) => {
         if (canceled) return;
@@ -337,7 +336,9 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
 
   const updateAvatar = (file?: File) => {
     if (!file) return;
-    setProfileDraft((current) => ({ ...current, avatarUrl: URL.createObjectURL(file) }));
+    void readFileAsDataUrl(file)
+      .then((avatarUrl) => setProfileDraft((current) => ({ ...current, avatarUrl })))
+      .catch((error) => setServerStatus(errorMessage(error)));
   };
 
   const recentFiles = useMemo(() => [...files].sort((a, b) => b.openedAt - a.openedAt).slice(0, 6), [files]);
@@ -683,7 +684,6 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
           </div>
           {searchMode ? null : (
             <>
-              <SidebarAction icon={<FiHome />} label="主页" onClick={() => setSearch("")} />
               <QuickFileSection title="最近打开" source="recent" icon={<FiClock />} expanded={expandedQuickSections.has("recent")} files={recentFiles} selectedMenuKey={selectedMenuKey} onToggle={() => toggleQuickSection("recent")} onSelect={selectFile} />
               <QuickFileSection title="星标文件" source="favorites" icon={<FiStar />} expanded={expandedQuickSections.has("favorites")} files={favoriteFiles} selectedMenuKey={selectedMenuKey} onToggle={() => toggleQuickSection("favorites")} onSelect={selectFile} />
             </>
@@ -1038,10 +1038,6 @@ function highlightText(text: string, query: string) {
   return parts.length ? parts : text;
 }
 
-function SidebarAction({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active?: boolean; onClick: () => void }) {
-  return <button type="button" className={`sidebar-action ${active ? "is-active" : ""}`} onClick={onClick}>{icon}<span>{label}</span></button>;
-}
-
 function SimpleFileRow({ file, active, onSelect }: { file: WorkspaceFile; active: boolean; onSelect: (file: WorkspaceFile) => void }) {
   return <button type="button" className={`simple-file-row ${active ? "is-active" : ""}`} onClick={() => onSelect(file)}><FiFileText /><span>{file.title || "无标题"}</span></button>;
 }
@@ -1298,6 +1294,15 @@ function saveLastOpenFileId(userId: string, fileId: string) {
 
 function profileFromSession(session: WorkspaceSession): UserProfile {
   return normalizeUserProfile(null, session);
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result ?? "")), { once: true });
+    reader.addEventListener("error", () => reject(reader.error ?? new Error("头像读取失败")), { once: true });
+    reader.readAsDataURL(file);
+  });
 }
 
 function normalizeUserProfile(profile: UserProfile | null | undefined, session: WorkspaceSession): UserProfile {

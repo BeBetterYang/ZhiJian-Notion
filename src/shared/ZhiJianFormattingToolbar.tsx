@@ -15,7 +15,7 @@ import {
   useEditorState,
 } from "@blocknote/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { RiDoubleQuotesL, RiEyeLine, RiEyeOffLine, RiImage2Line, RiTable2 } from "react-icons/ri";
+import { RiCheckboxLine, RiDoubleQuotesL, RiEyeLine, RiEyeOffLine, RiImage2Line, RiTable2 } from "react-icons/ri";
 import { saveImageAsset } from "./imageAssetStore";
 import { insertImageBlocks, insertNodeAttachmentBlocks } from "./attachmentInsertion";
 
@@ -28,6 +28,7 @@ interface ZhiJianFormattingToolbarProps {
 }
 
 const hiddenFormattingToolbarItems = new Set([
+  "fileCaptionButton",
   "replaceFileButton",
   "textAlignLeftButton",
   "textAlignCenterButton",
@@ -58,8 +59,7 @@ export function ZhiJianFormattingToolbar({
     () =>
       blockTypeSelectItems(editor.dictionary).filter((item) => {
         if (
-          item.type === "paragraph" ||
-          item.type === "checkListItem"
+          item.type === "paragraph"
         ) {
           return true;
         }
@@ -85,6 +85,7 @@ export function ZhiJianFormattingToolbar({
   // title. Nothing else can stand in for it — the outline bridge cannot select a
   // cell — so without this a run inside a cell had no way to be coloured at all.
   const isTableBlock = activeBlock?.type === "table";
+  const isImageBlock = activeBlock?.type === "image";
   if (activeBlock?.id === editor.document[0]?.id && !isTableBlock) {
     return null;
   }
@@ -94,19 +95,43 @@ export function ZhiJianFormattingToolbar({
       {/* Every type on offer is a kind of text row, and a table is none of them:
           picking one would replace the table with an empty paragraph. */}
       {isTableBlock ? null : <BlockTypeSelect items={blockTypes} />}
-      {showStructuralControls ? (
+      {showStructuralControls ? <ChecklistButton /> : null}
+      {showStructuralControls && !isImageBlock ? (
         <InsertQuoteButton
           onInsertQuote={onInsertQuote}
         />
       ) : null}
-      {showStructuralControls ? <InsertTableButton /> : null}
+      {showStructuralControls && !isImageBlock ? <InsertTableButton /> : null}
       {showStructuralControls ? (
         <InsertImageButton />
       ) : null}
-      {showClozeControl ? <ClozeButton /> : null}
+      {showClozeControl && !isImageBlock ? <ClozeButton /> : null}
       <ViewImageButton />
       {defaultItems}
     </FormattingToolbar>
+  );
+}
+
+function ChecklistButton() {
+  const editor = useBlockNoteEditor();
+  const Components = useComponentsContext()!;
+  const block = editor.getSelection()?.blocks[0] ?? editor.getTextCursorPosition().block;
+  const isChecklist = block?.type === "checkListItem";
+  const disabled = !block || block.type === "table" || block.type === "image";
+
+  return (
+    <Components.FormattingToolbar.Button
+      label="检查清单"
+      mainTooltip="检查清单"
+      icon={<RiCheckboxLine />}
+      isSelected={isChecklist}
+      isDisabled={disabled}
+      onClick={() => {
+        if (!block || disabled) return;
+        editor.updateBlock(block, { type: isChecklist ? "paragraph" : "checkListItem" });
+        editor.focus();
+      }}
+    />
   );
 }
 

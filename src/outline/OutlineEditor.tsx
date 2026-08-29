@@ -12,7 +12,7 @@ import {
   useExtensionState,
 } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   RiArrowDownSFill,
@@ -51,6 +51,7 @@ import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 import { handleOutlineNodeKeyDown } from "./outlineNodeKeymap";
 import { collapsedOutlineCss } from "./outlineCollapse";
 import { zoomedOutlineCss } from "./outlineZoom";
+import { outlineRowMenuPosition } from "./outlineRowMenuPosition";
 import { LinkDialog } from "../shared/LinkDialog";
 import {
   applyBlockShortcut,
@@ -487,10 +488,8 @@ function escapeCssString(value: string) {
 interface OutlineRowMenuState {
   nodeId: string;
   rootId: string | null;
-  position: {
-    top: number;
-    left: number;
-  };
+  anchor: HTMLElement;
+  anchorRect: DOMRect;
 }
 
 interface OutlineStoreContextValue {
@@ -569,17 +568,15 @@ function OutlineRowMenuButton({ nodeId, rootId }: { nodeId: string; rootId: stri
         if (block) {
           editor.setTextCursorPosition(block, "end");
         }
-        const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+        const anchor = event.currentTarget as HTMLElement;
         context?.setRowMenu(
           context.rowMenu?.nodeId === nodeId
             ? null
             : {
                 nodeId,
                 rootId,
-                position: {
-                  top: rect.bottom + 4,
-                  left: rect.left,
-                },
+                anchor,
+                anchorRect: anchor.getBoundingClientRect(),
               },
         );
       }}
@@ -593,6 +590,7 @@ function OutlineRowMenuPortal() {
   const menuRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [palette, setPalette] = useState<PaletteKind | null>(null);
+  const [position, setPosition] = useState({ top: 8, left: 8 });
   const menu = context?.rowMenu ?? null;
   const nodeId = menu?.nodeId ?? "";
   const rootId = menu?.rootId ?? null;
@@ -600,6 +598,31 @@ function OutlineRowMenuPortal() {
   const activeStyles = editor.getActiveStyles() as Record<string, unknown>;
   const activeTextColor = typeof activeStyles.textColor === "string" ? activeStyles.textColor : null;
   const activeBackgroundColor = typeof activeStyles.backgroundColor === "string" ? activeStyles.backgroundColor : null;
+
+  const updatePosition = useCallback(() => {
+    if (!menu || !menuRef.current) return;
+    const anchorRect = menu.anchor.isConnected
+      ? menu.anchor.getBoundingClientRect()
+      : menu.anchorRect;
+    const menuRect = menuRef.current.getBoundingClientRect();
+    setPosition(outlineRowMenuPosition(
+      anchorRect,
+      menuRect,
+      { width: window.innerWidth, height: window.innerHeight },
+    ));
+  }, [menu]);
+
+  useLayoutEffect(() => {
+    if (!menu) return undefined;
+    updatePosition();
+    const reposition = () => updatePosition();
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  }, [menu, palette, updatePosition]);
 
   useEffect(() => {
     if (!menu) return;
@@ -675,7 +698,7 @@ function OutlineRowMenuPortal() {
     <div
       className="outline-row-menu-layer"
       ref={menuRef}
-      style={{ top: menu.position.top, left: menu.position.left }}
+      style={{ top: position.top, left: position.left }}
       onMouseDown={(event) => event.preventDefault()}
     >
       <input
