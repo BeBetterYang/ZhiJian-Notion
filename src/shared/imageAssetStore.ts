@@ -42,6 +42,9 @@ export function getCachedImageAssetUrl(assetId: string) { return urlsByAssetId.g
  * document mentions is also kept as a blob in IndexedDB: cached ones are adopted first
  * because their URLs outlive the signature, and the rest are downloaded once so that a
  * second device stops depending on a fresh signature to show a picture it has seen.
+ *
+ * 已缓存的那部分是本地读取，进入工作区就要用，所以同步等它读完；缺的那些只是为了下次
+ * 免签名，签名 URL 本轮仍然有效，于是把下载和写库推到空闲时做，不去和首屏抢带宽。
  */
 export async function rehydrateImageAssets(): Promise<void> {
   if (typeof indexedDB === "undefined") return;
@@ -67,7 +70,7 @@ export async function rehydrateImageAssets(): Promise<void> {
   } catch {
     // IndexedDB is a best-effort cache; Storage remains the source of truth.
   } finally { database.close(); }
-  await cacheRemoteImageAssets(cachedIds);
+  whenIdle(() => { void cacheRemoteImageAssets(cachedIds); });
 }
 
 async function cacheRemoteImageAssets(cachedIds: Set<string>) {
@@ -82,7 +85,15 @@ async function cacheRemoteImageAssets(cachedIds: Set<string>) {
     } catch {
       // The signed URL still works for this session; the download can be retried next load.
     }
+    // 每张图之间让出一次空闲，避免一串下载把打开文档时的交互挤掉。
+    await new Promise<void>((resolve) => whenIdle(resolve));
   }
+}
+
+function whenIdle(task: () => void) {
+  const idle = (globalThis as { requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number }).requestIdleCallback;
+  if (typeof idle === "function") idle(task, { timeout: 2000 });
+  else setTimeout(task, 200);
 }
 
 function cacheAsset(assetId: string, url: string, storagePath?: string) {

@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createInitialTree } from "../core/tree";
 import { TreeStore } from "../core/treeStore";
 import type { WorkspaceSession } from "./auth";
 
 const serverMocks = vi.hoisted(() => ({
+  deleteWorkspaceDocument: vi.fn(),
   loadWorkspaceState: vi.fn(),
   saveWorkspaceDocument: vi.fn(),
   saveWorkspaceState: vi.fn(),
@@ -54,6 +55,7 @@ describe("WorkspaceShell session refresh", () => {
     });
     serverMocks.saveWorkspaceDocument.mockReset().mockResolvedValue(undefined);
     serverMocks.saveWorkspaceState.mockReset().mockResolvedValue(undefined);
+    serverMocks.deleteWorkspaceDocument.mockReset().mockResolvedValue(undefined);
   });
 
   it("does not show a connection status while server data is loading", () => {
@@ -104,5 +106,48 @@ describe("WorkspaceShell session refresh", () => {
     await waitFor(() => expect(screen.getByTestId("document-editor")).toBeInTheDocument());
     expect(screen.queryByText("正在加载服务器数据")).not.toBeInTheDocument();
     expect(serverMocks.loadWorkspaceState).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("回收站彻底删除", () => {
+  const trashedFile = { id: "file-9", title: "旧文档", type: "file" as const, parentId: null, order: 0, favorite: false, openedAt: 1 };
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    serverMocks.saveWorkspaceState.mockReset().mockResolvedValue(undefined);
+    serverMocks.deleteWorkspaceDocument.mockReset().mockResolvedValue(undefined);
+    serverMocks.loadWorkspaceState.mockReset().mockResolvedValue({
+      profile: { name: "枝间用户", email: session.email, avatarUrl: "" },
+      nodes: [],
+      documents: {},
+      trash: [{ id: trashedFile.id, deletedAt: 1, nodes: [trashedFile] }],
+    });
+  });
+
+  async function openTrash() {
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: /枝间用户/ }));
+    fireEvent.click(screen.getByRole("button", { name: /回收站/ }));
+    return screen.getByRole("button", { name: "清空回收站" });
+  }
+
+  it("服务端删除失败时保留回收站项目并报错", async () => {
+    serverMocks.deleteWorkspaceDocument.mockRejectedValue(new Error("网络不可用"));
+
+    fireEvent.click(await openTrash());
+
+    expect(await screen.findByText("服务器删除文档失败：网络不可用")).toBeInTheDocument();
+    expect(screen.getByText("旧文档")).toBeInTheDocument();
+  });
+
+  it("服务端删除成功后才清空回收站", async () => {
+    fireEvent.click(await openTrash());
+
+    await waitFor(() => expect(screen.getByText("回收站为空")).toBeInTheDocument());
+    expect(serverMocks.deleteWorkspaceDocument).toHaveBeenCalledWith(
+      expect.anything(),
+      "file-9",
+      expect.anything(),
+    );
   });
 });

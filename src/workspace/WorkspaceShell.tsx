@@ -29,7 +29,6 @@ import {
   FiX,
 } from "react-icons/fi";
 import { FaStar } from "react-icons/fa";
-import QRCode from "qrcode";
 import App, { type FocusBreadcrumbState } from "../App";
 import { createInitialTree, plainTextContent, richTextToPlainText, type ZhiJianNode, type ZhiJianTree } from "../core/tree";
 import { TreeStore } from "../core/treeStore";
@@ -44,9 +43,11 @@ import {
   updateDocumentShare,
   uploadWorkspaceImage,
   type WorkspaceDocumentShare,
+  type WorkspaceServerState,
   WorkspaceApiError,
 } from "./serverApi";
 import { configureImageAssetUpload, hydrateRemoteImageAssets, rehydrateImageAssets } from "../shared/imageAssetStore";
+import { compressAvatarFile } from "./avatarImage";
 import { AppErrorBoundary } from "../shared/AppErrorBoundary";
 import {
   childNodes,
@@ -73,6 +74,9 @@ interface WorkspaceShellProps {
   onSessionRefresh: (session: WorkspaceSession) => void;
   onLogout: () => void;
 }
+
+/** 工作区行里由这个组件负责的三个字段，文档和图片各有自己的存储路径。 */
+type WorkspaceStateSnapshot = Pick<WorkspaceServerState, "profile" | "nodes" | "trash">;
 
 type QuickSection = "recent" | "favorites";
 type DropTarget = { nodeId: string; mode: DropMode } | null;
@@ -148,6 +152,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const documentStores = useRef(new Map<string, TreeStore>());
   const documentRevisions = useRef(new Map<string, number>());
   const documentSaveQueues = useRef(new Map<string, Promise<void>>());
+  const workspaceSaveQueue = useRef<Promise<void>>(Promise.resolve());
+  const pendingWorkspaceState = useRef<WorkspaceStateSnapshot | null>(null);
   const sessionRef = useRef(session);
   const [serverReady, setServerReady] = useState(false);
   const [serverAvailable, setServerAvailable] = useState(false);
@@ -177,6 +183,25 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       if (documentSaveQueues.current.get(fileId) === queued) documentSaveQueues.current.delete(fileId);
     });
     documentSaveQueues.current.set(fileId, queued);
+    return queued;
+  }, [handleSessionRefresh]);
+
+  /**
+   * 资料、导航树和回收站共用一行，所以两个并发的 PUT 会互相覆盖，而且返回顺序无法保证——
+   * 慢的那个后到就会把新状态写回旧值。这里排成单队列，并且只保留最后一次快照：中途积压的
+   * 中间状态没有意义，最终写入的一定是最新的那份。
+   */
+  const persistWorkspaceState = useCallback((snapshot: WorkspaceStateSnapshot) => {
+    pendingWorkspaceState.current = snapshot;
+    const queued = workspaceSaveQueue.current.catch(() => undefined).then(async () => {
+      const pending = pendingWorkspaceState.current;
+      if (!pending) return;
+      pendingWorkspaceState.current = null;
+      await saveWorkspaceState(sessionRef.current, pending, { onSessionRefresh: handleSessionRefresh });
+    }).catch((error) => {
+      setServerStatus(`工作区保存到服务器失败：${errorMessage(error)}`);
+    });
+    workspaceSaveQueue.current = queued;
     return queued;
   }, [handleSessionRefresh]);
 
@@ -293,14 +318,10 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   useEffect(() => {
     if (!serverReady || !serverAvailable) return;
     const timer = setTimeout(() => {
-      void saveWorkspaceState(sessionRef.current, {
-        profile: userProfile,
-        nodes,
-        trash,
-      }, { onSessionRefresh: handleSessionRefresh }).catch((error) => setServerStatus(`工作区保存到服务器失败：${errorMessage(error)}`));
+      void persistWorkspaceState({ profile: userProfile, nodes, trash });
     }, 500);
     return () => clearTimeout(timer);
-  }, [handleSessionRefresh, nodes, serverAvailable, serverReady, trash, userProfile]);
+  }, [nodes, persistWorkspaceState, serverAvailable, serverReady, trash, userProfile]);
 
   useEffect(() => {
     if (!activeFile || !activeDocumentStore) return;
@@ -404,7 +425,13 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       setShareQrCode("");
       return;
     }
-    void QRCode.toDataURL(shareUrl, { width: 196, margin: 1, color: { dark: "#37352f", light: "#ffffff" } }).then(setShareQrCode);
+    let canceled = false;
+    // qrcode 只在打开分享面板时用得上，静态引入会把它算进工作区首屏的包里。
+    void import("qrcode")
+      .then(({ default: QRCode }) => QRCode.toDataURL(shareUrl, { width: 196, margin: 1, color: { dark: "#37352f", light: "#ffffff" } }))
+      .then((dataUrl) => { if (!canceled) setShareQrCode(dataUrl); })
+      .catch(() => { if (!canceled) setShareQrCode(""); });
+    return () => { canceled = true; };
   }, [shareUrl]);
 
   const toggleShare = async (enabled: boolean) => {
@@ -441,7 +468,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
 
   const updateAvatar = (file?: File) => {
     if (!file) return;
-    void readFileAsDataUrl(file)
+    void compressAvatarFile(file)
       .then((avatarUrl) => setProfileDraft((current) => ({ ...current, avatarUrl })))
       .catch((error) => setServerStatus(errorMessage(error)));
   };
@@ -600,21 +627,28 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     setSelectedTrashIds(new Set());
   };
 
-  const permanentlyDeleteTrashEntries = (entryIds: Set<string>) => {
+  const permanentlyDeleteTrashEntries = async (entryIds: Set<string>) => {
     const files = trash
       .filter((entry) => entryIds.has(entry.id))
       .flatMap((entry) => entry.nodes)
       .filter(isWorkspaceFile);
+    // Documents are their own rows now, so a purge has to reach the server; leaving them
+    // behind would keep the text and its images stored after the user asked to be rid of them.
+    // 服务端没删成功就什么都不动：回收站条目留着，用户可以看到错误并重试，否则文档会变成
+    // 界面上找不到、服务器上却还在的孤儿。
+    if (serverAvailable) {
+      try {
+        await Promise.all(files.map((file) => deleteWorkspaceDocument(sessionRef.current, file.id, { onSessionRefresh: handleSessionRefresh })));
+      } catch (error) {
+        setServerStatus(`服务器删除文档失败：${errorMessage(error)}`);
+        return;
+      }
+    }
     files.forEach((file) => {
       documentStores.current.delete(file.id);
       documentRevisions.current.delete(file.id);
     });
-    // Documents are their own rows now, so a purge has to reach the server; leaving them
-    // behind would keep the text and its images stored after the user asked to be rid of them.
-    if (serverAvailable) {
-      void Promise.all(files.map((file) => deleteWorkspaceDocument(sessionRef.current, file.id, { onSessionRefresh: handleSessionRefresh })))
-        .catch((error) => setServerStatus(`服务器删除文档失败：${errorMessage(error)}`));
-    }
+    setServerStatus("");
     setTrash((current) => current.filter((entry) => !entryIds.has(entry.id)));
     setSelectedTrashIds(new Set());
   };
@@ -1052,8 +1086,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               <label><input type="checkbox" checked={trash.length > 0 && selectedTrashIds.size === trash.length} onChange={(event) => setSelectedTrashIds(event.target.checked ? new Set(trash.map((entry) => entry.id)) : new Set())} />全选</label>
               <span />
               <button type="button" disabled={!selectedTrashIds.size} onClick={() => restoreTrashEntries(selectedTrashIds)}><FiRotateCcw />恢复</button>
-              <button type="button" className="danger" disabled={!selectedTrashIds.size} onClick={() => permanentlyDeleteTrashEntries(selectedTrashIds)}><FiTrash2 />彻底删除</button>
-              <button type="button" className="danger" disabled={!trash.length} onClick={() => permanentlyDeleteTrashEntries(new Set(trash.map((entry) => entry.id)))}>清空回收站</button>
+              <button type="button" className="danger" disabled={!selectedTrashIds.size} onClick={() => void permanentlyDeleteTrashEntries(selectedTrashIds)}><FiTrash2 />彻底删除</button>
+              <button type="button" className="danger" disabled={!trash.length} onClick={() => void permanentlyDeleteTrashEntries(new Set(trash.map((entry) => entry.id)))}>清空回收站</button>
             </div>
             <div className="trash-list">
               {trash.map((entry) => {
@@ -1064,7 +1098,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                   {root.type === "folder" ? <FiFolder /> : <FiFileText />}
                   <span><strong>{root.title || "无标题"}</strong><small>{new Date(entry.deletedAt).toLocaleString("zh-CN")}</small></span>
                   <button type="button" title="恢复" aria-label={`恢复${root.title}`} onClick={(event) => { event.preventDefault(); restoreTrashEntries(new Set([entry.id])); }}><FiRotateCcw /></button>
-                  <button type="button" className="danger" title="彻底删除" aria-label={`彻底删除${root.title}`} onClick={(event) => { event.preventDefault(); permanentlyDeleteTrashEntries(new Set([entry.id])); }}><FiTrash2 /></button>
+                  <button type="button" className="danger" title="彻底删除" aria-label={`彻底删除${root.title}`} onClick={(event) => { event.preventDefault(); void permanentlyDeleteTrashEntries(new Set([entry.id])); }}><FiTrash2 /></button>
                 </label>;
               })}
             </div>
@@ -1499,22 +1533,14 @@ function profileFromSession(session: WorkspaceSession): UserProfile {
   return normalizeUserProfile(null, session);
 }
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.addEventListener("load", () => resolve(String(reader.result ?? "")), { once: true });
-    reader.addEventListener("error", () => reject(reader.error ?? new Error("头像读取失败")), { once: true });
-    reader.readAsDataURL(file);
-  });
-}
-
 function normalizeUserProfile(profile: UserProfile | null | undefined, session: WorkspaceSession): UserProfile {
   const email = session.email;
   const sessionName = displayName(session.name, email);
   const profileName = profile?.name?.trim() ?? "";
   return {
     name: profileName && profileName.toLowerCase() !== email.toLowerCase() ? profileName : sessionName,
-    email: profile?.email?.trim() || email,
+    // Auth 是 email 的唯一来源，profile 里那一份只是过去写下的副本，改过邮箱之后就是旧值。
+    email,
     avatarUrl: profile?.avatarUrl ?? "",
   };
 }

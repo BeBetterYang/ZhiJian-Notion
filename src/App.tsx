@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   FiChevronDown,
@@ -18,9 +18,7 @@ import { outlineExportFileName, treeToOutlineHtmlDocument } from "./core/export/
 import { createInitialTree, richTextToPlainText } from "./core/tree";
 import { TreeStore, attachTreePersistence, loadPersistedTree } from "./core/treeStore";
 import { useTree } from "./core/treeStore/useTree";
-import { MindMapEditor } from "./mindmap/MindMapEditor";
 import type { MindMapTextSelection } from "./mindmap/MindMapEditor";
-import { OutlineEditor } from "./outline/OutlineEditor";
 import { zoomPath } from "./outline/outlineZoom";
 import type { DocumentViewState, MindMapViewportState } from "./shared/documentViewState";
 import { captureOutlinePng, downloadBlob, imageBlobToPdf } from "./shared/exportFiles";
@@ -33,6 +31,17 @@ import {
 } from "./shared/shortcuts";
 import { ShortcutHelpDialog } from "./shared/shortcuts/ShortcutHelpDialog";
 import "./styles.css";
+
+// 两个编辑器各自带着很重的依赖（BlockNote 和 MindElixir），静态引入会让工作区首屏
+// 必须等两份代码都下载完。改成按 activeView 懒加载：进入工作区只加载壳，打开文档时
+// 取大纲那一份，第一次切到导图才去取 MindElixir。
+const OutlineEditor = lazy(() => import("./outline/OutlineEditor").then((module) => ({ default: module.OutlineEditor })));
+const MindMapEditor = lazy(() => import("./mindmap/MindMapEditor").then((module) => ({ default: module.MindMapEditor })));
+
+/** 导出前先把目标视图的 chunk 取回来，否则慢网络下 waitForExportView 会等成"尚未准备好"。 */
+function preloadEditorView(view: "outline" | "mindmap") {
+  return view === "outline" ? import("./outline/OutlineEditor") : import("./mindmap/MindMapEditor");
+}
 
 interface AppProps {
   embedded?: boolean;
@@ -344,6 +353,7 @@ export default function App({
   const withExportView = async <T,>(view: "outline" | "mindmap", task: () => Promise<T>) => {
     const previous = activeView;
     if (previous !== view) {
+      await preloadEditorView(view);
       setActiveView(view);
       await waitForExportView(view, mindMapExportImageRef);
     }
@@ -565,42 +575,44 @@ export default function App({
           aria-hidden={activeView !== "outline"}
         >
           <div className="pane-title">大纲</div>
-          <OutlineEditor
-            readOnly={readOnly}
-            store={store}
-            onSelectNode={handleOutlineSelect}
-            mindMapNodeId={activeView === "mindmap" ? selectedNodeId : null}
-            mindMapTextSelection={mindMapTextSelection}
-            mindMapToolbarTarget={mindMapToolbarTarget}
-            showMindMapToolbar={
-              !readOnly &&
-              activeView === "mindmap" &&
-              selectionActive &&
-              Boolean(selectedNode) &&
-              !isMindMapMediaSelected &&
-              !mindMapNodeToolbarActive
-            }
-            searchQuery={searchQuery}
-            visibleNodeIds={visibleSearchNodeIds}
-            activeSearchNodeId={activeSearchNodeId}
-            zoomedNodeId={zoomedNodeId}
-            initialScrollTop={initialViewState?.outlineScrollTop}
-            onScrollPositionChange={updateOutlineScroll}
-            onFocusNode={(nodeId) => {
-              if (nodeId !== tree.rootId) {
-                setZoomedNodeId(nodeId);
+          <Suspense fallback={null}>
+            <OutlineEditor
+              readOnly={readOnly}
+              store={store}
+              onSelectNode={handleOutlineSelect}
+              mindMapNodeId={activeView === "mindmap" ? selectedNodeId : null}
+              mindMapTextSelection={mindMapTextSelection}
+              mindMapToolbarTarget={mindMapToolbarTarget}
+              showMindMapToolbar={
+                !readOnly &&
+                activeView === "mindmap" &&
+                selectionActive &&
+                Boolean(selectedNode) &&
+                !isMindMapMediaSelected &&
+                !mindMapNodeToolbarActive
               }
-            }}
-            onMindMapInsertQuote={(nodeId, focusBlockId) => {
-              setSelectedNodeId(nodeId);
-              setSelectionActive(true);
-              setMindMapFocusRequest((current) => ({
-                nodeId,
-                focusBlockId,
-                requestId: (current?.requestId ?? 0) + 1,
-              }));
-            }}
-          />
+              searchQuery={searchQuery}
+              visibleNodeIds={visibleSearchNodeIds}
+              activeSearchNodeId={activeSearchNodeId}
+              zoomedNodeId={zoomedNodeId}
+              initialScrollTop={initialViewState?.outlineScrollTop}
+              onScrollPositionChange={updateOutlineScroll}
+              onFocusNode={(nodeId) => {
+                if (nodeId !== tree.rootId) {
+                  setZoomedNodeId(nodeId);
+                }
+              }}
+              onMindMapInsertQuote={(nodeId, focusBlockId) => {
+                setSelectedNodeId(nodeId);
+                setSelectionActive(true);
+                setMindMapFocusRequest((current) => ({
+                  nodeId,
+                  focusBlockId,
+                  requestId: (current?.requestId ?? 0) + 1,
+                }));
+              }}
+            />
+          </Suspense>
         </section>
         <section
           className={`pane editor-view ${activeView === "mindmap" ? "is-active" : "is-inactive"}`}
@@ -609,44 +621,46 @@ export default function App({
           <div className="pane-title">思维导图</div>
           <div className="mindmap-pane-body">
             {activeView === "mindmap" ? (
-              <MindMapEditor
-                readOnly={readOnly}
-                store={store}
-                onSelectNode={(nodeId) => {
-                  setSelectedNodeId(nodeId);
-                  setMindMapTextSelection(null);
-                }}
-                onSelectionActiveChange={setSelectionActive}
-                onTextSelectionChange={setMindMapTextSelection}
-                onNodeToolbarActiveChange={setMindMapNodeToolbarActive}
-                onFocusNode={(nodeId) => {
-                  if (nodeId !== tree.rootId) {
-                    setZoomedNodeId(nodeId);
-                  }
-                }}
-                onExitFocus={() => setZoomedNodeId(null)}
-                selectedNodeId={selectedNodeId}
-                toolbarTarget={mindMapToolbarTarget}
-                focusRequest={mindMapFocusRequest}
-                focusNodeRequest={mindMapFocusNodeRequest}
-                searchQuery={searchQuery}
-                visibleNodeIds={visibleSearchNodeIds}
-                zoomedNodeId={zoomedNodeId}
-                initialViewport={mindMapViewportRef.current}
-                onViewportChange={updateMindMapViewport}
-                initialDirection={initialViewState?.mindMapDirection}
-                onDirectionChange={(mindMapDirection) => persistViewStatePatch({ mindMapDirection })}
-                initialTheme={initialViewState?.mindMapTheme}
-                onThemeChange={(mindMapTheme) => persistViewStatePatch({ mindMapTheme })}
-                onExportImageReady={(exportImage) => {
-                  mindMapExportImageRef.current = exportImage;
-                }}
-                onFocusRequestHandled={(requestId) => {
-                  setMindMapFocusRequest((current) =>
-                    current?.requestId === requestId ? null : current,
-                  );
-                }}
-              />
+              <Suspense fallback={null}>
+                <MindMapEditor
+                  readOnly={readOnly}
+                  store={store}
+                  onSelectNode={(nodeId) => {
+                    setSelectedNodeId(nodeId);
+                    setMindMapTextSelection(null);
+                  }}
+                  onSelectionActiveChange={setSelectionActive}
+                  onTextSelectionChange={setMindMapTextSelection}
+                  onNodeToolbarActiveChange={setMindMapNodeToolbarActive}
+                  onFocusNode={(nodeId) => {
+                    if (nodeId !== tree.rootId) {
+                      setZoomedNodeId(nodeId);
+                    }
+                  }}
+                  onExitFocus={() => setZoomedNodeId(null)}
+                  selectedNodeId={selectedNodeId}
+                  toolbarTarget={mindMapToolbarTarget}
+                  focusRequest={mindMapFocusRequest}
+                  focusNodeRequest={mindMapFocusNodeRequest}
+                  searchQuery={searchQuery}
+                  visibleNodeIds={visibleSearchNodeIds}
+                  zoomedNodeId={zoomedNodeId}
+                  initialViewport={mindMapViewportRef.current}
+                  onViewportChange={updateMindMapViewport}
+                  initialDirection={initialViewState?.mindMapDirection}
+                  onDirectionChange={(mindMapDirection) => persistViewStatePatch({ mindMapDirection })}
+                  initialTheme={initialViewState?.mindMapTheme}
+                  onThemeChange={(mindMapTheme) => persistViewStatePatch({ mindMapTheme })}
+                  onExportImageReady={(exportImage) => {
+                    mindMapExportImageRef.current = exportImage;
+                  }}
+                  onFocusRequestHandled={(requestId) => {
+                    setMindMapFocusRequest((current) =>
+                      current?.requestId === requestId ? null : current,
+                    );
+                  }}
+                />
+              </Suspense>
             ) : null}
             <div
               ref={setMindMapToolbarTarget}
