@@ -573,6 +573,7 @@ export default function App({
             mindMapTextSelection={mindMapTextSelection}
             mindMapToolbarTarget={mindMapToolbarTarget}
             showMindMapToolbar={
+              !readOnly &&
               activeView === "mindmap" &&
               selectionActive &&
               Boolean(selectedNode) &&

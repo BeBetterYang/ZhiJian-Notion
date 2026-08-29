@@ -97,6 +97,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const [shareLoading, setShareLoading] = useState(false);
   const [shareError, setShareError] = useState("");
   const [shareQrCode, setShareQrCode] = useState("");
+  const [shareCopied, setShareCopied] = useState(false);
   const [settingsView, setSettingsView] = useState<SettingsView>("account");
   const [settingsEdit, setSettingsEdit] = useState<SettingsEdit>(null);
   const [headerToolbarTarget, setHeaderToolbarTarget] = useState<HTMLDivElement | null>(null);
@@ -361,6 +362,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     setShareOpen(true);
     setShareLoading(true);
     setShareError("");
+    setShareCopied(false);
     try {
       setShareState(await loadDocumentShare(sessionRef.current, activeFile.id, { onSessionRefresh: handleSessionRefresh }));
     } catch (error) {
@@ -382,12 +384,31 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     if (!activeFile) return;
     setShareLoading(true);
     setShareError("");
+    setShareCopied(false);
     try {
       setShareState(await updateDocumentShare(sessionRef.current, activeFile.id, enabled, { onSessionRefresh: handleSessionRefresh }));
     } catch (error) {
       setShareError(errorMessage(error));
     } finally {
       setShareLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!shareCopied) return;
+    const timer = window.setTimeout(() => setShareCopied(false), 1800);
+    return () => window.clearTimeout(timer);
+  }, [shareCopied]);
+
+  const copyShareUrl = async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareCopied(true);
+      setShareError("");
+    } catch {
+      setShareCopied(false);
+      setShareError("复制失败，请手动复制链接。");
     }
   };
 
@@ -927,7 +948,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
             </label>
             {shareError ? <p className="share-error" role="alert">{shareError}</p> : null}
             {shareLoading ? <div className="share-loading">正在更新分享设置…</div> : shareUrl ? <>
-              <div className="share-link-row"><input value={shareUrl} readOnly aria-label="文档分享链接" /><button type="button" onClick={() => void navigator.clipboard.writeText(shareUrl)}>复制链接</button></div>
+              <div className="share-link-row"><input value={shareUrl} readOnly aria-label="文档分享链接" /><button type="button" onClick={() => void copyShareUrl()}>复制链接</button></div>
+              {shareCopied ? <div className="share-copy-success" role="status">复制成功</div> : null}
               <div className="share-qr">{shareQrCode ? <img src={shareQrCode} alt="文档分享二维码" /> : null}<span>扫描二维码查看文档</span></div>
             </> : null}
           </section>
