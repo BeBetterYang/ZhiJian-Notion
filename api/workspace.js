@@ -10,16 +10,15 @@ export default async function handler(request, response) {
   try {
     const user = await requireAuthenticatedUser(request);
     if (request.method === "GET") {
-      return sendJson(response, 200, await readWorkspace(user.email) ?? {});
+      return sendJson(response, 200, await readWorkspace(user.id));
     }
 
     if (request.method === "PUT") {
       const body = await readJsonBody(request);
-      await upsertWorkspace(user.email, {
+      await upsertWorkspace(user.id, {
         profile: body.profile,
         nodes: body.nodes,
         trash: body.trash,
-        documents: body.documents,
       });
       return sendJson(response, 200, { ok: true });
     }

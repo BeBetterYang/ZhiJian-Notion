@@ -13,7 +13,7 @@ import {
   type ZhiJianTableData,
   type ZhiJianTree,
 } from "../core/tree";
-import { getCachedImageAssetUrl, getImageAssetId } from "../shared/imageAssetStore";
+import { getCachedImageAssetUrl, getImageAssetId, getImageAssetStoragePath } from "../shared/imageAssetStore";
 
 export function treeToBlockNote(tree: ZhiJianTree): PartialBlock[] {
   return [visitNode(tree, tree.rootId)];
@@ -275,7 +275,7 @@ function imageDataFromBlock(block: Block): ZhiJianImageData {
   const props = block.props as Record<string, unknown>;
   const url = stringProp(props, "url") ?? "";
   const assetId = getImageAssetId(url);
-  return { url: assetId ? undefined : url, assetId, name: stringProp(props, "name"), caption: stringProp(props, "caption"), previewWidth: numberProp(props, "previewWidth") ?? 480, showPreview: typeof props.showPreview === "boolean" ? props.showPreview : true };
+  return { url: assetId ? undefined : url, assetId, storagePath: assetId ? getImageAssetStoragePath(url) : undefined, name: stringProp(props, "name"), caption: stringProp(props, "caption"), previewWidth: numberProp(props, "previewWidth") ?? 480, showPreview: typeof props.showPreview === "boolean" ? props.showPreview : true };
 }
 
 function createDefaultTableData(): ZhiJianTableData {

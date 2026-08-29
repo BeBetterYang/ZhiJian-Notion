@@ -827,6 +827,12 @@ function SearchPanel({ query, replacement, focusSignal, onQueryChange, onReplace
           查找 <FiChevronDown />
         </button> : <span className="search-mode-button">查找</span>}
         <input ref={queryRef} value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索关键词" />
+        {/* A shared document has no replace row to hang these off, and stepping through the
+            matches is most of what searching is for, so they sit in the row itself. */}
+        {allowReplace ? null : <>
+          <button type="button" className="search-step icon-button" aria-label="上一处" title="上一处" onClick={onPrevious}>‹</button>
+          <button type="button" className="search-step icon-button" aria-label="下一处" title="下一处" onClick={onNext}>›</button>
+        </>}
         <button type="button" className="search-close icon-button" aria-label="关闭查找" onClick={onClose}>×</button>
       </div>
       {allowReplace && replaceOpen ? (

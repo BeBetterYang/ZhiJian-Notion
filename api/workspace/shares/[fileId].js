@@ -9,13 +9,13 @@ export default async function handler(request, response) {
     const user = await requireAuthenticatedUser(request);
     const fileId = decodeURIComponent(String(request.query?.fileId ?? ""));
     if (!fileId) return sendJson(response, 400, { error: "缺少文档 ID。" });
-    if (request.method === "GET") return sendJson(response, 200, await findShare(user.email, fileId) ?? { enabled: false });
+    if (request.method === "GET") return sendJson(response, 200, await findShare(user.id, fileId) ?? { enabled: false });
     if (request.method === "PUT") {
       const body = await readJsonBody(request);
-      const current = await findShare(user.email, fileId);
+      const current = await findShare(user.id, fileId);
       const share = {
         token: current?.token ?? randomUUID(),
-        owner_email: user.email,
+        owner_user_id: user.id,
         file_id: fileId,
         enabled: body.enabled === true,
         updated_at: new Date().toISOString(),
@@ -30,7 +30,7 @@ export default async function handler(request, response) {
   }
 }
 
-async function findShare(email, fileId) {
-  const rows = await supabaseRequest(`${TABLE}?owner_email=eq.${encodeURIComponent(email)}&file_id=eq.${encodeURIComponent(fileId)}&select=token,enabled`, { method: "GET" });
+async function findShare(userId, fileId) {
+  const rows = await supabaseRequest(`${TABLE}?owner_user_id=eq.${encodeURIComponent(userId)}&file_id=eq.${encodeURIComponent(fileId)}&select=token,enabled`, { method: "GET" });
   return Array.isArray(rows) ? rows[0] ?? null : null;
 }

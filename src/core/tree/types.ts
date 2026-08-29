@@ -25,6 +25,7 @@ export interface ZhiJianTableData {
 export interface ZhiJianImageData {
   url?: string;
   assetId?: string;
+  storagePath?: string;
   name?: string;
   caption?: string;
   previewWidth?: number;

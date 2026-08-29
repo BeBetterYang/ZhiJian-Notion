@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createInitialTree } from "../core/tree";
 import type { WorkspaceSession } from "./auth";
-import { loadWorkspaceState, saveWorkspaceDocument, saveWorkspaceState } from "./serverApi";
+import { deleteWorkspaceDocument, loadWorkspaceState, saveWorkspaceDocument, saveWorkspaceState } from "./serverApi";
 
 const expiringSession: WorkspaceSession = {
   email: "user@example.com",
@@ -48,7 +48,7 @@ describe("workspace server API session refresh", () => {
       }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
 
-    await saveWorkspaceDocument({ ...expiringSession, expiresAt: Math.floor(Date.now() / 1000) + 3600 }, "file-1", createInitialTree());
+    await saveWorkspaceDocument({ ...expiringSession, expiresAt: Math.floor(Date.now() / 1000) + 3600 }, "file-1", createInitialTree(), 1);
 
     expect(fetch).toHaveBeenNthCalledWith(1, "/api/workspace/documents/file-1", expect.objectContaining({
       headers: expect.objectContaining({ Authorization: "Bearer old-token" }),
@@ -68,7 +68,7 @@ describe("workspace server API session refresh", () => {
 
     await Promise.all([
       saveWorkspaceState(expiringSession, { nodes: [] }),
-      saveWorkspaceDocument(expiringSession, "file-1", createInitialTree()),
+      saveWorkspaceDocument(expiringSession, "file-1", createInitialTree(), 1),
     ]);
 
     const calls = vi.mocked(fetch).mock.calls;
@@ -101,5 +101,45 @@ describe("workspace server API session refresh", () => {
       ...expiringSession,
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
     }, { nodes: [] })).rejects.toThrow("服务器 API 返回了网页而不是数据");
+  });
+
+  it("sends the expected revision and returns the next revision", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(
+      JSON.stringify({ ok: true, revision: 8 }),
+      { status: 200 },
+    ));
+
+    const result = await saveWorkspaceDocument({
+      ...expiringSession,
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    }, "file-1", createInitialTree(), 7);
+
+    expect(result.revision).toBe(8);
+    expect(fetch).toHaveBeenCalledWith("/api/workspace/documents/file-1", expect.objectContaining({
+      body: expect.stringContaining('"revision":7'),
+    }));
+  });
+
+  it("surfaces a document revision conflict", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(
+      JSON.stringify({ error: "文档已在其他标签页或设备更新，请刷新后继续编辑。" }),
+      { status: 409 },
+    ));
+
+    await expect(saveWorkspaceDocument({
+      ...expiringSession,
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    }, "file-1", createInitialTree(), 3)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("asks the server to drop a purged document", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+    await deleteWorkspaceDocument({
+      ...expiringSession,
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    }, "file-1");
+
+    expect(fetch).toHaveBeenCalledWith("/api/workspace/documents/file-1", expect.objectContaining({ method: "DELETE" }));
   });
 });

@@ -8,3 +8,4 @@ dist
 node_modules/.tmp
 .zhijian-server-data
 .vercel
+supabase/.temp

@@ -273,6 +273,8 @@ export function OutlineEditor({
       {!readOnly ? <FormattingToolbarController
         formattingToolbar={() => <ZhiJianFormattingToolbar />}
       /> : null}
+      {/* BlockNote's `SideMenuView` refuses to show while the editor is not editable, so a
+          shared document gets `ReadOnlyCollapseLayer` instead of this menu. */}
       {!readOnly ? <SideMenuController sideMenu={RootProtectedSideMenu} /> : null}
       {!readOnly ? <OutlineRowMenuPortal /> : null}
       {!readOnly ? <ZhiJianSlashMenu /> : null}
@@ -396,6 +398,7 @@ export function OutlineEditor({
       <style>{zoomCss}</style>
       <style>{rowMenuHighlightCss}</style>
       <OutlineStoreContext.Provider value={outlineContextValue}>{editorView}</OutlineStoreContext.Provider>
+      {readOnly ? <ReadOnlyCollapseLayer store={store} panelRef={panelRef} /> : null}
       {/* 添加图片 (Alt Enter) has nothing to insert until a file has been chosen, and
           the picker can only be opened from a real click on an input. */}
       <input
@@ -937,6 +940,76 @@ function CollapseButton({ store, nodeId }: { store: TreeStore; nodeId: string })
       icon={collapsed ? <RiArrowRightSFill /> : <RiArrowDownSFill />}
       onClick={() => store.updateProps(nodeId, { collapsed: !collapsed })}
     />
+  );
+}
+
+/**
+ * The collapse toggle for a shared document. BlockNote's own side menu is unavailable
+ * there — `SideMenuView.updateStateFromMousePos` returns early unless `editor.isEditable`
+ * — so the row under the pointer is tracked here instead, and the one control a reader
+ * still needs is painted beside it. Same glyphs and same store call as `CollapseButton`;
+ * only the positioning is ours, which is why it is fixed to the viewport and cleared on
+ * scroll rather than measured against the scrolling panel.
+ */
+function ReadOnlyCollapseLayer(
+  { store, panelRef }: { store: TreeStore; panelRef: { current: HTMLElement | null } },
+) {
+  const tree = useTree(store);
+  const [row, setRow] = useState<{ nodeId: string; top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const clear = () => setRow((current) => (current ? null : current));
+    const onPointerMove = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      const outer = target?.closest<HTMLElement>(".bn-block-outer[data-id]");
+      const content = outer?.querySelector<HTMLElement>(":scope > .bn-block > .bn-block-content");
+      const nodeId = outer?.getAttribute("data-id");
+      if (!content || !nodeId) {
+        clear();
+        return;
+      }
+      const rect = content.getBoundingClientRect();
+      // Every move over the same row would otherwise re-render the layer; the row's own
+      // box is the thing that has to match, not just its id, because collapsing a row
+      // above it moves it without the pointer leaving it.
+      setRow((current) =>
+        current?.nodeId === nodeId && current.top === rect.top && current.left === rect.left
+          ? current
+          : { nodeId, top: rect.top, left: rect.left }
+      );
+    };
+    panel.addEventListener("pointermove", onPointerMove);
+    panel.addEventListener("pointerleave", clear);
+    panel.addEventListener("scroll", clear);
+    // The box was measured against the viewport, so a scroll or a resize leaves it
+    // pointing at nothing; the next move over a row measures it again.
+    window.addEventListener("resize", clear);
+    return () => {
+      panel.removeEventListener("pointermove", onPointerMove);
+      panel.removeEventListener("pointerleave", clear);
+      panel.removeEventListener("scroll", clear);
+      window.removeEventListener("resize", clear);
+    };
+  }, [panelRef]);
+
+  if (!row) return null;
+  const node = tree.nodes[row.nodeId];
+  if (!node || node.id === tree.rootId || node.children.length === 0) return null;
+  const collapsed = node.props?.collapsed === true;
+
+  return (
+    <button
+      type="button"
+      className="outline-readonly-collapse"
+      style={{ top: row.top, left: row.left - 22 }}
+      title={collapsed ? "展开" : "收起"}
+      aria-label={collapsed ? "展开" : "收起"}
+      onClick={() => store.updateProps(row.nodeId, { collapsed: !collapsed })}
+    >
+      {collapsed ? <RiArrowRightSFill /> : <RiArrowDownSFill />}
+    </button>
   );
 }
 

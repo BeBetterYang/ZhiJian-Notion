@@ -4,20 +4,27 @@ import "@fontsource/source-sans-pro/600.css";
 import "@fontsource/source-sans-pro/700.css";
 import { StrictMode, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { FiDownload } from "react-icons/fi";
+import { FiCheck, FiDownload } from "react-icons/fi";
 import App from "../App";
 import type { ZhiJianTree } from "../core/tree";
 import { TreeStore } from "../core/treeStore";
+import { hydrateRemoteImageAssets, type ImageAssetReference } from "../shared/imageAssetStore";
+import { AppErrorBoundary } from "../shared/AppErrorBoundary";
+import { loadWorkspaceSession } from "../workspace/auth";
+import { importSharedDocument, WorkspaceApiError } from "../workspace/serverApi";
 import "../workspace/workspace.css";
 import "./share.css";
 
-interface SharedDocument { token: string; title: string; tree: ZhiJianTree }
+interface SharedDocument { token: string; title: string; tree: ZhiJianTree; assets?: ImageAssetReference[] }
 const PENDING_SHARE_KEY = "zhijian.workspace.pending-share-token";
+
+type SaveState = { status: "idle" | "saving" | "saved" } | { status: "failed"; message: string };
 
 function SharedDocumentApp() {
   const token = new URLSearchParams(window.location.search).get("token") ?? "";
   const [sharedDocument, setSharedDocument] = useState<SharedDocument | null>(null);
   const [error, setError] = useState("");
+  const [save, setSave] = useState<SaveState>({ status: "idle" });
   const [toolbarTarget, setToolbarTarget] = useState<HTMLDivElement | null>(null);
   const store = useMemo(() => sharedDocument ? new TreeStore(sharedDocument.tree) : null, [sharedDocument]);
 
@@ -27,15 +34,37 @@ function SharedDocumentApp() {
       .then(async (response) => {
         const result = await response.json() as SharedDocument & { error?: string };
         if (!response.ok) throw new Error(result.error ?? "无法打开分享文档。");
+        hydrateRemoteImageAssets(result.assets);
         setSharedDocument(result);
-        window.document.title = `${result.title}-枝间`;
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "无法打开分享文档。"));
   }, [token]);
 
-  const saveToWorkspace = () => {
-    window.localStorage.setItem(PENDING_SHARE_KEY, token);
-    window.location.href = "/workspace.html";
+  useEffect(() => {
+    if (sharedDocument) window.document.title = `${sharedDocument.title}-枝间`;
+  }, [sharedDocument]);
+
+  const saveToWorkspace = async () => {
+    // The session lives in sessionStorage, so a link opened in a fresh tab has none even
+    // when the visitor is signed in elsewhere; the token is parked and imported after login.
+    const session = loadWorkspaceSession();
+    if (!session) {
+      window.localStorage.setItem(PENDING_SHARE_KEY, token);
+      window.location.href = "/workspace.html";
+      return;
+    }
+    setSave({ status: "saving" });
+    try {
+      await importSharedDocument(session, token);
+      setSave({ status: "saved" });
+    } catch (reason) {
+      if (reason instanceof WorkspaceApiError && reason.status === 401) {
+        window.localStorage.setItem(PENDING_SHARE_KEY, token);
+        window.location.href = "/workspace.html";
+        return;
+      }
+      setSave({ status: "failed", message: reason instanceof Error ? reason.message : "保存失败，请稍后重试。" });
+    }
   };
 
   if (error) return <main className="share-state"><h1>无法打开文档</h1><p>{error}</p></main>;
@@ -43,12 +72,18 @@ function SharedDocumentApp() {
   return <main className="shared-document-shell">
     <header className="shared-document-header">
       <strong>{sharedDocument.title}</strong>
+      <span className="shared-document-badge">只读分享</span>
       <div className="shared-document-actions">
-        <button type="button" onClick={saveToWorkspace}><FiDownload />保存到我的枝间</button>
+        {save.status === "saved"
+          ? <a className="shared-document-saved" href="/workspace.html"><FiCheck />已保存，去我的枝间查看</a>
+          : <button type="button" disabled={save.status === "saving"} onClick={() => void saveToWorkspace()}>
+              <FiDownload />{save.status === "saving" ? "保存中…" : "保存到我的枝间"}
+            </button>}
         <div ref={setToolbarTarget} className="document-header-actions" />
       </div>
     </header>
-    <section className="shared-document-stage"><App embedded readOnly store={store} toolbarTarget={toolbarTarget} viewStateStorageKey={`zhijian.share.${token}.view-state.v1`} /></section>
+    {save.status === "failed" ? <p className="shared-document-error" role="alert">{save.message}</p> : null}
+    <section className="shared-document-stage"><AppErrorBoundary scope="文档"><App embedded readOnly store={store} toolbarTarget={toolbarTarget} viewStateStorageKey={`zhijian.share.${token}.view-state.v1`} /></AppErrorBoundary></section>
   </main>;
 }
 

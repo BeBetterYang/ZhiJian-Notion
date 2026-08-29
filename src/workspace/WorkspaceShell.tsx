@@ -37,12 +37,17 @@ import type { WorkspaceSession } from "./auth";
 import {
   loadWorkspaceState,
   loadDocumentShare,
+  deleteWorkspaceDocument,
   saveWorkspaceDocument,
   saveWorkspaceState,
+  updateWorkspaceAccount,
   updateDocumentShare,
+  uploadWorkspaceImage,
   type WorkspaceDocumentShare,
   WorkspaceApiError,
 } from "./serverApi";
+import { configureImageAssetUpload, hydrateRemoteImageAssets, rehydrateImageAssets } from "../shared/imageAssetStore";
+import { AppErrorBoundary } from "../shared/AppErrorBoundary";
 import {
   childNodes,
   canMoveNode,
@@ -141,6 +146,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const selectCreatedNameOnFocus = useRef(false);
   const peekCloseTimer = useRef<number | null>(null);
   const documentStores = useRef(new Map<string, TreeStore>());
+  const documentRevisions = useRef(new Map<string, number>());
+  const documentSaveQueues = useRef(new Map<string, Promise<void>>());
   const sessionRef = useRef(session);
   const [serverReady, setServerReady] = useState(false);
   const [serverAvailable, setServerAvailable] = useState(false);
@@ -157,6 +164,26 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     sessionRef.current = nextSession;
     onSessionRefresh(nextSession);
   }, [onSessionRefresh]);
+
+  const persistDocument = useCallback((fileId: string, tree: ZhiJianTree) => {
+    const previous = documentSaveQueues.current.get(fileId) ?? Promise.resolve();
+    const queued = previous.catch(() => undefined).then(async () => {
+      const revision = documentRevisions.current.get(fileId) ?? 0;
+      const result = await saveWorkspaceDocument(sessionRef.current, fileId, tree, revision, { onSessionRefresh: handleSessionRefresh });
+      if (Number.isInteger(result.revision)) documentRevisions.current.set(fileId, result.revision);
+    }).catch((error) => {
+      setServerStatus(`文档保存到服务器失败：${errorMessage(error)}`);
+    }).finally(() => {
+      if (documentSaveQueues.current.get(fileId) === queued) documentSaveQueues.current.delete(fileId);
+    });
+    documentSaveQueues.current.set(fileId, queued);
+    return queued;
+  }, [handleSessionRefresh]);
+
+  useEffect(() => {
+    configureImageAssetUpload((file) => uploadWorkspaceImage(sessionRef.current, file, { onSessionRefresh: handleSessionRefresh }));
+    return () => configureImageAssetUpload(null);
+  }, [handleSessionRefresh]);
 
   const files = useMemo(() => nodes.filter(isWorkspaceFile), [nodes]);
   const activeFile = files.find((file) => file.id === activeFileId) ?? files[0];
@@ -201,6 +228,9 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         documentStores.current = new Map(
           Object.entries(state?.documents ?? {}).map(([fileId, tree]) => [fileId, new TreeStore(tree)]),
         );
+        documentRevisions.current = new Map(Object.entries(state?.documentRevisions ?? {}));
+        hydrateRemoteImageAssets(state?.assets);
+        void rehydrateImageAssets();
         setUserProfile(nextProfile);
         setProfileDraft(nextProfile);
         setNodes(nextNodes);
@@ -248,19 +278,17 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
-        void saveWorkspaceDocument(sessionRef.current, activeFile.id, tree, { onSessionRefresh: handleSessionRefresh })
-          .catch((error) => setServerStatus(`文档保存到服务器失败：${errorMessage(error)}`));
+        void persistDocument(activeFile.id, tree);
       }, 400);
     });
     return () => {
       if (timer) {
         clearTimeout(timer);
-        void saveWorkspaceDocument(sessionRef.current, activeFile.id, activeDocumentStore.getSnapshot(), { onSessionRefresh: handleSessionRefresh })
-          .catch((error) => setServerStatus(`文档保存到服务器失败：${errorMessage(error)}`));
+        void persistDocument(activeFile.id, activeDocumentStore.getSnapshot());
       }
       unsubscribe();
     };
-  }, [activeDocumentStore, activeFile, handleSessionRefresh, serverAvailable, serverReady]);
+  }, [activeDocumentStore, activeFile, persistDocument, serverAvailable, serverReady]);
 
   useEffect(() => {
     if (!serverReady || !serverAvailable) return;
@@ -269,7 +297,6 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         profile: userProfile,
         nodes,
         trash,
-        documents: snapshotDocumentStores(documentStores.current),
       }, { onSessionRefresh: handleSessionRefresh }).catch((error) => setServerStatus(`工作区保存到服务器失败：${errorMessage(error)}`));
     }, 500);
     return () => clearTimeout(timer);
@@ -419,6 +446,36 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       .catch((error) => setServerStatus(errorMessage(error)));
   };
 
+  const saveAccountSettings = async () => {
+    try {
+      const nextName = profileDraft.name.trim();
+      const nextEmail = profileDraft.email.trim().toLowerCase();
+      const authUpdate = {
+        ...(nextName !== sessionRef.current.name ? { name: nextName } : {}),
+        ...(nextEmail !== sessionRef.current.email ? { email: nextEmail } : {}),
+        ...(newPassword ? { password: newPassword } : {}),
+      };
+      if (Object.keys(authUpdate).length) {
+        const result = await updateWorkspaceAccount(sessionRef.current, authUpdate, { onSessionRefresh: handleSessionRefresh });
+        const nextSession = {
+          ...sessionRef.current,
+          name: result.user.user_metadata?.name?.trim() || nextName || sessionRef.current.name,
+          email: result.user.email?.trim().toLowerCase() || sessionRef.current.email,
+        };
+        sessionRef.current = nextSession;
+        onSessionRefresh(nextSession);
+        setProfileDraft((current) => ({ ...current, name: nextSession.name, email: nextSession.email }));
+      }
+      setUserProfile((current) => ({ ...current, ...profileDraft, name: nextName, email: sessionRef.current.email }));
+      setNewPassword("");
+      setSettingsEdit(null);
+      setSettingsOpen(false);
+      setServerStatus("");
+    } catch (error) {
+      setServerStatus(`账号修改失败：${errorMessage(error)}`);
+    }
+  };
+
   const recentFiles = useMemo(() => [...files].sort((a, b) => b.openedAt - a.openedAt).slice(0, 6), [files]);
   const favoriteFiles = useMemo(() => files.filter((file) => file.favorite), [files]);
   const workspaceSearchResults = useMemo(
@@ -544,11 +601,20 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   };
 
   const permanentlyDeleteTrashEntries = (entryIds: Set<string>) => {
-    trash
+    const files = trash
       .filter((entry) => entryIds.has(entry.id))
       .flatMap((entry) => entry.nodes)
-      .filter(isWorkspaceFile)
-      .forEach((file) => documentStores.current.delete(file.id));
+      .filter(isWorkspaceFile);
+    files.forEach((file) => {
+      documentStores.current.delete(file.id);
+      documentRevisions.current.delete(file.id);
+    });
+    // Documents are their own rows now, so a purge has to reach the server; leaving them
+    // behind would keep the text and its images stored after the user asked to be rid of them.
+    if (serverAvailable) {
+      void Promise.all(files.map((file) => deleteWorkspaceDocument(sessionRef.current, file.id, { onSessionRefresh: handleSessionRefresh })))
+        .catch((error) => setServerStatus(`服务器删除文档失败：${errorMessage(error)}`));
+    }
     setTrash((current) => current.filter((entry) => !entryIds.has(entry.id)));
     setSelectedTrashIds(new Set());
   };
@@ -870,7 +936,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
           {!serverReady ? (
             <WorkspaceLoading label="正在加载服务器数据" />
           ) : activeDocumentStore && activeFile ? (
-            <App
+            <AppErrorBoundary scope="文档"><App
               key={activeFile.id}
               embedded
               store={activeDocumentStore}
@@ -883,7 +949,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                   ? documentFocusRequest
                   : null
               }
-            />
+            /></AppErrorBoundary>
           ) : (
             <div className="document-empty-state">暂无可打开的文档</div>
           )}
@@ -926,7 +992,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                     <div className="settings-rule"><span><strong>密码</strong><small>更改用于登录的密码</small></span><button type="button" onClick={() => setSettingsEdit((current) => current === "password" ? null : "password")}>修改密码</button></div>
                     {settingsEdit === "password" ? <label className="settings-inline-editor"><span>新密码</span><input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="输入新密码" autoFocus /></label> : null}
                   </section>
-                  <footer className="settings-actions"><button type="button" onClick={() => setSettingsOpen(false)}>取消</button><button type="button" className="settings-save" onClick={() => { setUserProfile(profileDraft); setSettingsOpen(false); }}>保存修改</button></footer>
+                  <footer className="settings-actions"><button type="button" onClick={() => setSettingsOpen(false)}>取消</button><button type="button" className="settings-save" onClick={() => void saveAccountSettings()}>保存修改</button></footer>
                 </div>
               ) : (
                 <div className="preferences-settings">
@@ -1024,12 +1090,6 @@ function getDocumentStore(stores: Map<string, TreeStore>, file: WorkspaceFile) {
   const store = new TreeStore(createWorkspaceDocument(file.title));
   stores.set(file.id, store);
   return store;
-}
-
-function snapshotDocumentStores(stores: Map<string, TreeStore>) {
-  return Object.fromEntries(
-    [...stores.entries()].map(([fileId, store]) => [fileId, store.getSnapshot()]),
-  );
 }
 
 function documentViewStorageKey(fileId: string) {

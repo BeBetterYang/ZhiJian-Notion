@@ -6,6 +6,7 @@ import {
   type WorkspaceSession,
 } from "./auth";
 import type { WorkspaceNode, WorkspaceTrashEntry } from "./workspaceData";
+import type { ImageAssetReference } from "../shared/imageAssetStore";
 
 export interface WorkspaceProfile {
   name: string;
@@ -18,6 +19,8 @@ export interface WorkspaceServerState {
   nodes?: WorkspaceNode[];
   trash?: WorkspaceTrashEntry[];
   documents?: Record<string, ZhiJianTree>;
+  documentRevisions?: Record<string, number>;
+  assets?: ImageAssetReference[];
 }
 
 export interface WorkspaceDocumentShare {
@@ -57,13 +60,46 @@ export async function saveWorkspaceState(session: WorkspaceSession, state: Works
   await readJsonResponse(response, "服务器未返回有效的工作区保存结果。");
 }
 
-export async function saveWorkspaceDocument(session: WorkspaceSession, fileId: string, tree: ZhiJianTree, options?: WorkspaceApiOptions) {
+export async function saveWorkspaceDocument(session: WorkspaceSession, fileId: string, tree: ZhiJianTree, revision: number, options?: WorkspaceApiOptions) {
   const response = await workspaceFetch(`/api/workspace/documents/${encodeURIComponent(fileId)}`, {
     method: "PUT",
-    body: JSON.stringify({ tree }),
+    body: JSON.stringify({ tree, revision }),
   }, session, options);
   if (!response.ok) throw new WorkspaceApiError(await readApiError(response, "无法保存文档到服务器。"), response.status);
-  await readJsonResponse(response, "服务器未返回有效的文档保存结果。");
+  return readJsonResponse(response, "服务器未返回有效的文档保存结果。") as Promise<{ ok: true; revision: number }>;
+}
+
+export async function deleteWorkspaceDocument(session: WorkspaceSession, fileId: string, options?: WorkspaceApiOptions) {
+  const response = await workspaceFetch(`/api/workspace/documents/${encodeURIComponent(fileId)}`, {
+    method: "DELETE",
+  }, session, options);
+  if (!response.ok) throw new WorkspaceApiError(await readApiError(response, "无法删除服务器上的文档。"), response.status);
+}
+
+export async function uploadWorkspaceImage(session: WorkspaceSession, file: File, options?: WorkspaceApiOptions): Promise<ImageAssetReference> {
+  const response = await workspaceFetch("/api/workspace/assets", {
+    method: "POST",
+    headers: { "Content-Type": file.type, "X-File-Name": encodeURIComponent(file.name) },
+    body: file,
+  }, session, options);
+  if (!response.ok) throw new WorkspaceApiError(await readApiError(response, "图片上传失败。"), response.status);
+  return readJsonResponse(response, "服务器返回的图片信息格式不正确。") as Promise<ImageAssetReference>;
+}
+
+export async function updateWorkspaceAccount(
+  session: WorkspaceSession,
+  update: { name?: string; email?: string; password?: string },
+  options?: WorkspaceApiOptions,
+) {
+  const response = await workspaceFetch("/api/auth/account", {
+    method: "PUT",
+    body: JSON.stringify(update),
+  }, session, options);
+  if (!response.ok) throw new WorkspaceApiError(await readApiError(response, "账号修改失败。"), response.status);
+  return readJsonResponse(response, "服务器返回的账号信息格式不正确。") as Promise<{
+    ok: true;
+    user: { email?: string; user_metadata?: { name?: string } };
+  }>;
 }
 
 export async function loadDocumentShare(session: WorkspaceSession, fileId: string, options?: WorkspaceApiOptions): Promise<WorkspaceDocumentShare> {
@@ -130,9 +166,14 @@ async function refreshSessionOrThrow(session: WorkspaceSession, options?: Worksp
 function authHeaders(session: WorkspaceSession, headers?: HeadersInit) {
   return {
     ...(headers instanceof Headers ? Object.fromEntries(headers.entries()) : Array.isArray(headers) ? Object.fromEntries(headers) : headers),
-    "Content-Type": "application/json",
+    ...(!hasContentType(headers) ? { "Content-Type": "application/json" } : null),
     Authorization: `Bearer ${session.accessToken}`,
   };
+}
+
+function hasContentType(headers?: HeadersInit) {
+  if (!headers) return false;
+  return new Headers(headers).has("Content-Type");
 }
 
 async function readApiError(response: Response, fallback: string) {
