@@ -8,19 +8,7 @@ import {
   type DefaultReactSuggestionItem,
 } from "@blocknote/react";
 import { insertNodeAttachmentBlocks } from "../shared/attachmentInsertion";
-
-const removedItems = new Set([
-  "heading_4",
-  "heading_5",
-  "heading_6",
-  "toggle_heading",
-  "toggle_heading_2",
-  "toggle_heading_3",
-  "toggle_list",
-  "numbered_list",
-  "bullet_list",
-  "divider",
-]);
+import { isSupportedSlashItemKey } from "./slashMenuItems";
 
 export function ZhiJianSlashMenu() {
   const editor = useBlockNoteEditor();
@@ -28,11 +16,10 @@ export function ZhiJianSlashMenu() {
   return (
     <SuggestionMenuController
       triggerCharacter="/"
-      portalElement={null}
       getItems={async (query) =>
         filterSuggestionItems(
           getDefaultReactSlashMenuItems(editor)
-            .filter((item) => !removedItems.has((item as typeof item & { key: string }).key))
+            .filter((item) => isSupportedSlashItemKey((item as typeof item & { key: string }).key))
             .map((item) => withAttachmentBodyGuard(editor, item)),
           query,
         )
