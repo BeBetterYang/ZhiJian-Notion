@@ -658,8 +658,6 @@ export default function App({
                   onViewportChange={updateMindMapViewport}
                   initialDirection={initialViewState?.mindMapDirection}
                   onDirectionChange={(mindMapDirection) => persistViewStatePatch({ mindMapDirection })}
-                  initialTheme={initialViewState?.mindMapTheme}
-                  onThemeChange={(mindMapTheme) => persistViewStatePatch({ mindMapTheme })}
                   onExportImageReady={(exportImage) => {
                     mindMapExportImageRef.current = exportImage;
                   }}
@@ -781,7 +779,6 @@ function loadDocumentViewState(key: string): DocumentViewState {
       outlineScrollTop: typeof value.outlineScrollTop === "number" ? value.outlineScrollTop : undefined,
       mindMapViewport: isMindMapViewportState(value.mindMapViewport) ? value.mindMapViewport : undefined,
       mindMapDirection: value.mindMapDirection === 0 || value.mindMapDirection === 1 || value.mindMapDirection === 2 ? value.mindMapDirection : undefined,
-      mindMapTheme: value.mindMapTheme === "zhijian" ? value.mindMapTheme : undefined,
     };
   } catch {
     return {};

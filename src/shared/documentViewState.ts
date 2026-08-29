@@ -9,5 +9,4 @@ export interface DocumentViewState {
   outlineScrollTop?: number;
   mindMapViewport?: MindMapViewportState;
   mindMapDirection?: 0 | 1 | 2;
-  mindMapTheme?: "zhijian";
 }

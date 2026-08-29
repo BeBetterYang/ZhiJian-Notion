@@ -6,6 +6,7 @@ import {
   type ZhiJianTree,
 } from "../core/tree";
 import { getMindMapNodeVisualStyle, renderMindMapNodeHtml, type MindMapNodeMetadata } from "./MindMapNodeRenderer";
+import { resolveMindMapTheme, type MindMapTheme } from "./mindMapTheme";
 
 export interface MindElixirProjectionOptions {
   visibleNodeIds?: Set<string> | null;
@@ -20,12 +21,14 @@ export interface MindElixirProjectionOptions {
 
 export function treeToMindElixir(tree: ZhiJianTree, options: MindElixirProjectionOptions = {}): MindElixirData {
   const rootId = options.rootNodeId && tree.nodes[options.rootNodeId] ? options.rootNodeId : tree.rootId;
-  const visit = (node: ZhiJianNode): NodeObj<MindMapNodeMetadata> => {
-    const visual = getMindMapNodeVisualStyle(node, node.id === rootId);
+  const theme = resolveMindMapTheme(tree.mindMap?.theme);
+  const visit = (node: ZhiJianNode, level = 0): NodeObj<MindMapNodeMetadata> => {
+    const branchColor = mindMapBranchColor(tree, node.id, theme);
+    const visual = getMindMapNodeVisualStyle(node, node.id === rootId, { theme, level, branchColor });
     const topic = node.type === "table" ? "表格" : richTextToPlainText(node.content) || " ";
     const children = node.children
       .filter((childId) => !options.visibleNodeIds || options.visibleNodeIds.has(childId))
-      .map((childId) => visit(tree.nodes[childId]));
+      .map((childId) => visit(tree.nodes[childId], level + 1));
     return {
       id: node.id,
       topic,
@@ -40,13 +43,20 @@ export function treeToMindElixir(tree: ZhiJianTree, options: MindElixirProjectio
         fontStyle: visual.fontStyle,
         textDecoration: visual.textDecoration,
       } as NodeObj["style"] & { fontStyle?: string },
-      dangerouslySetInnerHTML: renderMindMapNodeHtml(node, node.id === rootId, options.searchQuery),
+      branchColor,
+      dangerouslySetInnerHTML: renderMindMapNodeHtml(node, node.id === rootId, options.searchQuery, {
+        theme,
+        level,
+        branchColor,
+      }),
       metadata: {
         type: node.type,
         plainText: topic,
         checked: node.type === "todo" ? node.props?.checked ?? false : undefined,
         hasQuote: node.blocks?.some((block) => block.type === "quote") ?? false,
         imageCount: node.blocks?.filter((block) => block.type === "image").length ?? 0,
+        branchColor,
+        level,
       },
       children,
     };
@@ -66,9 +76,20 @@ export function treeToMindElixir(tree: ZhiJianTree, options: MindElixirProjectio
   return {
     nodeData,
     direction: MindElixir.RIGHT,
-    summaries: visibleSummaries(tree, rootId, options.visibleNodeIds),
-    arrows: visibleArrows(tree, rootId, options.visibleNodeIds),
+    summaries: visibleSummaries(tree, rootId, theme, options.visibleNodeIds),
+    arrows: visibleArrows(tree, rootId, theme, options.visibleNodeIds),
   };
+}
+
+export function mindMapBranchColor(tree: ZhiJianTree, nodeId: string, theme = resolveMindMapTheme(tree.mindMap?.theme)) {
+  if (nodeId === tree.rootId) return undefined;
+  let branch = tree.nodes[nodeId];
+  while (branch?.parentId && branch.parentId !== tree.rootId) {
+    branch = tree.nodes[branch.parentId];
+  }
+  if (!branch || branch.parentId !== tree.rootId) return undefined;
+  const index = tree.nodes[tree.rootId]?.children.indexOf(branch.id) ?? -1;
+  return index >= 0 ? theme.branchPalette[index % theme.branchPalette.length] : undefined;
 }
 
 /**
@@ -91,13 +112,25 @@ export function assignGroupedSideDirections(children: NodeObj[]) {
  * 进入当前主题 the parent may be outside the visible subtree, and a search filters
  * children out from under it, which would slide the indices onto other nodes.
  */
-function visibleSummaries(tree: ZhiJianTree, rootId: string, visibleNodeIds?: Set<string> | null) {
+function visibleSummaries(
+  tree: ZhiJianTree,
+  rootId: string,
+  theme: MindMapTheme,
+  visibleNodeIds?: Set<string> | null,
+) {
   return (tree.mindMap?.summaries ?? []).filter((summary) => {
     const parent = tree.nodes[summary.parent];
     if (!parent || !isInSubtree(tree, summary.parent, rootId)) return false;
     if (visibleNodeIds && parent.children.some((childId) => !visibleNodeIds.has(childId))) return false;
     return summary.end < parent.children.length;
-  });
+  }).map((summary) => ({
+    ...summary,
+    style: {
+      stroke: mindMapBranchColor(tree, summary.parent, theme) ?? theme.summary.stroke,
+      labelColor: theme.summary.labelColor,
+      ...summary.style,
+    },
+  }));
 }
 
 /**
@@ -108,12 +141,19 @@ function visibleSummaries(tree: ZhiJianTree, rootId: string, visibleNodeIds?: Se
  * on the canvas to draw from, so it has to be left out rather than drawn to a
  * stale position.
  */
-function visibleArrows(tree: ZhiJianTree, rootId: string, visibleNodeIds?: Set<string> | null) {
+function visibleArrows(tree: ZhiJianTree, rootId: string, theme: MindMapTheme, visibleNodeIds?: Set<string> | null) {
   const drawn = (nodeId: string) =>
     Boolean(tree.nodes[nodeId]) &&
     isInSubtree(tree, nodeId, rootId) &&
     (!visibleNodeIds || visibleNodeIds.has(nodeId) || nodeId === rootId);
-  return (tree.mindMap?.arrows ?? []).filter((arrow) => drawn(arrow.from) && drawn(arrow.to));
+  return (tree.mindMap?.arrows ?? []).filter((arrow) => drawn(arrow.from) && drawn(arrow.to)).map((arrow) => ({
+    ...arrow,
+    style: {
+      stroke: mindMapBranchColor(tree, arrow.from, theme) ?? theme.arrow.stroke,
+      labelColor: theme.arrow.labelColor,
+      ...arrow.style,
+    },
+  }));
 }
 
 function isInSubtree(tree: ZhiJianTree, nodeId: string, rootId: string) {

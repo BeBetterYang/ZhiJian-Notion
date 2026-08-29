@@ -10,6 +10,7 @@ import {
 } from "../core/tree";
 import { getCachedImageAssetUrl } from "../shared/imageAssetStore";
 import { CLOZE_CLASS } from "./mindMapCloze";
+import { resolveMindMapTheme, type MindMapTheme } from "./mindMapTheme";
 
 export interface MindMapNodeMetadata {
   type: ZhiJianNodeType;
@@ -17,6 +18,8 @@ export interface MindMapNodeMetadata {
   checked?: boolean;
   hasQuote?: boolean;
   imageCount?: number;
+  branchColor?: string;
+  level?: number;
 }
 
 export interface MindMapNodeVisualStyle {
@@ -27,6 +30,16 @@ export interface MindMapNodeVisualStyle {
   color?: string;
   background?: string;
   textDecoration?: string;
+  borderColor?: string;
+  borderRadius?: string;
+  accentColor?: string;
+  userColor?: string;
+}
+
+export interface MindMapNodeThemeContext {
+  theme?: MindMapTheme;
+  level?: number;
+  branchColor?: string;
 }
 
 const HEADING_FONT_SIZE = {
@@ -45,8 +58,15 @@ const ROOT_FONT_SIZE = "20px";
  * every following word slanted. Each run wears its own marks instead: the display
  * layer writes them per span below, and BlockNote writes them in the editor.
  */
-export function getMindMapNodeVisualStyle(node: ZhiJianNode, isRoot: boolean): MindMapNodeVisualStyle {
+export function getMindMapNodeVisualStyle(
+  node: ZhiJianNode,
+  isRoot: boolean,
+  context: MindMapNodeThemeContext = {},
+): MindMapNodeVisualStyle {
   const style = getNodeStyle(node.props?.style);
+  const userStyle = style as typeof style & { borderColor?: string; borderRadius?: string };
+  const theme = context.theme ?? resolveMindMapTheme();
+  const themed = isRoot ? theme.root : context.level === 1 ? theme.level1 : theme.child;
   const headingLevel = node.type === "heading" ? node.props?.headingLevel ?? 1 : undefined;
   const fontSize = isRoot ? ROOT_FONT_SIZE : headingLevel ? HEADING_FONT_SIZE[headingLevel] : BODY_FONT_SIZE;
 
@@ -61,15 +81,25 @@ export function getMindMapNodeVisualStyle(node: ZhiJianNode, isRoot: boolean): M
       ? "var(--zhijian-type-heading-weight)"
       : "var(--zhijian-type-body-weight)"),
     fontStyle: style.fontStyle,
-    color: style.color,
-    background: style.backgroundColor,
+    color: style.color ?? themed.text,
+    background: style.backgroundColor ?? themed.background,
     textDecoration: style.textDecorationLine || style.textDecoration,
+    borderColor: userStyle.borderColor ?? (isRoot ? themed.border : "transparent"),
+    borderRadius: userStyle.borderRadius ?? themed.radius,
+    accentColor: context.branchColor ?? theme.connector.color,
+    userColor: style.color,
   };
 }
 
-export function renderMindMapNodeHtml(node: ZhiJianNode, isRoot = false, searchQuery = "") {
+export function renderMindMapNodeHtml(
+  node: ZhiJianNode,
+  isRoot = false,
+  searchQuery = "",
+  context: MindMapNodeThemeContext = {},
+) {
   const id = escapeHtml(node.id);
-  return `<div class="mindmap-node-shell" data-node-id="${id}" style="${renderVisualVariables(getMindMapNodeVisualStyle(node, isRoot))}"><div class="mindmap-node-display">${renderMindMapNodeDisplayHtml(node, searchQuery)}</div><div class="mindmap-node-editor-slot" data-zhijian-node-content="${id}"></div></div>`;
+  const level = isRoot ? 0 : context.level ?? 2;
+  return `<div class="mindmap-node-shell" data-node-id="${id}" data-mindmap-level="${level}" style="${renderVisualVariables(getMindMapNodeVisualStyle(node, isRoot, context))}"><div class="mindmap-node-display">${renderMindMapNodeDisplayHtml(node, searchQuery)}</div><div class="mindmap-node-editor-slot" data-zhijian-node-content="${id}"></div></div>`;
 }
 
 export function renderMindMapNodeDisplayHtml(node: ZhiJianNode, searchQuery = "") {
@@ -112,6 +142,10 @@ export function applyMindMapVisualVariables(element: HTMLElement, style: MindMap
   setOptionalVariable(element, "--mindmap-color", style.color);
   setOptionalVariable(element, "--mindmap-background", style.background);
   setOptionalVariable(element, "--mindmap-text-decoration", style.textDecoration);
+  setOptionalVariable(element, "--mindmap-border-color", style.borderColor);
+  setOptionalVariable(element, "--mindmap-border-radius", style.borderRadius);
+  setOptionalVariable(element, "--mindmap-accent-color", style.accentColor);
+  setOptionalVariable(element, "--mindmap-user-color", style.userColor);
 }
 
 function renderTableHtml(node: ZhiJianNode) {
@@ -231,6 +265,10 @@ function renderVisualVariables(style: MindMapNodeVisualStyle) {
     style.color ? `--mindmap-color:${escapeHtml(style.color)}` : "",
     style.background ? `--mindmap-background:${escapeHtml(style.background)}` : "",
     style.textDecoration ? `--mindmap-text-decoration:${escapeHtml(style.textDecoration)}` : "",
+    style.borderColor ? `--mindmap-border-color:${escapeHtml(style.borderColor)}` : "",
+    style.borderRadius ? `--mindmap-border-radius:${escapeHtml(style.borderRadius)}` : "",
+    style.accentColor ? `--mindmap-accent-color:${escapeHtml(style.accentColor)}` : "",
+    style.userColor ? `--mindmap-user-color:${escapeHtml(style.userColor)}` : "",
   ].filter(Boolean).join(";");
 }
 

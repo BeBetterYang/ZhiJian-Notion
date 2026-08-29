@@ -274,7 +274,17 @@ export class TreeStore {
     this.commit((draft) => {
       const summaries = (decorations.summaries ?? []).filter((summary) => draft.nodes[summary.parent]);
       const arrows = (decorations.arrows ?? []).filter((arrow) => draft.nodes[arrow.from] && draft.nodes[arrow.to]);
-      draft.mindMap = summaries.length || arrows.length ? { summaries, arrows } : undefined;
+      const theme = draft.mindMap?.theme;
+      draft.mindMap = summaries.length || arrows.length || theme ? { summaries, arrows, theme } : undefined;
+    });
+  }
+
+  setMindMapTheme(theme: NonNullable<ZhiJianMindMapDecorations["theme"]>) {
+    this.commit((draft) => {
+      draft.mindMap = {
+        ...draft.mindMap,
+        theme: { ...theme },
+      };
     });
   }
 

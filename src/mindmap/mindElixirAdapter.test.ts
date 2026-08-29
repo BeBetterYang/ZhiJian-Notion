@@ -32,6 +32,21 @@ describe("mindElixirAdapter", () => {
     expect(children[0].dangerouslySetInnerHTML).toContain("asset:1");
   });
 
+  it("gives a first-level branch and every descendant the same palette colour", () => {
+    const tree = createInitialTree();
+    tree.nodes.web.children = ["web-child"];
+    tree.nodes["web-child"] = { id: "web-child", parentId: "web", children: [], type: "text", content: { text: "子节点" } };
+    const projected = treeToMindElixir(tree).nodeData.children as NodeObj[];
+    const web = projected[0];
+    const app = projected[1];
+    const child = web.children?.[0];
+
+    expect(web.branchColor).toBe("#4f78a7");
+    expect(child?.branchColor).toBe(web.branchColor);
+    expect(app.branchColor).toBe("#5f8b6d");
+    expect(app.branchColor).not.toBe(web.branchColor);
+  });
+
   it("keeps tables as their own visual node", () => {
     const tree = createInitialTree();
     tree.nodes.web.type = "table";

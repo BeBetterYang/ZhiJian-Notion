@@ -114,6 +114,10 @@ export interface ZhiJianMindMapArrow {
 export interface ZhiJianMindMapDecorations {
   summaries?: ZhiJianMindMapSummary[];
   arrows?: ZhiJianMindMapArrow[];
+  theme?: {
+    id: string;
+    version: number;
+  };
 }
 
 export interface ZhiJianTree {

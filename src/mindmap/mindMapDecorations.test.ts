@@ -56,6 +56,14 @@ describe("mind map decorations on the tree", () => {
     expect(store.getSnapshot().mindMap?.arrows).toEqual([arrow]);
   });
 
+  it("updates live annotations without erasing the document theme", () => {
+    const store = new TreeStore(createInitialTree());
+    store.setMindMapTheme({ id: "ocean", version: 1 });
+    store.setMindMapDecorations({ summaries: [summary], arrows: [arrow] });
+
+    expect(store.getSnapshot().mindMap?.theme).toEqual({ id: "ocean", version: 1 });
+  });
+
   it("drops annotations whose nodes the outline deleted while the map was away", () => {
     const store = new TreeStore(createInitialTree());
     store.setMindMapDecorations({ summaries: [summary], arrows: [arrow] });
@@ -67,8 +75,8 @@ describe("mind map decorations on the tree", () => {
 
   it("hands them to mind-elixir with the data, which is what re-renders them", () => {
     const data = treeToMindElixir(treeWithDecorations());
-    expect(data.summaries).toEqual([summary]);
-    expect(data.arrows).toEqual([arrow]);
+    expect(data.summaries).toEqual([{ ...summary, style: { stroke: "#697386", labelColor: "#535c6d" } }]);
+    expect(data.arrows).toEqual([{ ...arrow, style: { stroke: "#4f78a7", labelColor: "#535c6d" } }]);
   });
 
   it("leaves out a summary whose child range no longer exists", () => {

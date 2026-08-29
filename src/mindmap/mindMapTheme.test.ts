@@ -1,7 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { mindMapMainBranchPath, mindMapSubBranchPath } from "./mindMapTheme";
+import {
+  createMindElixirTheme,
+  MIND_MAP_THEME_PRESETS,
+  mindMapMainBranchPath,
+  mindMapSubBranchPath,
+  resolveMindMapTheme,
+} from "./mindMapTheme";
 
 const NODE_GAP_X = 30;
+
+describe("mind map theme presets", () => {
+  it("falls back to 枝间 when a document has no known theme", () => {
+    expect(resolveMindMapTheme().id).toBe("zhijian");
+    expect(resolveMindMapTheme({ id: "missing", version: 1 }).id).toBe("zhijian");
+  });
+
+  it("keeps every preset visual-only by sharing identical geometry variables", () => {
+    const geometryKeys = ["--topic-padding", "--node-gap-y", "--main-gap-y"] as const;
+    const values = MIND_MAP_THEME_PRESETS.map((preset) => {
+      const css = createMindElixirTheme(preset).cssVar;
+      return geometryKeys.map((key) => css?.[key]);
+    });
+
+    expect(new Set(values.map((value) => JSON.stringify(value))).size).toBe(1);
+  });
+});
 
 /** Where the line leaves the parent. */
 function start(path: string) {

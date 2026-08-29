@@ -69,12 +69,12 @@ describe("mind map display/editor typography", () => {
     expect(rule!.body).toContain("font-family: var(--zhijian-font-family) !important");
   });
 
-  it("hands the document ink to BlockNote as its own token", () => {
+  it("hands the themed node ink to BlockNote as its own token", () => {
     // Not as a `color` declaration: BlockNote paints from this variable on its own
     // elements, and a declaration strong enough to beat it would also beat the
     // checked-todo colour below.
     expect(declarationsFor(".mindmap-node-editor .bn-container")).toContain(
-      "--bn-colors-editor-text: var(--zhijian-ink)",
+      "--bn-colors-editor-text: var(--mindmap-color, var(--zhijian-ink))",
     );
   });
 
@@ -84,7 +84,7 @@ describe("mind map display/editor typography", () => {
       '.mindmap-node-editor .bn-block-content[data-content-type="checkListItem"][data-checked="true"] .bn-inline-content',
     ]) {
       const declarations = declarationsFor(selector);
-      expect(declarations, selector).toContain("color: #73808a");
+      expect(declarations, selector).toContain("color: var(--mindmap-user-color, #73808a)");
       expect(declarations, selector).toContain("text-decoration: line-through");
     }
   });

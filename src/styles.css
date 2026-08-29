@@ -1703,11 +1703,19 @@ textarea {
 .mindmap-node-shell {
   color: var(--mindmap-color, var(--zhijian-ink));
   background: var(--mindmap-background, transparent);
+  border-radius: var(--mindmap-border-radius, 0);
+  box-shadow: inset 0 0 0 1px var(--mindmap-border-color, transparent);
   font-size: var(--mindmap-font-size, 16px);
   font-style: var(--mindmap-font-style, normal);
   font-weight: var(--mindmap-font-weight, 400);
   line-height: var(--mindmap-line-height, 1.5);
   text-decoration: var(--mindmap-text-decoration, none);
+}
+
+.mindmap-node-shell[data-mindmap-level="1"] {
+  box-shadow:
+    inset 0 0 0 1px var(--mindmap-border-color, transparent),
+    inset 0 -2px 0 var(--mindmap-accent-color, transparent);
 }
 
 .mindmap-node-editor-slot,
@@ -1883,7 +1891,7 @@ textarea {
   justify-content: center;
   padding: 0 5px;
   border-radius: 9px;
-  background-color: #b6bcc4;
+  background-color: var(--mindmap-branch-color, #b6bcc4);
   background-image: none !important;
   color: #ffffff;
   font-size: 11px;
@@ -1987,7 +1995,7 @@ textarea {
    still overrides it. Mirrors what `.outline-panel .bn-container` does. */
 .mindmap-node-editor,
 .mindmap-node-editor .bn-container {
-  --bn-colors-editor-text: var(--zhijian-ink);
+  --bn-colors-editor-text: var(--mindmap-color, var(--zhijian-ink));
 }
 
 /* A node holds one line box even with no text, so a freshly created node — or one
@@ -2039,8 +2047,8 @@ textarea {
 
 .mindmap-node-checkbox:checked,
 .mindmap-node-editor .bn-block-content[data-content-type="checkListItem"] > div > input:checked {
-  border-color: #2383e2;
-  background-color: #2383e2;
+  border-color: var(--selected, #2383e2);
+  background-color: var(--selected, #2383e2);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.4 6.2 4.8 8.5 9.7 3.6' fill='none' stroke='white' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-position: center;
   background-repeat: no-repeat;
@@ -2048,7 +2056,7 @@ textarea {
 }
 
 .mindmap-node-todo.is-checked .mindmap-node-rich-text {
-  color: #73808a;
+  color: var(--mindmap-user-color, #73808a);
   text-decoration: line-through;
 }
 
@@ -2061,7 +2069,7 @@ textarea {
 .mindmap-node-editor
   .bn-block-content[data-content-type="checkListItem"][data-checked="true"]
   .bn-inline-content {
-  color: #73808a;
+  color: var(--mindmap-user-color, #73808a);
   text-decoration: line-through;
 }
 
@@ -2100,8 +2108,8 @@ textarea {
   cursor: pointer;
 }
 
-.mind-elixir-toolbar.lt > span {
-  display: none;
+.mind-elixir-toolbar.lt > :not(.mindmap-style-menu-wrap) {
+  display: none !important;
 }
 
 .mindmap-style-menu-wrap,
@@ -2178,6 +2186,137 @@ textarea {
   width: 15px;
   height: 15px;
   flex: none;
+}
+
+.mindmap-theme-panel {
+  width: 304px;
+  padding: 10px;
+}
+
+.mindmap-theme-panel-title {
+  padding: 0 2px 8px;
+  color: #787774;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mindmap-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.mindmap-style-menu .mindmap-theme-grid button {
+  position: relative;
+  display: grid;
+  height: auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 5px;
+  white-space: normal;
+}
+
+.mindmap-theme-grid button > span:nth-last-of-type(1) {
+  padding: 6px 3px 2px;
+  justify-self: start;
+  line-height: 18px;
+}
+
+.mindmap-theme-grid button > svg {
+  align-self: end;
+  margin: 0 3px 3px 0;
+  color: #2383e2;
+}
+
+.mindmap-theme-preview {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 58px;
+  grid-column: 1 / -1;
+  overflow: hidden;
+  border: 1px solid rgba(55, 53, 47, 0.1);
+  border-radius: 4px;
+  background: var(--preview-canvas);
+}
+
+.mindmap-theme-preview-root,
+.mindmap-theme-preview-node,
+.mindmap-theme-preview-child {
+  position: absolute;
+  display: block;
+  height: 6px;
+  border-radius: 2px;
+}
+
+.mindmap-theme-preview-root {
+  top: 24px;
+  left: 10px;
+  width: 23px;
+  height: 10px;
+  background: var(--preview-root);
+  box-shadow: inset 0 0 0 1px var(--preview-root);
+}
+
+.mindmap-theme-preview-root::after {
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  width: 13px;
+  height: 2px;
+  background: var(--preview-root-text);
+  content: "";
+}
+
+.mindmap-theme-preview-line {
+  position: absolute;
+  left: 33px;
+  width: 34px;
+  height: 16px;
+  border-left: 1px solid;
+  border-bottom: 1px solid;
+}
+
+.mindmap-theme-preview-line.is-one {
+  top: 13px;
+  border-color: var(--preview-branch-1);
+}
+
+.mindmap-theme-preview-line.is-two {
+  top: 29px;
+  border-color: var(--preview-branch-2);
+  transform: scaleY(-1);
+  transform-origin: center;
+}
+
+.mindmap-theme-preview-node {
+  left: 67px;
+  width: 29px;
+  background: var(--preview-text);
+}
+
+.mindmap-theme-preview-node.is-one {
+  top: 12px;
+  box-shadow: 0 2px 0 var(--preview-branch-1);
+}
+
+.mindmap-theme-preview-node.is-two {
+  top: 40px;
+  box-shadow: 0 2px 0 var(--preview-branch-2);
+}
+
+.mindmap-theme-preview-child {
+  left: 105px;
+  width: 21px;
+  background: var(--preview-text);
+  opacity: 0.58;
+}
+
+.mindmap-theme-preview-child.is-one {
+  top: 12px;
+}
+
+.mindmap-theme-preview-child.is-two {
+  top: 40px;
 }
 
 .mindmap-style-submenu {

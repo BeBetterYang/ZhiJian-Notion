@@ -868,6 +868,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
             {accountOpen ? (
               <div className="account-menu">
                 <div className="account-summary"><strong>{userProfile.name}</strong><span>{userProfile.email}</span></div>
+                <button type="button" onClick={() => { setAccountOpen(false); importInputRef.current?.click(); }}><FiUpload />导入文档</button>
                 <button type="button" onClick={() => openSettings()}><FiSettings />设置</button>
                 <button type="button" onClick={() => { setTrashOpen(true); setSelectedTrashIds(new Set()); setAccountOpen(false); }}><FiTrash2 />回收站</button>
                 <button type="button" onClick={onLogout}><FiLogOut />退出登录</button>
@@ -982,7 +983,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         <div className="sidebar-bottom-action">
           <div className="create-wrap">
             <button type="button" className="sidebar-new-button" aria-expanded={createMenuOpen} onClick={() => setCreateMenuOpen((open) => !open)}><FiPlus /><span>新增</span></button>
-            {createMenuOpen ? <div className="create-menu"><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file")}><FiFilePlus />新增文档</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("folder")}><FiFolderPlus />新增文件夹</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => importInputRef.current?.click()}><FiUpload />导入文档</button></div> : null}
+            {createMenuOpen ? <div className="create-menu"><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file")}><FiFilePlus />新增文档</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("folder")}><FiFolderPlus />新增文件夹</button></div> : null}
           </div>
           <input
             ref={importInputRef}

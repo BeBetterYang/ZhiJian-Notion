@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RichTextSpan, ZhiJianNode } from "../core/tree";
 import { getMindMapNodeVisualStyle, renderMindMapNodeDisplayHtml } from "./MindMapNodeRenderer";
+import { resolveMindMapTheme } from "./mindMapTheme";
 
 function tableNode(cells: ZhiJianNode["props"]): ZhiJianNode {
   return {
@@ -94,7 +95,7 @@ describe("marks belong to the run they were applied to", () => {
 
     expect(style.fontWeight).toBe("var(--zhijian-type-body-weight)");
     expect(style.fontStyle).toBeUndefined();
-    expect(style.color).toBeUndefined();
+    expect(style.color).toBe(resolveMindMapTheme().child.text);
   });
 
   it("hands a palette colour back to BlockNote by name, so the map matches the outline", () => {
@@ -108,5 +109,21 @@ describe("marks belong to the run they were applied to", () => {
     expect(html).toContain('<span data-text-color="blue">蓝字</span>');
     // Not one of BlockNote's names, so it can only be a plain CSS colour.
     expect(html).toContain('<span style="color:#123456">自定义</span>');
+  });
+});
+
+describe("theme style priority", () => {
+  it("keeps a user's node colours above the theme", () => {
+    const node = textNode([{ text: "自定义" }]);
+    node.props = { style: { color: "#123456", backgroundColor: "#fedcba" } };
+    const style = getMindMapNodeVisualStyle(node, false, {
+      theme: resolveMindMapTheme({ id: "ocean", version: 1 }),
+      level: 1,
+      branchColor: "#337da5",
+    });
+
+    expect(style.color).toBe("#123456");
+    expect(style.background).toBe("#fedcba");
+    expect(style.accentColor).toBe("#337da5");
   });
 });

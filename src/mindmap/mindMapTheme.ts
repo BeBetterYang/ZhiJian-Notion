@@ -9,71 +9,199 @@ import type { MainLineParams, SubLineParams, Theme } from "mind-elixir";
  * pills through `--root-*`/`--main-*` and the flattening rules in `styles.css`.
  */
 
-/** Line ink. A one-colour palette gives every branch the same stroke. */
-const BRANCH_COLOR = "#4d5666";
-/**
- * Node ink and canvas. Both are the app-wide tokens from `styles.css`, which the
- * outline reads too — the map and the outline show one document, so a node cannot
- * change colour by being looked at in the other view. mind-elixir applies every
- * `cssVar` entry with `setProperty` on the container, so a `var()` here resolves
- * exactly as it would in a stylesheet; `palette` above is written into an SVG
- * `stroke` attribute instead and has to stay a literal colour.
- *
- * The canvas doubles as every node's own background: a node being edited floats
- * above the map, so an opaque box is what keeps the text being typed legible over
- * whatever it covers. See the `me-tpc` background rule in `styles.css` for the
- * levels mind-elixir does not colour from a variable.
- */
-const NODE_INK = "var(--zhijian-ink)";
-const CANVAS_COLOR = "var(--zhijian-canvas)";
 /** Distance from a node's near edge to the vertical leg, where there is room. */
 const TRUNK_GAP = 30;
 
-export const MINDMAP_THEME: Theme = {
-  name: "zhijian",
-  type: "light",
-  palette: [BRANCH_COLOR],
-  cssVar: {
-    "--bgcolor": CANVAS_COLOR,
-    "--color": NODE_INK,
-    // The root is the one node that keeps a frame: a rounded outline in the branch
-    // ink, no fill of its own. mind-elixir reads this as `border: var(
-    // --root-border-color) 2px solid`, so the colour is all there is to set — the
-    // rounding comes from `--root-radius` and the box from its own padding.
-    "--root-color": NODE_INK,
-    "--root-bgcolor": CANVAS_COLOR,
-    "--root-border-color": BRANCH_COLOR,
-    "--root-radius": "10px",
-    "--main-color": NODE_INK,
-    "--main-bgcolor": CANVAS_COLOR,
-    // Read as `border: var(--main-border, 2px solid var(--main-color))`, so this
-    // is the only way to take the first level's frame away.
-    "--main-border": "0",
-    "--main-radius": "6px",
-    // Wider than it is tall, and the width is deliberately double mind-elixir's
-    // own 3px: a node's text needs air between it and where its box ends, and the
-    // box is what a connector arrives at and what a selection outlines. Rows stay
-    // as tight as they were, so the map's vertical rhythm is untouched. The root
-    // is not affected — mind-elixir pads it from its own rule.
-    "--topic-padding": "3px 6px",
-    // The row rhythm, taken from the reference map: siblings sit a little over
-    // 2.6× their font size apart, and two first-level branches about 1.3× that
-    // again — enough to read as separate branches without leaving the map airy.
-    // Half of this lands above a row and half below (see the `me-parent` rule in
-    // `styles.css`), and `me-parent`'s own vertical padding is trimmed there to
-    // the 2px that makes the sum come out at the reference's pitch.
-    "--node-gap-y": "6px",
-    "--main-gap-y": "12px",
-    "--selected": "#2383e2",
-    "--panel-color": NODE_INK,
-    "--panel-bgcolor": CANVAS_COLOR,
-    "--panel-border-color": "#e5e7eb",
+export interface MindMapThemeNodeStyle {
+  background: string;
+  text: string;
+  border: string;
+  radius: string;
+}
+
+export interface MindMapTheme {
+  id: string;
+  version: number;
+  name: string;
+  type: "light" | "dark";
+  canvas: { background: string };
+  root: MindMapThemeNodeStyle;
+  branchPalette: string[];
+  level1: MindMapThemeNodeStyle;
+  child: MindMapThemeNodeStyle;
+  connector: { color: string };
+  summary: { stroke: string; labelColor: string };
+  arrow: { stroke: string; labelColor: string };
+  selection: { color: string };
+}
+
+const nodeStyle = (background: string, text: string, border: string, radius = "6px"): MindMapThemeNodeStyle => ({
+  background,
+  text,
+  border,
+  radius,
+});
+
+export const DEFAULT_MIND_MAP_THEME_ID = "zhijian";
+
+export const MIND_MAP_THEME_PRESETS: readonly MindMapTheme[] = [
+  {
+    id: "zhijian",
+    version: 1,
+    name: "枝间",
+    type: "light",
+    canvas: { background: "#ffffff" },
+    root: nodeStyle("#37352f", "#ffffff", "#37352f", "10px"),
+    branchPalette: ["#4f78a7", "#5f8b6d", "#a8793c", "#a15f6c", "#70669a", "#4f8587"],
+    level1: nodeStyle("transparent", "#252525", "transparent"),
+    child: nodeStyle("transparent", "#37352f", "transparent"),
+    connector: { color: "#4d5666" },
+    summary: { stroke: "#697386", labelColor: "#535c6d" },
+    arrow: { stroke: "#697386", labelColor: "#535c6d" },
+    selection: { color: "#2383e2" },
   },
-  generateMainBranch: mindMapMainBranchPath,
-  generateSubBranch(params) {
-    return mindMapSubBranchPath(params, mindMapNodeGapX(this.container));
+  {
+    id: "minimal",
+    version: 1,
+    name: "极简",
+    type: "light",
+    canvas: { background: "#ffffff" },
+    root: nodeStyle("#ffffff", "#202124", "#202124", "4px"),
+    branchPalette: ["#34373b", "#60646c", "#81858c", "#4b4f54"],
+    level1: nodeStyle("transparent", "#202124", "transparent", "3px"),
+    child: nodeStyle("transparent", "#34373b", "transparent", "3px"),
+    connector: { color: "#777b82" },
+    summary: { stroke: "#777b82", labelColor: "#4b4f54" },
+    arrow: { stroke: "#777b82", labelColor: "#4b4f54" },
+    selection: { color: "#37352f" },
   },
-};
+  {
+    id: "rainbow",
+    version: 1,
+    name: "彩虹",
+    type: "light",
+    canvas: { background: "#fffefe" },
+    root: nodeStyle("#5b50c7", "#ffffff", "#5b50c7", "10px"),
+    branchPalette: ["#e45858", "#e89135", "#d3ad2f", "#4f9b69", "#3b8dc4", "#7266cf", "#b55da0"],
+    level1: nodeStyle("transparent", "#29272e", "transparent"),
+    child: nodeStyle("transparent", "#37343c", "transparent"),
+    connector: { color: "#77717e" },
+    summary: { stroke: "#7266cf", labelColor: "#5b50c7" },
+    arrow: { stroke: "#e45858", labelColor: "#b14444" },
+    selection: { color: "#6257dc" },
+  },
+  {
+    id: "forest",
+    version: 1,
+    name: "森林",
+    type: "light",
+    canvas: { background: "#f7faf7" },
+    root: nodeStyle("#315f48", "#ffffff", "#315f48", "10px"),
+    branchPalette: ["#48765c", "#6f8d57", "#8a7850", "#477876", "#7a6960"],
+    level1: nodeStyle("transparent", "#244837", "transparent"),
+    child: nodeStyle("transparent", "#34483d", "transparent"),
+    connector: { color: "#607a69" },
+    summary: { stroke: "#48765c", labelColor: "#315f48" },
+    arrow: { stroke: "#8a7850", labelColor: "#6c5b3d" },
+    selection: { color: "#2f8f62" },
+  },
+  {
+    id: "ocean",
+    version: 1,
+    name: "海洋",
+    type: "light",
+    canvas: { background: "#f6fafc" },
+    root: nodeStyle("#245f83", "#ffffff", "#245f83", "10px"),
+    branchPalette: ["#337da5", "#418c9b", "#526fa7", "#4f91c2", "#637ca1"],
+    level1: nodeStyle("transparent", "#224b65", "transparent"),
+    child: nodeStyle("transparent", "#314a59", "transparent"),
+    connector: { color: "#52788e" },
+    summary: { stroke: "#337da5", labelColor: "#245f83" },
+    arrow: { stroke: "#526fa7", labelColor: "#415985" },
+    selection: { color: "#1683c6" },
+  },
+  {
+    id: "sunny",
+    version: 1,
+    name: "暖阳",
+    type: "light",
+    canvas: { background: "#fffaf4" },
+    root: nodeStyle("#b86b38", "#ffffff", "#b86b38", "10px"),
+    branchPalette: ["#c77a3d", "#d39a45", "#b86155", "#b2884e", "#9e6d4c"],
+    level1: nodeStyle("transparent", "#704224", "transparent"),
+    child: nodeStyle("transparent", "#59483d", "transparent"),
+    connector: { color: "#a77b5e" },
+    summary: { stroke: "#c77a3d", labelColor: "#9a552d" },
+    arrow: { stroke: "#b86155", labelColor: "#91473f" },
+    selection: { color: "#d47732" },
+  },
+  {
+    id: "morandi",
+    version: 1,
+    name: "莫兰迪",
+    type: "light",
+    canvas: { background: "#f8f7f5" },
+    root: nodeStyle("#6f7475", "#ffffff", "#6f7475", "10px"),
+    branchPalette: ["#81939a", "#8d9a83", "#a38e86", "#938aa0", "#9d947d", "#7f9692"],
+    level1: nodeStyle("transparent", "#4f5557", "transparent"),
+    child: nodeStyle("transparent", "#5c5d5c", "transparent"),
+    connector: { color: "#858b8c" },
+    summary: { stroke: "#81939a", labelColor: "#68777c" },
+    arrow: { stroke: "#a38e86", labelColor: "#826f69" },
+    selection: { color: "#697f8a" },
+  },
+  {
+    id: "dark",
+    version: 1,
+    name: "深色",
+    type: "dark",
+    canvas: { background: "#202124" },
+    root: nodeStyle("#e8eaed", "#202124", "#e8eaed", "10px"),
+    branchPalette: ["#7da6d8", "#78ad88", "#d2a563", "#ca8491", "#9b90cd", "#71aeb0"],
+    level1: nodeStyle("transparent", "#f1f3f4", "transparent"),
+    child: nodeStyle("transparent", "#d7d9dc", "transparent"),
+    connector: { color: "#9aa0a6" },
+    summary: { stroke: "#aeb4ba", labelColor: "#e2e4e7" },
+    arrow: { stroke: "#ca8491", labelColor: "#e0a3ae" },
+    selection: { color: "#8ab4f8" },
+  },
+] as const;
+
+export function resolveMindMapTheme(theme?: { id: string; version: number } | null): MindMapTheme {
+  return MIND_MAP_THEME_PRESETS.find((preset) => preset.id === theme?.id) ?? MIND_MAP_THEME_PRESETS[0];
+}
+
+export function createMindElixirTheme(theme: MindMapTheme): Theme {
+  return {
+    name: theme.id,
+    type: theme.type,
+    palette: [...theme.branchPalette],
+    cssVar: {
+      "--bgcolor": theme.canvas.background,
+      "--color": theme.child.text,
+      "--root-color": theme.root.text,
+      "--root-bgcolor": theme.root.background,
+      "--root-border-color": theme.root.border,
+      "--root-radius": theme.root.radius,
+      "--main-color": theme.level1.text,
+      "--main-bgcolor": theme.canvas.background,
+      "--main-border": "0",
+      "--main-radius": theme.level1.radius,
+      "--topic-padding": "3px 6px",
+      "--node-gap-y": "6px",
+      "--main-gap-y": "12px",
+      "--selected": theme.selection.color,
+      "--accent-color": theme.selection.color,
+      "--panel-color": theme.child.text,
+      "--panel-bgcolor": theme.canvas.background,
+      "--panel-border-color": theme.child.border === "transparent" ? theme.connector.color : theme.child.border,
+    },
+    generateMainBranch: mindMapMainBranchPath,
+    generateSubBranch(params) {
+      return mindMapSubBranchPath(params, mindMapNodeGapX(this.container));
+    },
+  };
+}
 
 /** The column gap mind-elixir is currently laying out with. */
 export function mindMapNodeGapX(container: HTMLElement) {

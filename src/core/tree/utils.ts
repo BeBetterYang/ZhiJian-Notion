@@ -13,6 +13,7 @@ export function cloneTree(tree: ZhiJianTree): ZhiJianTree {
 
 function cloneMindMapDecorations(decorations: ZhiJianMindMapDecorations): ZhiJianMindMapDecorations {
   return {
+    theme: decorations.theme ? { ...decorations.theme } : undefined,
     summaries: decorations.summaries?.map((summary) => ({
       ...summary,
       style: summary.style ? { ...summary.style } : undefined,

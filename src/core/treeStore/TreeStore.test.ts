@@ -9,6 +9,15 @@ describe("TreeStore", () => {
     expect(tree.nodes[tree.rootId].children).toEqual(["web", "app"]);
   });
 
+  it("persists only the selected mind-map theme without changing document nodes", () => {
+    const store = new TreeStore(createInitialTree());
+    const nodesBefore = JSON.stringify(store.getSnapshot().nodes);
+    store.setMindMapTheme({ id: "forest", version: 1 });
+
+    expect(store.getSnapshot().mindMap?.theme).toEqual({ id: "forest", version: 1 });
+    expect(JSON.stringify(store.getSnapshot().nodes)).toBe(nodesBefore);
+  });
+
   it("updates content, description and undo/redo", () => {
     const store = new TreeStore(createInitialTree());
     store.updateContent("web", "Web 编辑器");
