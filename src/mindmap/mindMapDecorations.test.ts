@@ -75,8 +75,8 @@ describe("mind map decorations on the tree", () => {
 
   it("hands them to mind-elixir with the data, which is what re-renders them", () => {
     const data = treeToMindElixir(treeWithDecorations());
-    expect(data.summaries).toEqual([{ ...summary, style: { stroke: "#697386", labelColor: "#535c6d" } }]);
-    expect(data.arrows).toEqual([{ ...arrow, style: { stroke: "#4f78a7", labelColor: "#535c6d" } }]);
+    expect(data.summaries).toEqual([{ ...summary, style: { stroke: "#8e9093", labelColor: "#555658" } }]);
+    expect(data.arrows).toEqual([{ ...arrow, style: { stroke: "#b8babd", labelColor: "#555658" } }]);
   });
 
   it("leaves out a summary whose child range no longer exists", () => {

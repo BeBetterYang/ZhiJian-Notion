@@ -1704,18 +1704,11 @@ textarea {
   color: var(--mindmap-color, var(--zhijian-ink));
   background: var(--mindmap-background, transparent);
   border-radius: var(--mindmap-border-radius, 0);
-  box-shadow: inset 0 0 0 1px var(--mindmap-border-color, transparent);
   font-size: var(--mindmap-font-size, 16px);
   font-style: var(--mindmap-font-style, normal);
   font-weight: var(--mindmap-font-weight, 400);
   line-height: var(--mindmap-line-height, 1.5);
   text-decoration: var(--mindmap-text-decoration, none);
-}
-
-.mindmap-node-shell[data-mindmap-level="1"] {
-  box-shadow:
-    inset 0 0 0 1px var(--mindmap-border-color, transparent),
-    inset 0 -2px 0 var(--mindmap-accent-color, transparent);
 }
 
 .mindmap-node-editor-slot,
@@ -1822,7 +1815,7 @@ textarea {
    attribute. The colour is left to the theme's one-entry palette. */
 .map-container .lines path,
 .map-container .subLines path {
-  stroke-width: 1.6;
+  stroke-width: 2;
 }
 
 /* mind-elixir stacks nodes with a top margin alone, and an inline-block is centred
@@ -1851,6 +1844,129 @@ textarea {
 .map-container me-nodes me-main > me-wrapper > me-parent {
   margin-top: calc(var(--node-gap-y) / 2 + var(--mindmap-row-pad-y));
   margin-bottom: calc(var(--node-gap-y) / 2 + var(--mindmap-row-pad-y));
+}
+
+/* MindElixir owns the actual node geometry for all five structures. These rules
+   only change its flex axes: offsetTop/offsetLeft therefore remain the source of
+   truth for connectors, dragging, editing frames and hit testing. */
+.mindmap-layout-org-chart.mindmap-layout-direction-up .map-container me-nodes.down {
+  flex-direction: column-reverse;
+}
+
+.mindmap-layout-org-chart.mindmap-layout-direction-up .map-container me-nodes.down me-wrapper {
+  flex-direction: column-reverse;
+}
+
+.mindmap-layout-org-chart.mindmap-layout-direction-up .map-container me-nodes.down me-children {
+  margin-top: 0;
+  margin-bottom: var(--node-gap-x);
+}
+
+.mindmap-layout-org-chart.mindmap-layout-direction-up .map-container me-nodes.down me-parent > me-epd,
+.mindmap-layout-org-chart.mindmap-layout-direction-up .map-container me-nodes.down me-parent > me-epd.minus {
+  top: -9px;
+  left: calc(50% - 9px);
+}
+
+/* 树形图也是往下长的，但每一层的孩子都排成一列、整列往一侧缩进，父节点自己贴在
+   那一侧的边上——像文件树那样。首层跟更深的层唯一的差别是它住在 `me-main` 而不是
+   `me-children` 里，所以两边都要摆平。缩进的一半就是连线那根竖线的位置，见
+   `mindMapTheme.ts` 的 `TREE_TRUNK_INSET`（24px 的一半 = 12px）。 */
+.mindmap-layout-tree .map-container me-nodes.down {
+  align-items: flex-start;
+}
+
+.mindmap-layout-tree .map-container me-nodes.down > me-main {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding-left: 24px;
+}
+
+.mindmap-layout-tree .map-container me-nodes.down > me-main > me-wrapper {
+  margin: 0;
+}
+
+.mindmap-layout-tree .map-container me-nodes.down me-wrapper {
+  align-items: flex-start;
+}
+
+.mindmap-layout-tree .map-container me-nodes.down me-children {
+  flex-direction: column;
+  align-items: flex-start;
+  margin-top: 0;
+  padding-left: 24px;
+}
+
+.mindmap-layout-tree.mindmap-layout-direction-left .map-container me-nodes.down {
+  align-items: flex-end;
+}
+
+.mindmap-layout-tree.mindmap-layout-direction-left .map-container me-nodes.down > me-main {
+  align-items: flex-end;
+  padding-right: 24px;
+  padding-left: 0;
+}
+
+.mindmap-layout-tree.mindmap-layout-direction-left .map-container me-nodes.down me-wrapper {
+  align-items: flex-end;
+}
+
+.mindmap-layout-tree.mindmap-layout-direction-left .map-container me-nodes.down me-children {
+  align-items: flex-end;
+  padding-right: 24px;
+  padding-left: 0;
+}
+
+/* 一列里每一行的高度由 me-parent 的上下外边距撑开，横排时那份边距是列间距，这里
+   要的是行间距，所以换成和横向布局同一套行距。首层的 `me-parent` 另有一份 10px
+   的边距，也要一起收掉，否则第一层比更深的层松一档。 */
+.mindmap-layout-tree .map-container me-nodes.down me-parent {
+  margin-top: calc(var(--node-gap-y) / 2);
+  margin-bottom: calc(var(--node-gap-y) / 2);
+  padding: var(--mindmap-row-pad-y) 0;
+}
+
+/* 根节点上下留白按整幅图的行距来，45px 是横向布局才需要的。 */
+.mindmap-layout-tree .map-container me-root {
+  margin: 0 0 var(--main-gap-y) 0;
+}
+
+/* 折叠手柄挪到节点靠根那一侧的连线上、垂直居中——像文件树的展开箭头。留在
+   mind-elixir 给纵向布局定的"正下方"会压到下一行的文字，因为树形图的行距很紧。
+   -21px = 24px 缩进的一半（竖线的位置）再加手柄半径 9px。 */
+.mindmap-layout-tree .map-container me-nodes.down me-parent > me-epd,
+.mindmap-layout-tree .map-container me-nodes.down me-parent > me-epd.minus {
+  top: calc(50% - 9px);
+  left: -21px;
+  right: auto;
+}
+
+.mindmap-layout-tree.mindmap-layout-direction-left .map-container me-nodes.down me-parent > me-epd,
+.mindmap-layout-tree.mindmap-layout-direction-left .map-container me-nodes.down me-parent > me-epd.minus {
+  right: -21px;
+  left: auto;
+}
+
+/* 时间轴：首层节点串成一条主序列，每个节点自己的子树按普通导图往边上长，所以换
+   结构从来不会改文档的层级。轴的方向和 MindElixir 的方向是对调的（见
+   `mindMapLayoutDirection`），这里只把根节点从轴的顶端搬到轴的侧面。 */
+.mindmap-layout-timeline.mindmap-layout-direction-right .map-container me-nodes.down {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.mindmap-layout-timeline.mindmap-layout-direction-right .map-container me-root {
+  margin: 0 var(--main-gap-x) 0 0;
+}
+
+.mindmap-layout-timeline.mindmap-layout-direction-down .map-container me-nodes:not(.down) {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.mindmap-layout-timeline.mindmap-layout-direction-down .map-container me-root {
+  margin: 0 0 var(--main-gap-y) 0;
 }
 
 /* How far a frame's own padding holds its node in from the right edge, which is
@@ -1913,6 +2029,67 @@ textarea {
 
 .map-container me-nodes me-parent > me-epd:not(.minus)::after {
   content: attr(data-count);
+}
+
+/* A selected topic uses the collapse handle's spot as the shortest route to a
+   child. It lives inside the topic rather than replacing `me-epd`, so leaf nodes
+   get the same action and the library keeps owning collapse state unchanged. */
+.map-container me-tpc > .mindmap-add-child-button {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 6px);
+  z-index: 12;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--mindmap-branch-color, var(--selected, #2383e2));
+  color: #ffffff;
+  cursor: pointer;
+  pointer-events: auto !important;
+  transform: translateY(-50%);
+}
+
+.map-container me-tpc > .mindmap-add-child-button:hover {
+  filter: brightness(0.92);
+}
+
+.map-container me-tpc > .mindmap-add-child-button svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2;
+}
+
+.map-container .lhs me-tpc > .mindmap-add-child-button {
+  right: calc(100% + 6px);
+  left: auto;
+}
+
+.map-container me-nodes.down me-tpc > .mindmap-add-child-button {
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* 树形图虽然走的是纵向那根轴，但行距很紧：按钮挂在节点正下方会压到下一行的文字，
+   所以放回节点侧面，和横向布局一样。 */
+.mindmap-layout-tree .map-container me-nodes.down me-tpc > .mindmap-add-child-button {
+  top: 50%;
+  left: calc(100% + 6px);
+  transform: translateY(-50%);
+}
+
+.mindmap-layout-tree.mindmap-layout-direction-left .map-container me-nodes.down me-tpc > .mindmap-add-child-button {
+  right: calc(100% + 6px);
+  left: auto;
+}
+
+.map-container me-tpc:has(> .mindmap-add-child-button) + me-epd {
+  opacity: 0 !important;
+  pointer-events: none;
 }
 
 /* A table sets the node's width, not the 28em reading measure every other node is
@@ -2188,9 +2365,175 @@ textarea {
   flex: none;
 }
 
-.mindmap-theme-panel {
-  width: 304px;
+.mindmap-layout-panel {
+  width: min(390px, calc(100vw - 84px));
   padding: 10px;
+}
+
+.mindmap-layout-panel-title {
+  padding: 0 2px 8px;
+  color: #787774;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mindmap-layout-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mindmap-style-menu .mindmap-layout-grid > button {
+  position: relative;
+  display: grid;
+  height: 94px;
+  grid-template-rows: 66px 20px;
+  justify-items: center;
+  padding: 4px 8px 2px;
+  border: 1px solid rgba(55, 53, 47, 0.1);
+  border-radius: 7px;
+  color: #53514d;
+  font-size: 12px;
+}
+
+.mindmap-style-menu .mindmap-layout-grid > button:hover,
+.mindmap-style-menu .mindmap-layout-grid > button.is-active {
+  border-color: rgba(55, 53, 47, 0.72);
+  background: rgba(55, 53, 47, 0.025);
+}
+
+.mindmap-layout-grid > button > svg {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  color: #2383e2;
+}
+
+.mindmap-layout-preview {
+  position: relative;
+  display: block;
+  width: 126px;
+  height: 64px;
+  color: #a9a9a6;
+}
+
+.mindmap-layout-preview-root,
+.mindmap-layout-preview-node {
+  position: absolute;
+  z-index: 2;
+  display: block;
+  height: 12px;
+  border-radius: 3px;
+  background: #53514d;
+}
+
+.mindmap-layout-preview-root {
+  width: 29px;
+}
+
+.mindmap-layout-preview-node {
+  width: 21px;
+  height: 9px;
+  background: #d6d6d3;
+}
+
+.mindmap-layout-preview-line {
+  position: absolute;
+  z-index: 1;
+  display: block;
+  border-color: currentColor;
+  border-style: solid;
+}
+
+.mindmap-layout-preview.is-mind-map .mindmap-layout-preview-root {
+  top: 26px;
+  left: 49px;
+}
+
+.mindmap-layout-preview.is-mind-map .node-a { top: 8px; left: 96px; }
+.mindmap-layout-preview.is-mind-map .node-b { top: 43px; left: 96px; }
+.mindmap-layout-preview.is-mind-map .node-c { top: 26px; left: 8px; }
+.mindmap-layout-preview.is-mind-map .line-a { top: 13px; left: 63px; width: 44px; height: 35px; border-width: 1.5px 1.5px 1.5px 0; }
+.mindmap-layout-preview.is-mind-map .line-b { top: 31px; left: 27px; width: 22px; border-width: 1.5px 0 0; }
+
+.mindmap-layout-preview.is-logic .mindmap-layout-preview-root {
+  top: 26px;
+  left: 8px;
+}
+
+.mindmap-layout-preview.is-logic .node-a { top: 8px; left: 96px; }
+.mindmap-layout-preview.is-logic .node-b { top: 26px; left: 96px; }
+.mindmap-layout-preview.is-logic .node-c { top: 44px; left: 96px; }
+.mindmap-layout-preview.is-logic .line-a { top: 13px; left: 37px; width: 69px; height: 36px; border-width: 1.5px 1.5px 1.5px 0; }
+.mindmap-layout-preview.is-logic .line-b { top: 31px; left: 37px; width: 69px; border-width: 1.5px 0 0; }
+
+.mindmap-layout-preview.is-org-chart .mindmap-layout-preview-root,
+.mindmap-layout-preview.is-tree .mindmap-layout-preview-root {
+  top: 5px;
+  left: 49px;
+}
+
+.mindmap-layout-preview.is-org-chart .node-a { top: 46px; left: 12px; }
+.mindmap-layout-preview.is-org-chart .node-b { top: 46px; left: 53px; }
+.mindmap-layout-preview.is-org-chart .node-c { top: 46px; left: 94px; }
+.mindmap-layout-preview.is-org-chart .line-a { top: 17px; left: 22px; width: 84px; height: 33px; border-width: 0 1.5px 1.5px; }
+.mindmap-layout-preview.is-org-chart .line-b { top: 17px; left: 63px; height: 30px; border-width: 0 0 0 1.5px; }
+
+.mindmap-layout-preview.is-timeline .mindmap-layout-preview-root { top: 26px; left: 4px; }
+.mindmap-layout-preview.is-timeline .node-a { top: 8px; left: 48px; }
+.mindmap-layout-preview.is-timeline .node-b { top: 43px; left: 79px; }
+.mindmap-layout-preview.is-timeline .node-c { top: 8px; left: 104px; }
+.mindmap-layout-preview.is-timeline .line-a { top: 31px; left: 33px; width: 82px; border-width: 1.5px 0 0; }
+.mindmap-layout-preview.is-timeline .line-b { top: 13px; left: 58px; width: 31px; height: 35px; border-width: 0 1.5px; }
+
+.mindmap-layout-preview.is-tree .node-a { top: 29px; left: 24px; }
+.mindmap-layout-preview.is-tree .node-b { top: 46px; left: 50px; }
+.mindmap-layout-preview.is-tree .node-c { top: 46px; left: 85px; }
+.mindmap-layout-preview.is-tree .line-a { top: 17px; left: 34px; width: 30px; height: 17px; border-width: 0 0 1.5px 1.5px; }
+.mindmap-layout-preview.is-tree .line-b { top: 33px; left: 34px; width: 62px; height: 18px; border-width: 0 1.5px 1.5px 0; }
+
+.mindmap-layout-direction {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 9px 2px 0;
+  border-top: 1px solid rgba(55, 53, 47, 0.1);
+  color: #787774;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mindmap-layout-direction > div {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 5px;
+  background: rgba(55, 53, 47, 0.06);
+}
+
+.mindmap-style-menu .mindmap-layout-direction button {
+  width: auto;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 4px;
+  color: #53514d;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.mindmap-style-menu .mindmap-layout-direction button.is-active {
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 15, 15, 0.12);
+}
+
+.mindmap-theme-panel {
+  width: min(500px, calc(100vw - 84px));
+  max-height: calc(100vh - 160px);
+  padding: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .mindmap-theme-panel-title {
@@ -2202,121 +2545,217 @@ textarea {
 
 .mindmap-theme-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mindmap-theme-group + .mindmap-theme-group {
+  margin-top: 12px;
+}
+
+.mindmap-theme-group-title {
+  padding: 0 2px 7px;
+  color: #a3a3a0;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .mindmap-style-menu .mindmap-theme-grid button {
   position: relative;
-  display: grid;
-  height: auto;
-  grid-template-columns: minmax(0, 1fr) auto;
-  padding: 5px;
+  display: block;
+  height: 74px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(55, 53, 47, 0.1);
+  border-radius: 7px;
   white-space: normal;
 }
 
-.mindmap-theme-grid button > span:nth-last-of-type(1) {
-  padding: 6px 3px 2px;
-  justify-self: start;
-  line-height: 18px;
+.mindmap-style-menu .mindmap-theme-grid button:hover,
+.mindmap-style-menu .mindmap-theme-grid button.is-active {
+  border-color: rgba(55, 53, 47, 0.72);
+  background: transparent;
 }
 
 .mindmap-theme-grid button > svg {
-  align-self: end;
-  margin: 0 3px 3px 0;
+  position: absolute;
+  top: 7px;
+  right: 7px;
   color: #2383e2;
 }
 
-.mindmap-theme-preview {
-  position: relative;
-  display: block;
-  width: 100%;
-  height: 58px;
-  grid-column: 1 / -1;
-  overflow: hidden;
-  border: 1px solid rgba(55, 53, 47, 0.1);
+.mindmap-connector-style,
+.mindmap-frame-style {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 8px 2px 0;
+  border-top: 1px solid rgba(55, 53, 47, 0.1);
+  color: #787774;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mindmap-connector-style > div,
+.mindmap-frame-style > div {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 5px;
+  background: rgba(55, 53, 47, 0.06);
+}
+
+.mindmap-style-menu .mindmap-connector-style button,
+.mindmap-style-menu .mindmap-frame-style button {
+  width: auto;
+  height: 24px;
+  padding: 0 9px;
   border-radius: 4px;
+  color: #53514d;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.mindmap-style-menu .mindmap-connector-style button.is-active,
+.mindmap-style-menu .mindmap-frame-style button.is-active {
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 15, 15, 0.12);
+}
+
+.mindmap-theme-panel .mindmap-theme-grid .mindmap-theme-preview {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 10px;
   background: var(--preview-canvas);
 }
 
+.mindmap-theme-preview-name {
+  align-self: flex-start;
+  color: var(--preview-name);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.mindmap-theme-panel .mindmap-theme-grid .mindmap-theme-preview-swatches {
+  display: flex;
+  width: 100%;
+  height: 22px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
 .mindmap-theme-preview-root,
-.mindmap-theme-preview-node,
+.mindmap-theme-preview-level-1,
 .mindmap-theme-preview-child {
-  position: absolute;
   display: block;
-  height: 6px;
-  border-radius: 2px;
+  flex: none;
+  border-radius: 3px;
 }
 
-.mindmap-theme-preview-root {
-  top: 24px;
-  left: 10px;
-  width: 23px;
-  height: 10px;
+.mindmap-theme-preview-root.is-frame {
+  width: 38px;
+  height: 22px;
   background: var(--preview-root);
-  box-shadow: inset 0 0 0 1px var(--preview-root);
+  box-shadow: inset 0 0 0 1px var(--preview-root-border);
 }
 
-.mindmap-theme-preview-root::after {
-  position: absolute;
-  top: 4px;
-  left: 5px;
-  width: 13px;
-  height: 2px;
-  background: var(--preview-root-text);
-  content: "";
+.mindmap-theme-preview-root.is-line {
+  width: 38px;
+  height: 3px;
+  background: var(--preview-connector);
 }
 
-.mindmap-theme-preview-line {
-  position: absolute;
-  left: 33px;
-  width: 34px;
+.mindmap-theme-preview-level-1.is-frame {
+  width: 25px;
   height: 16px;
-  border-left: 1px solid;
-  border-bottom: 1px solid;
+  background: var(--preview-level-1);
+  box-shadow: inset 0 0 0 1px var(--preview-level-1-border);
 }
 
-.mindmap-theme-preview-line.is-one {
-  top: 13px;
-  border-color: var(--preview-branch-1);
+.mindmap-theme-preview-level-1.is-line {
+  width: 25px;
+  height: 3px;
+  background: var(--preview-connector);
 }
 
-.mindmap-theme-preview-line.is-two {
-  top: 29px;
-  border-color: var(--preview-branch-2);
-  transform: scaleY(-1);
-  transform-origin: center;
+.mindmap-theme-preview-child.is-frame {
+  width: 19px;
+  height: 12px;
+  background: var(--preview-child);
+  box-shadow: inset 0 0 0 1px var(--preview-child-border);
 }
 
-.mindmap-theme-preview-node {
-  left: 67px;
-  width: 29px;
-  background: var(--preview-text);
+.mindmap-theme-preview-child.is-line {
+  width: 19px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--preview-connector);
 }
 
-.mindmap-theme-preview-node.is-one {
-  top: 12px;
-  box-shadow: 0 2px 0 var(--preview-branch-1);
+@media (max-width: 560px) {
+  .mindmap-theme-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
-.mindmap-theme-preview-node.is-two {
-  top: 40px;
-  box-shadow: 0 2px 0 var(--preview-branch-2);
+.mindmap-background-style {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 8px 2px 0;
+  border-top: 1px solid rgba(55, 53, 47, 0.1);
+  color: #787774;
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.mindmap-theme-preview-child {
-  left: 105px;
-  width: 21px;
-  background: var(--preview-text);
-  opacity: 0.58;
+.mindmap-background-palette {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  flex-wrap: wrap;
 }
 
-.mindmap-theme-preview-child.is-one {
-  top: 12px;
+.mindmap-style-menu .mindmap-background-palette button,
+.mindmap-background-custom {
+  display: block;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(55, 53, 47, 0.16);
+  border-radius: 4px;
+  background: var(--background-swatch);
+  cursor: pointer;
 }
 
-.mindmap-theme-preview-child.is-two {
-  top: 40px;
+.mindmap-style-menu .mindmap-background-palette button.is-active {
+  border-color: #2383e2;
+  box-shadow: 0 0 0 1px #2383e2;
+}
+
+.mindmap-background-custom {
+  position: relative;
+  overflow: hidden;
+  background: conic-gradient(#e45858, #e89135, #d3ad2f, #4f9b69, #3b8dc4, #7266cf, #e45858);
+}
+
+.mindmap-background-custom input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
 }
 
 .mindmap-style-submenu {
@@ -2721,6 +3160,31 @@ textarea {
   position: static;
   max-width: 100%;
   box-shadow: 0 10px 28px rgba(29, 36, 48, 0.16);
+}
+
+/* 选中文字、图片、链接弹出来的都是 BlockNote 的 `bn-toolbar`（导图里是同一份工具栏，
+   只是换了个容器），默认 30px 高、12px 字、16px 图标，配放大过的文档主工具栏偏细，
+   跟着放大一档。工具栏里点开的下拉菜单和面板不动。
+   选择器多带一个 `.bn-root`：BlockNote 自己那条 `.bn-mantine .bn-toolbar` 也写了
+   gap/padding: 2px，编辑器样式由懒加载 chunk 带进来、排在 styles.css 之后，同优先级压不过。 */
+.bn-root.bn-mantine .bn-toolbar {
+  gap: 3px;
+  padding: 3px;
+}
+
+.bn-toolbar > button {
+  height: 34px;
+  /* ActionIcon 把宽度钉在 30px，只改高度会变成竖着的长方形；交给 padding 和 min-width
+     决定，纯图标按钮就还是正方形。 */
+  width: auto;
+  min-width: 34px;
+  padding: 0 8px;
+  font-size: 13px;
+}
+
+.bn-toolbar > button svg {
+  width: 18px;
+  height: 18px;
 }
 
 .inspector {

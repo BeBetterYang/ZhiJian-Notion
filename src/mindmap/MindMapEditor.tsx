@@ -3,9 +3,9 @@ import MindElixir, { type MindElixirData, type NodeObj, type Operation, type Top
 import { zh_CN } from "mind-elixir/i18n";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type MutableRefObject } from "react";
 import { createPortal } from "react-dom";
-import { FiCheck, FiDroplet, FiGitBranch } from "react-icons/fi";
+import { FiCheck, FiDroplet, FiGitBranch, FiPlus } from "react-icons/fi";
 import { RiEyeLine, RiEyeOffLine } from "react-icons/ri";
-import type { ZhiJianTree } from "../core/tree";
+import type { ZhiJianMindMapLayout, ZhiJianTree } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
 import { useTree } from "../core/treeStore/useTree";
 import type { MindMapViewportState } from "../shared/documentViewState";
@@ -14,6 +14,7 @@ import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 import { handleShortcutKeyDown } from "../shared/shortcuts";
 import { createMindMapStructureSignature, treeToMindElixir } from "./mindElixirAdapter";
 import { applyMindElixirOperation } from "./mindElixirCommands";
+import { MIND_MAP_LAYOUT_PRESETS, mindMapLayoutClassName, mindMapLayoutDirection, mindMapLayoutKey, resolveMindMapLayout } from "./mindMapLayout";
 import {
   correctMindMapSummaryOffsets,
   isMindMapDecorationOperation,
@@ -21,7 +22,7 @@ import {
   sameMindMapDecorations,
 } from "./mindMapDecorations";
 import { MINDMAP_DRAGGING_CLASS, displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, isMindMapAnnotationTarget, mindMapDisplayDragTopic, mindMapMeasuredSizeChanged, mindMapPressTarget, mindMapScaleFromTransform, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, unscaledMindMapSize, updateMindMapPointerSession, type EditingTarget, type MindMapMeasuredSize, type MindMapPointerSession, type MindMapPressTarget } from "./mindMapInteraction";
-import { createMindElixirTheme, MIND_MAP_THEME_PRESETS, resolveMindMapTheme, type MindMapTheme } from "./mindMapTheme";
+import { createMindElixirTheme, MIND_MAP_BACKGROUND_PRESETS, MIND_MAP_THEME_GROUPS, MIND_MAP_THEME_PRESETS, resolveMindMapTheme, type MindMapTheme } from "./mindMapTheme";
 import {
   CLOZE_CLASS,
   CLOZE_REVEALED_CLASS,
@@ -73,7 +74,9 @@ export interface MindMapTextSelection {
 
 export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelectionActiveChange, onTextSelectionChange, onNodeToolbarActiveChange, onFocusNode, onExitFocus, selectedNodeId, toolbarTarget, focusRequest, focusNodeRequest = null, onFocusRequestHandled, searchQuery = "", visibleNodeIds = null, zoomedNodeId = null, initialViewport, onViewportChange, initialDirection = MindElixir.RIGHT, onDirectionChange, onExportImageReady }: MindMapEditorProps) {
   const tree = useTree(store);
-  const activeTheme = resolveMindMapTheme(tree.mindMap?.theme);
+  const activeTheme = resolveMindMapTheme(tree.mindMap?.theme, tree.mindMap?.canvas?.background);
+  const roundedConnectors = tree.mindMap?.connector?.rounded ?? false;
+  const roundedFrames = tree.mindMap?.frame?.rounded ?? false;
   const containerRef = useRef<HTMLDivElement>(null);
   const mindRef = useRef<MindElixir | null>(null);
   const suppressOperation = useRef(false);
@@ -81,7 +84,9 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
   const structureSignature = useRef(createMindMapStructureSignature(tree, visibleNodeIds, zoomedNodeId));
   const projectionOptionsRef = useRef({ searchQuery, visibleNodeIds, rootNodeId: zoomedNodeId });
   const initialViewportRef = useRef(initialViewport);
-  const directionRef = useRef<0 | 1 | 2>(initialDirection);
+  const initialLayoutRef = useRef(resolveMindMapLayout(initialTree.current.mindMap?.layout, initialDirection));
+  const directionRef = useRef<0 | 1 | 2 | 3>(mindMapLayoutDirection(initialLayoutRef.current));
+  const layoutSignature = useRef(mindMapLayoutKey(initialLayoutRef.current));
   // A flag rather than the deferred map itself: whatever the map looked like when
   // the structural change arrived, it is out of date by the time the edit ends —
   // the node has been typed into since, and Enter may have inserted a node through
@@ -128,6 +133,21 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
   const [editingTarget, setEditingTarget] = useState<EditingTarget>(null);
   const [styleToolbarHost, setStyleToolbarHost] = useState<HTMLElement | null>(null);
   const [styleSubmenu, setStyleSubmenu] = useState<"layout" | "theme" | null>(null);
+  const [readOnlyLayout, setReadOnlyLayout] = useState<ZhiJianMindMapLayout | null>(null);
+  const activeLayout = readOnlyLayout ?? resolveMindMapLayout(tree.mindMap?.layout, initialDirection);
+  const activeLayoutKey = mindMapLayoutKey(activeLayout);
+  const activeLayoutDirection = mindMapLayoutDirection(activeLayout);
+  const activeLayoutPreset = MIND_MAP_LAYOUT_PRESETS.find((preset) => preset.id === activeLayout.type)
+    ?? MIND_MAP_LAYOUT_PRESETS[0];
+  // 连线的画法跟着结构变（树形图挂一竖、时间轴的根在侧面），而 `activeLayout` 每次
+  // 渲染都是新对象，直接进依赖数组会让主题每敲一个字就重建一次。
+  const activeLayoutRef = useRef(activeLayout);
+  activeLayoutRef.current = activeLayout;
+
+  const selectLayout = (layout: ZhiJianMindMapLayout) => {
+    if (readOnly) setReadOnlyLayout(layout);
+    else store.setMindMapLayout(layout);
+  };
 
   useEffect(() => {
     if (!styleSubmenu) return;
@@ -171,11 +191,17 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
     setContentTargets(content);
   }, []);
 
-  const refreshStructure = useCallback((data: MindElixirData, signature: string) => {
+  const refreshStructure = useCallback((data: MindElixirData, signature: string, nextLayoutKey = layoutSignature.current) => {
     const mind = mindRef.current;
     if (!mind) return;
     structureSignature.current = signature;
+    layoutSignature.current = nextLayoutKey;
     suppressOperation.current = true;
+    // `refresh` only re-reads nodeData/arrows/summaries — the `direction` on the data
+    // it is handed is ignored (only `init` reads that one). The axis therefore has to
+    // be written onto the instance, or switching structure would leave the map on
+    // whatever direction it was initialised with.
+    mind.direction = directionRef.current;
     mind.refresh({ ...data, direction: directionRef.current });
     mind.clearHistory?.();
     correctMindMapSummaryOffsets(mind, treeRef.current);
@@ -226,9 +252,9 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
   useEffect(() => {
     const mind = mindRef.current;
     if (!mind) return;
-    mind.changeTheme(createMindElixirTheme(activeTheme), false);
+    mind.changeTheme(createMindElixirTheme(activeTheme, roundedConnectors, activeLayoutRef.current), false);
     scheduleLinkDiv();
-  }, [activeTheme, scheduleLinkDiv]);
+  }, [activeLayoutKey, activeTheme, roundedConnectors, scheduleLinkDiv]);
 
   const scheduleGeometryMeasure = useCallback((nodeId: string) => {
     window.cancelAnimationFrame(geometryMeasureFrame.current);
@@ -313,7 +339,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
       el: containerRef.current,
       // One direction, like an outline read left to right. `SIDE` would split the
       // root's children between the two sides, which reads as two maps.
-      direction: MindElixir.RIGHT,
+      direction: directionRef.current,
       editable: !readOnly,
       contextMenu: {
         locale: zh_CN,
@@ -344,7 +370,14 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
       // Has to be the theme rather than the two `generate*Branch` options next to
       // it: `init` re-reads the branch generators off the theme, which would drop
       // anything passed alongside.
-      theme: createMindElixirTheme(resolveMindMapTheme(initialTree.current.mindMap?.theme)),
+      theme: createMindElixirTheme(
+        resolveMindMapTheme(
+          initialTree.current.mindMap?.theme,
+          initialTree.current.mindMap?.canvas?.background,
+        ),
+        initialTree.current.mindMap?.connector?.rounded ?? false,
+        initialLayoutRef.current,
+      ),
     });
     mind.init({ ...treeToMindElixir(initialTree.current, projectionOptionsRef.current), direction: directionRef.current });
     // mind-elixir's own layout switcher, top left. 一键显示/隐藏挖空内容 belongs with it
@@ -445,9 +478,9 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
       if (viewport) onViewportChange?.(viewport);
     });
     mind.bus.addListener("changeDirection", (direction: number) => {
-      if (direction === MindElixir.LEFT || direction === MindElixir.RIGHT || direction === MindElixir.SIDE) {
+      if (direction === MindElixir.LEFT || direction === MindElixir.RIGHT || direction === MindElixir.SIDE || direction === MindElixir.DOWN) {
         directionRef.current = direction;
-        onDirectionChangeRef.current?.(direction);
+        if (direction !== MindElixir.DOWN) onDirectionChangeRef.current?.(direction);
       }
       window.requestAnimationFrame(collectTargets);
     });
@@ -567,6 +600,20 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
     void mind.insertSibling("after", topic);
   }, [applyEditingTarget]);
 
+  const addChildNode = useCallback((nodeId: string) => {
+    const mind = mindRef.current;
+    if (readOnly || !mind || !storeRef.current.getNode(nodeId)) return;
+    let topic: Topic;
+    try {
+      topic = mind.findEle(nodeId);
+    } catch {
+      return;
+    }
+    applyEditingTarget(null);
+    mind.selectNode(topic);
+    void mind.addChild(topic);
+  }, [applyEditingTarget, readOnly]);
+
   useEffect(() => {
     if (!focusRequest?.nodeId || !tree.nodes[focusRequest.nodeId]) return;
     // This effect also re-runs on every keystroke, because `tree.nodes` changes.
@@ -591,7 +638,9 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
   useEffect(() => {
     const nextSignature = createMindMapStructureSignature(tree, visibleNodeIds, zoomedNodeId);
     const nextData = treeToMindElixir(tree, { searchQuery, visibleNodeIds, rootNodeId: zoomedNodeId });
-    const mode = mindMapUpdateMode(structureSignature.current !== nextSignature, editingTargetRef.current !== null);
+    const layoutChanged = layoutSignature.current !== activeLayoutKey;
+    directionRef.current = activeLayoutDirection;
+    const mode = mindMapUpdateMode(structureSignature.current !== nextSignature || layoutChanged, editingTargetRef.current !== null);
     if (mode === "content") {
       const editingNodeId = editingTargetRef.current?.nodeId;
       const result = updateMindMapNodesInPlace(mindRef.current, nextData.nodeData, editingNodeId);
@@ -605,8 +654,9 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
       pendingStructure.current = true;
       return;
     }
-    refreshStructure(nextData, nextSignature);
-  }, [collectTargets, refreshStructure, scheduleLinkDiv, searchQuery, tree, visibleNodeIds, zoomedNodeId]);
+    refreshStructure(nextData, nextSignature, activeLayoutKey);
+    if (activeLayoutDirection !== MindElixir.DOWN) onDirectionChangeRef.current?.(activeLayoutDirection);
+  }, [activeLayoutDirection, activeLayoutKey, collectTargets, refreshStructure, scheduleLinkDiv, searchQuery, tree, visibleNodeIds, zoomedNodeId]);
 
   const previousZoomedNodeId = useRef(zoomedNodeId);
   useEffect(() => {
@@ -648,15 +698,23 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
       // resyncs `structureSignature` — in which case there is nothing owed.
       const current = treeRef.current;
       const signature = createMindMapStructureSignature(current, visibleNodeIds, zoomedNodeId);
-      if (signature !== structureSignature.current) refreshStructure(treeToMindElixir(current, { searchQuery, visibleNodeIds, rootNodeId: zoomedNodeId }), signature);
+      if (signature !== structureSignature.current || activeLayoutKey !== layoutSignature.current) {
+        directionRef.current = activeLayoutDirection;
+        refreshStructure(treeToMindElixir(current, { searchQuery, visibleNodeIds, rootNodeId: zoomedNodeId }), signature, activeLayoutKey);
+      }
     }
-  }, [editingTarget, refreshStructure, scheduleLinkDiv, searchQuery, setEditingFloat, visibleNodeIds, zoomedNodeId]);
+  }, [activeLayoutDirection, activeLayoutKey, editingTarget, refreshStructure, scheduleLinkDiv, searchQuery, setEditingFloat, visibleNodeIds, zoomedNodeId]);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Element | null;
+      if (target?.closest(".mindmap-add-child-button")) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       // 挖空: the one press on a node that is neither a selection nor an edit. It is
       // answered here, ahead of everything else, because the reader may not have the
       // node selected — and must not end up selecting it by uncovering a blank.
@@ -747,6 +805,13 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
     };
     const onClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
+      const addChildButton = target?.closest<HTMLElement>(".mindmap-add-child-button[data-node-id]");
+      if (addChildButton?.dataset.nodeId) {
+        event.preventDefault();
+        event.stopPropagation();
+        addChildNode(addChildButton.dataset.nodeId);
+        return;
+      }
       // The cloze was uncovered on pointerdown; the click that follows it must not
       // also select the node or open its editor.
       if (clozeAtEvent(target)) {
@@ -880,7 +945,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
       container.removeEventListener("contextmenu", onContextMenu, true);
       endPointerDrag();
     };
-  }, [beginNodeEdit, clearTreeSelection, insertSiblingNode, selectMindElixirNode, selectTreeNode]);
+  }, [addChildNode, beginNodeEdit, clearTreeSelection, insertSiblingNode, selectMindElixirNode, selectTreeNode]);
 
   // The collapse handle doubles as the count of what it hides, so the number is
   // written onto the handle itself rather than shown by a second control — see the
@@ -935,12 +1000,16 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
     };
   }, [scheduleLinkDiv]);
 
+  const selectedTopic = !readOnly && selectedNodeId
+    ? contentTargets.find(({ id }) => id === selectedNodeId)?.host.closest<HTMLElement>("me-tpc") ?? null
+    : null;
+
   return (
     <>
       {/* `bn-root` is here for BlockNote's colour palette, which the display layer
           borrows so a coloured run of text or table cell looks the same at rest as
           it does in the editor — see `.mindmap-canvas.bn-root` in `styles.css`. */}
-      <div className={`mindmap-canvas bn-root ${zoomedNodeId ? "is-focus-mode" : ""} ${revealAllCloze ? CLOZE_REVEAL_ALL_CLASS : ""}`} ref={containerRef} />
+      <div className={`mindmap-canvas bn-root ${mindMapLayoutClassName(activeLayout)} ${zoomedNodeId ? "is-focus-mode" : ""} ${revealAllCloze ? CLOZE_REVEAL_ALL_CLASS : ""}`} ref={containerRef} />
       {styleToolbarHost
         ? createPortal(
           <div className="mindmap-style-menu-wrap">
@@ -950,30 +1019,130 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
               {hasCloze ? <button type="button" className={`mindmap-style-menu-trigger ${revealAllCloze ? "is-active" : ""}`} title={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"} aria-label={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"} aria-pressed={revealAllCloze} onClick={toggleAllCloze}>{revealAllCloze ? <RiEyeLine /> : <RiEyeOffLine />}</button> : null}
             </div>
             {styleSubmenu === "layout" ? (
-              <div className="mindmap-style-menu" role="menu">
-                <button type="button" role="menuitem" onClick={() => { styleToolbarHost.querySelector<HTMLElement>("#tbltl")?.click(); setStyleSubmenu(null); }}>向左布局</button>
-                <button type="button" role="menuitem" onClick={() => { styleToolbarHost.querySelector<HTMLElement>("#tbltr")?.click(); setStyleSubmenu(null); }}>向右布局</button>
-                <button type="button" role="menuitem" onClick={() => { styleToolbarHost.querySelector<HTMLElement>("#tblts")?.click(); setStyleSubmenu(null); }}>双向布局</button>
+              <div className="mindmap-style-menu mindmap-layout-panel" role="menu" aria-label="导图样式">
+                <div className="mindmap-layout-panel-title">结构</div>
+                <div className="mindmap-layout-grid">
+                  {MIND_MAP_LAYOUT_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      role="menuitemradio"
+                      className={activeLayout.type === preset.id ? "is-active" : ""}
+                      aria-checked={activeLayout.type === preset.id}
+                      onClick={() => selectLayout({ type: preset.id, direction: preset.defaultDirection })}
+                    >
+                      <MindMapLayoutPreview type={preset.id} />
+                      <span>{preset.name}</span>
+                      {activeLayout.type === preset.id ? <FiCheck /> : null}
+                    </button>
+                  ))}
+                </div>
+                <div className="mindmap-layout-direction">
+                  <span>方向</span>
+                  <div role="group" aria-label={`${activeLayoutPreset.name}方向`}>
+                    {activeLayoutPreset.directions.map((direction) => (
+                      <button
+                        key={direction.id}
+                        type="button"
+                        className={activeLayout.direction === direction.id ? "is-active" : ""}
+                        aria-pressed={activeLayout.direction === direction.id}
+                        onClick={() => selectLayout({ type: activeLayout.type, direction: direction.id })}
+                      >
+                        {direction.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             ) : null}
             {styleSubmenu === "theme" ? (
               <div className="mindmap-style-menu mindmap-theme-panel" role="menu" aria-label="导图主题">
-                <div className="mindmap-theme-panel-title">导图主题</div>
-                <div className="mindmap-theme-grid">
-                  {MIND_MAP_THEME_PRESETS.map((theme) => (
+                <div className="mindmap-theme-panel-title">配色</div>
+                {MIND_MAP_THEME_GROUPS.map((group) => (
+                  <div className="mindmap-theme-group" key={group.id}>
+                    {group.label ? <div className="mindmap-theme-group-title">{group.label}</div> : null}
+                    <div className="mindmap-theme-grid">
+                      {MIND_MAP_THEME_PRESETS.filter((theme) => theme.group === group.id).map((theme) => (
+                        <button
+                          key={theme.id}
+                          type="button"
+                          role="menuitemradio"
+                          className={activeTheme.id === theme.id ? "is-active" : ""}
+                          aria-checked={activeTheme.id === theme.id}
+                          onClick={() => store.setMindMapTheme({ id: theme.id, version: theme.version })}
+                        >
+                          <MindMapThemePreview theme={theme} />
+                          {activeTheme.id === theme.id ? <FiCheck /> : null}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <div className="mindmap-connector-style">
+                  <span>连接线</span>
+                  <div role="group" aria-label="连接线转角">
                     <button
-                      key={theme.id}
                       type="button"
-                      role="menuitemradio"
-                      className={activeTheme.id === theme.id ? "is-active" : ""}
-                      aria-checked={activeTheme.id === theme.id}
-                      onClick={() => store.setMindMapTheme({ id: theme.id, version: theme.version })}
+                      className={!roundedConnectors ? "is-active" : ""}
+                      aria-pressed={!roundedConnectors}
+                      onClick={() => store.setMindMapConnectorRounded(false)}
                     >
-                      <MindMapThemePreview theme={theme} />
-                      <span>{theme.name}</span>
-                      {activeTheme.id === theme.id ? <FiCheck /> : null}
+                      直角
                     </button>
-                  ))}
+                    <button
+                      type="button"
+                      className={roundedConnectors ? "is-active" : ""}
+                      aria-pressed={roundedConnectors}
+                      onClick={() => store.setMindMapConnectorRounded(true)}
+                    >
+                      圆角
+                    </button>
+                  </div>
+                </div>
+                <div className="mindmap-frame-style">
+                  <span>方框</span>
+                  <div role="group" aria-label="节点方框类型">
+                    <button
+                      type="button"
+                      className={!roundedFrames ? "is-active" : ""}
+                      aria-pressed={!roundedFrames}
+                      onClick={() => store.setMindMapFrameRounded(false)}
+                    >
+                      直角
+                    </button>
+                    <button
+                      type="button"
+                      className={roundedFrames ? "is-active" : ""}
+                      aria-pressed={roundedFrames}
+                      onClick={() => store.setMindMapFrameRounded(true)}
+                    >
+                      圆角
+                    </button>
+                  </div>
+                </div>
+                <div className="mindmap-background-style">
+                  <span>背景色</span>
+                  <div className="mindmap-background-palette" role="group" aria-label="导图背景色">
+                    {MIND_MAP_BACKGROUND_PRESETS.map((background) => (
+                      <button
+                        key={background.value}
+                        type="button"
+                        className={activeTheme.canvas.background.toLowerCase() === background.value ? "is-active" : ""}
+                        style={{ "--background-swatch": background.value } as CSSProperties}
+                        aria-label={background.name}
+                        title={background.name}
+                        onClick={() => store.setMindMapCanvasBackground(background.value)}
+                      />
+                    ))}
+                    <label className="mindmap-background-custom" title="自定义背景色">
+                      <input
+                        type="color"
+                        value={activeTheme.canvas.background}
+                        aria-label="自定义背景色"
+                        onChange={(event) => store.setMindMapCanvasBackground(event.target.value)}
+                      />
+                    </label>
+                  </div>
                 </div>
               </div>
             ) : null}
@@ -985,6 +1154,20 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
           cell — opens the outline's link toolbar over it. The popup itself is rendered
           by `MindMapLinkToolbar`, inside the outline editor whose component it is. */}
       <MindMapLinkHoverTracker canvasRef={containerRef} />
+      {selectedTopic && selectedNodeId
+        ? createPortal(
+          <button
+            type="button"
+            className="mindmap-add-child-button"
+            data-node-id={selectedNodeId}
+            title="新增下级"
+            aria-label="新增下级"
+          >
+            <FiPlus />
+          </button>,
+          selectedTopic,
+        )
+        : null}
       {contentTargets.map(({ id, host }) => {
         const node = tree.nodes[id];
         return node ? createPortal(
@@ -998,25 +1181,53 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
 }
 
 function MindMapThemePreview({ theme }: { theme: MindMapTheme }) {
+  const rootHasFrame = mindMapThemeNodeHasFrame(theme.root);
+  const level1HasFrame = mindMapThemeNodeHasFrame(theme.level1);
   const style = {
     "--preview-canvas": theme.canvas.background,
     "--preview-root": theme.root.background,
     "--preview-root-text": theme.root.text,
-    "--preview-branch-1": theme.branchPalette[0],
-    "--preview-branch-2": theme.branchPalette[1] ?? theme.branchPalette[0],
-    "--preview-text": theme.child.text,
+    "--preview-root-border": theme.root.border,
+    "--preview-level-1": theme.level1.background,
+    "--preview-level-1-border": theme.level1.border,
+    "--preview-child": theme.child.background,
+    "--preview-child-border": theme.child.border === "transparent" ? theme.connector.color : theme.child.border,
+    "--preview-connector": theme.connector.color,
+    "--preview-name": theme.type === "dark"
+      ? theme.child.text
+      : theme.root.background !== "transparent"
+        ? theme.root.background
+        : theme.root.border !== "transparent"
+          ? theme.root.border
+          : theme.root.text,
   } as CSSProperties;
   return (
     <span className="mindmap-theme-preview" style={style} aria-hidden="true">
-      <span className="mindmap-theme-preview-root" />
-      <span className="mindmap-theme-preview-line is-one" />
-      <span className="mindmap-theme-preview-line is-two" />
-      <span className="mindmap-theme-preview-node is-one" />
-      <span className="mindmap-theme-preview-node is-two" />
-      <span className="mindmap-theme-preview-child is-one" />
-      <span className="mindmap-theme-preview-child is-two" />
+      <span className="mindmap-theme-preview-name">{theme.name}</span>
+      <span className="mindmap-theme-preview-swatches">
+        <span className={`mindmap-theme-preview-root ${rootHasFrame ? "is-frame" : "is-line"}`} />
+        <span className={`mindmap-theme-preview-level-1 ${level1HasFrame ? "is-frame" : "is-line"}`} />
+        <span className="mindmap-theme-preview-child is-line" />
+      </span>
     </span>
   );
+}
+
+function MindMapLayoutPreview({ type }: { type: ZhiJianMindMapLayout["type"] }) {
+  return (
+    <span className={`mindmap-layout-preview is-${type}`} aria-hidden="true">
+      <span className="mindmap-layout-preview-root" />
+      <span className="mindmap-layout-preview-line line-a" />
+      <span className="mindmap-layout-preview-line line-b" />
+      <span className="mindmap-layout-preview-node node-a" />
+      <span className="mindmap-layout-preview-node node-b" />
+      <span className="mindmap-layout-preview-node node-c" />
+    </span>
+  );
+}
+
+function mindMapThemeNodeHasFrame(node: MindMapTheme["root"]) {
+  return node.background !== "transparent" || node.border !== "transparent";
 }
 
 function dismissContextMenu(event: MouseEvent) {

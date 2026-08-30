@@ -275,7 +275,13 @@ export class TreeStore {
       const summaries = (decorations.summaries ?? []).filter((summary) => draft.nodes[summary.parent]);
       const arrows = (decorations.arrows ?? []).filter((arrow) => draft.nodes[arrow.from] && draft.nodes[arrow.to]);
       const theme = draft.mindMap?.theme;
-      draft.mindMap = summaries.length || arrows.length || theme ? { summaries, arrows, theme } : undefined;
+      const connector = draft.mindMap?.connector;
+      const frame = draft.mindMap?.frame;
+      const canvas = draft.mindMap?.canvas;
+      const layout = draft.mindMap?.layout;
+      draft.mindMap = summaries.length || arrows.length || theme || connector || frame || canvas || layout
+        ? { summaries, arrows, theme, connector, frame, canvas, layout }
+        : undefined;
     });
   }
 
@@ -284,6 +290,43 @@ export class TreeStore {
       draft.mindMap = {
         ...draft.mindMap,
         theme: { ...theme },
+        canvas: undefined,
+      };
+    });
+  }
+
+  setMindMapConnectorRounded(rounded: boolean) {
+    this.commit((draft) => {
+      draft.mindMap = {
+        ...draft.mindMap,
+        connector: { rounded },
+      };
+    });
+  }
+
+  setMindMapFrameRounded(rounded: boolean) {
+    this.commit((draft) => {
+      draft.mindMap = {
+        ...draft.mindMap,
+        frame: { rounded },
+      };
+    });
+  }
+
+  setMindMapCanvasBackground(background?: string) {
+    this.commit((draft) => {
+      draft.mindMap = {
+        ...draft.mindMap,
+        canvas: background ? { background } : undefined,
+      };
+    });
+  }
+
+  setMindMapLayout(layout: NonNullable<ZhiJianMindMapDecorations["layout"]>) {
+    this.commit((draft) => {
+      draft.mindMap = {
+        ...draft.mindMap,
+        layout: { ...layout },
       };
     });
   }

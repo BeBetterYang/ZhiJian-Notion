@@ -6,6 +6,7 @@ import {
   type ZhiJianTree,
 } from "../core/tree";
 import { getMindMapNodeVisualStyle, renderMindMapNodeHtml, type MindMapNodeMetadata } from "./MindMapNodeRenderer";
+import { mindMapLayoutDirection, resolveMindMapLayout } from "./mindMapLayout";
 import { resolveMindMapTheme, type MindMapTheme } from "./mindMapTheme";
 
 export interface MindElixirProjectionOptions {
@@ -21,10 +22,15 @@ export interface MindElixirProjectionOptions {
 
 export function treeToMindElixir(tree: ZhiJianTree, options: MindElixirProjectionOptions = {}): MindElixirData {
   const rootId = options.rootNodeId && tree.nodes[options.rootNodeId] ? options.rootNodeId : tree.rootId;
-  const theme = resolveMindMapTheme(tree.mindMap?.theme);
+  const theme = resolveMindMapTheme(tree.mindMap?.theme, tree.mindMap?.canvas?.background);
   const visit = (node: ZhiJianNode, level = 0): NodeObj<MindMapNodeMetadata> => {
     const branchColor = mindMapBranchColor(tree, node.id, theme);
-    const visual = getMindMapNodeVisualStyle(node, node.id === rootId, { theme, level, branchColor });
+    const visual = getMindMapNodeVisualStyle(node, node.id === rootId, {
+      theme,
+      level,
+      branchColor,
+      roundedFrames: tree.mindMap?.frame?.rounded ?? false,
+    });
     const topic = node.type === "table" ? "表格" : richTextToPlainText(node.content) || " ";
     const children = node.children
       .filter((childId) => !options.visibleNodeIds || options.visibleNodeIds.has(childId))
@@ -39,6 +45,11 @@ export function treeToMindElixir(tree: ZhiJianTree, options: MindElixirProjectio
         lineHeight: visual.lineHeight,
         color: visual.color,
         background: visual.background,
+        borderColor: visual.borderColor,
+        borderRadius: visual.borderRadius,
+        boxShadow: node.id === rootId || !visual.borderColor || visual.borderColor === "transparent"
+          ? "none"
+          : `inset 0 0 0 1px ${visual.borderColor}`,
         fontWeight: visual.fontWeight,
         fontStyle: visual.fontStyle,
         textDecoration: visual.textDecoration,
@@ -48,6 +59,7 @@ export function treeToMindElixir(tree: ZhiJianTree, options: MindElixirProjectio
         theme,
         level,
         branchColor,
+        roundedFrames: tree.mindMap?.frame?.rounded ?? false,
       }),
       metadata: {
         type: node.type,
@@ -75,13 +87,17 @@ export function treeToMindElixir(tree: ZhiJianTree, options: MindElixirProjectio
   assignGroupedSideDirections(nodeData.children ?? []);
   return {
     nodeData,
-    direction: MindElixir.RIGHT,
+    direction: mindMapLayoutDirection(resolveMindMapLayout(tree.mindMap?.layout)),
     summaries: visibleSummaries(tree, rootId, theme, options.visibleNodeIds),
     arrows: visibleArrows(tree, rootId, theme, options.visibleNodeIds),
   };
 }
 
-export function mindMapBranchColor(tree: ZhiJianTree, nodeId: string, theme = resolveMindMapTheme(tree.mindMap?.theme)) {
+export function mindMapBranchColor(
+  tree: ZhiJianTree,
+  nodeId: string,
+  theme = resolveMindMapTheme(tree.mindMap?.theme, tree.mindMap?.canvas?.background),
+) {
   if (nodeId === tree.rootId) return undefined;
   let branch = tree.nodes[nodeId];
   while (branch?.parentId && branch.parentId !== tree.rootId) {

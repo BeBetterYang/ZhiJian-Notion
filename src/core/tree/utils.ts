@@ -14,6 +14,10 @@ export function cloneTree(tree: ZhiJianTree): ZhiJianTree {
 function cloneMindMapDecorations(decorations: ZhiJianMindMapDecorations): ZhiJianMindMapDecorations {
   return {
     theme: decorations.theme ? { ...decorations.theme } : undefined,
+    connector: decorations.connector ? { ...decorations.connector } : undefined,
+    frame: decorations.frame ? { ...decorations.frame } : undefined,
+    canvas: decorations.canvas ? { ...decorations.canvas } : undefined,
+    layout: decorations.layout ? { ...decorations.layout } : undefined,
     summaries: decorations.summaries?.map((summary) => ({
       ...summary,
       style: summary.style ? { ...summary.style } : undefined,

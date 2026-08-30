@@ -102,6 +102,11 @@ export interface ZhiJianMindMapArrow {
   };
 }
 
+export type ZhiJianMindMapLayout = {
+  type: "mind-map" | "logic" | "org-chart" | "timeline" | "tree";
+  direction: "left" | "right" | "both" | "up" | "down";
+};
+
 /**
  * What the mind map draws over the tree and nothing else does.
  *
@@ -118,6 +123,16 @@ export interface ZhiJianMindMapDecorations {
     id: string;
     version: number;
   };
+  connector?: {
+    rounded: boolean;
+  };
+  frame?: {
+    rounded: boolean;
+  };
+  canvas?: {
+    background: string;
+  };
+  layout?: ZhiJianMindMapLayout;
 }
 
 export interface ZhiJianTree {

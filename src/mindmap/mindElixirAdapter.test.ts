@@ -10,6 +10,15 @@ describe("mindElixirAdapter", () => {
     expect(children.map((child) => child.direction)).toEqual([1, 1, 1, 0, 0, 0]);
   });
 
+  it("projects the document layout direction without changing the tree", () => {
+    const tree = createInitialTree();
+    const nodesBefore = JSON.stringify(tree.nodes);
+    tree.mindMap = { layout: { type: "org-chart", direction: "up" } };
+
+    expect(treeToMindElixir(tree).direction).toBe(3);
+    expect(JSON.stringify(tree.nodes)).toBe(nodesBefore);
+  });
+
   it("keeps the extra branch on the right for an odd branch count", () => {
     const children = Array.from({ length: 5 }, (_, index) => ({ id: String(index + 1), topic: String(index + 1) })) as NodeObj[];
     assignGroupedSideDirections(children);
@@ -41,10 +50,40 @@ describe("mindElixirAdapter", () => {
     const app = projected[1];
     const child = web.children?.[0];
 
-    expect(web.branchColor).toBe("#4f78a7");
+    expect(web.branchColor).toBe("#b8babd");
     expect(child?.branchColor).toBe(web.branchColor);
-    expect(app.branchColor).toBe("#5f8b6d");
-    expect(app.branchColor).not.toBe(web.branchColor);
+    expect(app.branchColor).toBe("#b8babd");
+  });
+
+  it("uses the Yanpi swatches for the root and direct child without framing deeper text", () => {
+    const tree = createInitialTree();
+    tree.mindMap = { theme: { id: "yanpi", version: 1 } };
+    tree.nodes.web.children = ["web-child"];
+    tree.nodes["web-child"] = { id: "web-child", parentId: "web", children: [], type: "text", content: { text: "子节点" } };
+
+    const root = treeToMindElixir(tree).nodeData;
+    const directChild = (root.children as NodeObj[])[0];
+    const descendant = directChild.children?.[0];
+
+    expect(root.style).toMatchObject({ background: "#9b8a76", boxShadow: "none" });
+    expect(directChild.style).toMatchObject({
+      background: "#d5d1ca",
+      boxShadow: "inset 0 0 0 1px #d5d1ca",
+    });
+    expect(descendant?.style).toMatchObject({ background: "transparent", boxShadow: "none" });
+  });
+
+  it("projects the selected frame corner style onto every node box", () => {
+    const tree = createInitialTree();
+    tree.mindMap = { frame: { rounded: true } };
+    const rounded = treeToMindElixir(tree).nodeData;
+    expect(rounded.style).toMatchObject({ borderRadius: "999px" });
+    expect(rounded.children?.[0].style).toMatchObject({ borderRadius: "999px" });
+
+    tree.mindMap.frame = { rounded: false };
+    const square = treeToMindElixir(tree).nodeData;
+    expect(square.style).toMatchObject({ borderRadius: "6px" });
+    expect(square.children?.[0].style).toMatchObject({ borderRadius: "6px" });
   });
 
   it("keeps tables as their own visual node", () => {

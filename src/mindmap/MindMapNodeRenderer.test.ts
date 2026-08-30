@@ -113,6 +113,28 @@ describe("marks belong to the run they were applied to", () => {
 });
 
 describe("theme style priority", () => {
+  it("uses one theme box for direct children and one treatment for every deeper descendant", () => {
+    const theme = resolveMindMapTheme({ id: "ocean", version: 1 });
+    const node = textNode([{ text: "层级" }]);
+
+    const level1 = getMindMapNodeVisualStyle(node, false, { theme, level: 1 });
+    const descendant = getMindMapNodeVisualStyle(node, false, { theme, level: 2 });
+
+    expect(level1.background).toBe(theme.level1.background);
+    expect(level1.borderColor).toBe(theme.level1.border);
+    expect(descendant.background).toBe(theme.child.background);
+    expect(descendant.borderColor).toBe(theme.child.border);
+  });
+
+  it("does not add a text background box to the default theme's direct children", () => {
+    const theme = resolveMindMapTheme();
+    const node = textNode([{ text: "直接子节点" }]);
+    const style = getMindMapNodeVisualStyle(node, false, { theme, level: 1 });
+
+    expect(style.background).toBe("transparent");
+    expect(style.borderColor).toBe("transparent");
+  });
+
   it("keeps a user's node colours above the theme", () => {
     const node = textNode([{ text: "自定义" }]);
     node.props = { style: { color: "#123456", backgroundColor: "#fedcba" } };

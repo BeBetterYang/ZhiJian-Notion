@@ -13,7 +13,12 @@ describe("treePersistence", () => {
 
   it("round-trips a persisted tree", () => {
     const tree = createInitialTree();
-    tree.mindMap = { theme: { id: "morandi", version: 1 } };
+    tree.mindMap = {
+      theme: { id: "morandi", version: 1 },
+      frame: { rounded: true },
+      canvas: { background: "#f1f3f5" },
+      layout: { type: "timeline", direction: "down" },
+    };
     persistTree(tree);
     expect(loadPersistedTree()).toEqual(tree);
   });

@@ -18,6 +18,49 @@ describe("TreeStore", () => {
     expect(JSON.stringify(store.getSnapshot().nodes)).toBe(nodesBefore);
   });
 
+  it("persists the connector corner style without dropping the selected theme", () => {
+    const store = new TreeStore(createInitialTree());
+    store.setMindMapTheme({ id: "forest", version: 1 });
+    store.setMindMapConnectorRounded(true);
+
+    expect(store.getSnapshot().mindMap).toMatchObject({
+      theme: { id: "forest", version: 1 },
+      connector: { rounded: true },
+    });
+  });
+
+  it("persists the node frame corner style without dropping other map settings", () => {
+    const store = new TreeStore(createInitialTree());
+    store.setMindMapTheme({ id: "yanpi", version: 1 });
+    store.setMindMapConnectorRounded(true);
+    store.setMindMapFrameRounded(true);
+
+    expect(store.getSnapshot().mindMap).toMatchObject({
+      theme: { id: "yanpi", version: 1 },
+      connector: { rounded: true },
+      frame: { rounded: true },
+    });
+  });
+
+  it("persists a custom canvas background and resets it when a full theme is selected", () => {
+    const store = new TreeStore(createInitialTree());
+    store.setMindMapTheme({ id: "yanpi", version: 1 });
+    store.setMindMapCanvasBackground("#f1f3f5");
+    expect(store.getSnapshot().mindMap?.canvas).toEqual({ background: "#f1f3f5" });
+
+    store.setMindMapTheme({ id: "ocean", version: 1 });
+    expect(store.getSnapshot().mindMap?.canvas).toBeUndefined();
+  });
+
+  it("persists the selected map structure without changing document nodes", () => {
+    const store = new TreeStore(createInitialTree());
+    const nodesBefore = JSON.stringify(store.getSnapshot().nodes);
+    store.setMindMapLayout({ type: "org-chart", direction: "up" });
+
+    expect(store.getSnapshot().mindMap?.layout).toEqual({ type: "org-chart", direction: "up" });
+    expect(JSON.stringify(store.getSnapshot().nodes)).toBe(nodesBefore);
+  });
+
   it("updates content, description and undo/redo", () => {
     const store = new TreeStore(createInitialTree());
     store.updateContent("web", "Web 编辑器");

@@ -40,6 +40,7 @@ export interface MindMapNodeThemeContext {
   theme?: MindMapTheme;
   level?: number;
   branchColor?: string;
+  roundedFrames?: boolean;
 }
 
 const HEADING_FONT_SIZE = {
@@ -66,7 +67,11 @@ export function getMindMapNodeVisualStyle(
   const style = getNodeStyle(node.props?.style);
   const userStyle = style as typeof style & { borderColor?: string; borderRadius?: string };
   const theme = context.theme ?? resolveMindMapTheme();
-  const themed = isRoot ? theme.root : context.level === 1 ? theme.level1 : theme.child;
+  const themed = isRoot
+    ? theme.root
+    : context.level === 1
+      ? theme.level1
+      : theme.child;
   const headingLevel = node.type === "heading" ? node.props?.headingLevel ?? 1 : undefined;
   const fontSize = isRoot ? ROOT_FONT_SIZE : headingLevel ? HEADING_FONT_SIZE[headingLevel] : BODY_FONT_SIZE;
 
@@ -84,8 +89,9 @@ export function getMindMapNodeVisualStyle(
     color: style.color ?? themed.text,
     background: style.backgroundColor ?? themed.background,
     textDecoration: style.textDecorationLine || style.textDecoration,
-    borderColor: userStyle.borderColor ?? (isRoot ? themed.border : "transparent"),
-    borderRadius: userStyle.borderRadius ?? themed.radius,
+    borderColor: userStyle.borderColor ?? themed.border,
+    borderRadius: userStyle.borderRadius
+      ?? (context.roundedFrames === undefined ? themed.radius : context.roundedFrames ? "999px" : "6px"),
     accentColor: context.branchColor ?? theme.connector.color,
     userColor: style.color,
   };

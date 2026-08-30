@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createMindElixirTheme,
+  MIND_MAP_BACKGROUND_PRESETS,
   MIND_MAP_THEME_PRESETS,
   mindMapMainBranchPath,
   mindMapSubBranchPath,
@@ -10,9 +11,25 @@ import {
 const NODE_GAP_X = 30;
 
 describe("mind map theme presets", () => {
-  it("falls back to 枝间 when a document has no known theme", () => {
-    expect(resolveMindMapTheme().id).toBe("zhijian");
-    expect(resolveMindMapTheme({ id: "missing", version: 1 }).id).toBe("zhijian");
+  it("falls back to the default paper theme when a document has no known theme", () => {
+    expect(resolveMindMapTheme().id).toBe("paper");
+    expect(resolveMindMapTheme({ id: "missing", version: 1 }).id).toBe("paper");
+  });
+
+  it("contains the complete reference theme set in display order", () => {
+    expect(MIND_MAP_THEME_PRESETS.map((theme) => theme.name)).toEqual([
+      "纯境", "明线", "素页",
+      "墨稿", "雁皮", "薄雾", "清风", "脉搏", "远航",
+      "焦点", "深潜", "夜图", "秘林", "火山", "梦湖",
+    ]);
+    expect(MIND_MAP_THEME_PRESETS.filter((theme) => theme.group === "plain")).toHaveLength(3);
+    expect(MIND_MAP_THEME_PRESETS.filter((theme) => theme.group === "light")).toHaveLength(6);
+    expect(MIND_MAP_THEME_PRESETS.filter((theme) => theme.group === "dark")).toHaveLength(6);
+  });
+
+  it("offers every unique theme canvas colour in the background palette", () => {
+    const themeBackgrounds = [...new Set(MIND_MAP_THEME_PRESETS.map((theme) => theme.canvas.background))];
+    expect(MIND_MAP_BACKGROUND_PRESETS.map((background) => background.value)).toEqual(themeBackgrounds);
   });
 
   it("keeps every preset visual-only by sharing identical geometry variables", () => {
@@ -23,6 +40,47 @@ describe("mind map theme presets", () => {
     });
 
     expect(new Set(values.map((value) => JSON.stringify(value))).size).toBe(1);
+  });
+
+  it("defines root, direct-child and remaining-descendant treatments for every theme", () => {
+    MIND_MAP_THEME_PRESETS.forEach((theme) => {
+      expect(theme.root.background).toBeTruthy();
+      expect(theme.level1.background).toBeTruthy();
+      expect(theme.child.background).toBeTruthy();
+    });
+  });
+
+  it("keeps coloured direct children framed and every deeper node unframed", () => {
+    MIND_MAP_THEME_PRESETS.filter((theme) => theme.group !== "plain").forEach((theme) => {
+      expect(theme.level1.background).not.toBe("transparent");
+      expect(theme.level1.border).not.toBe("transparent");
+    });
+    MIND_MAP_THEME_PRESETS.forEach((theme) => {
+      expect(theme.child.background).toBe("transparent");
+      expect(theme.child.border).toBe("transparent");
+    });
+  });
+
+  it("maps previously stored theme ids to the closest current preset", () => {
+    expect(resolveMindMapTheme({ id: "zhijian", version: 1 }).id).toBe("paper");
+    expect(resolveMindMapTheme({ id: "forest", version: 1 }).id).toBe("breeze");
+    expect(resolveMindMapTheme({ id: "dark", version: 1 }).id).toBe("focus");
+  });
+
+  it("uses the Yanpi third swatch as a line for unframed descendants and connectors", () => {
+    const yanpi = resolveMindMapTheme({ id: "yanpi", version: 1 });
+    expect(yanpi.root.background).toBe("#9b8a76");
+    expect(yanpi.level1.background).toBe("#d5d1ca");
+    expect(yanpi.child.background).toBe("transparent");
+    expect(yanpi.connector.color).toBe("#d5d1ca");
+  });
+
+  it("overrides only the canvas background with a custom palette colour", () => {
+    const original = resolveMindMapTheme({ id: "ocean", version: 1 });
+    const customized = resolveMindMapTheme({ id: "ocean", version: 1 }, "#f1f3f5");
+    expect(customized.canvas.background).toBe("#f1f3f5");
+    expect(customized.root).toBe(original.root);
+    expect(customized.child).toBe(original.child);
   });
 });
 
@@ -94,6 +152,27 @@ describe("mindMapMainBranchPath", () => {
     expect(start(path)).toEqual({ x: 140, y: 240 });
     expect(path).toBe("M 140 240 V 270 H 310 V 300");
   });
+
+  it("connects from the upper edge when the vertical layout grows upward", () => {
+    const path = mindMapMainBranchPath({ ...mainParams, ...child, cT: 100, direction: "down" });
+
+    expect(start(path)).toEqual({ x: 140, y: 200 });
+    expect(path).toBe("M 140 200 V 160 H 310 V 130");
+  });
+
+  it("keeps the shared trunk junction square and rounds only the child corner", () => {
+    const path = mindMapMainBranchPath({ ...mainParams, ...child, direction: "rhs" }, true);
+
+    expect(path).toBe("M 180 220 H 250 V 133 Q 250 115 268 115 H 280");
+    expect(start(path)).toEqual({ x: 180, y: 220 });
+    expect(path.endsWith("H 280")).toBe(true);
+  });
+
+  it("uses the same shared-trunk corner treatment in top-down layout", () => {
+    expect(mindMapMainBranchPath({ ...mainParams, ...child, cT: 300, direction: "down" }, true)).toBe(
+      "M 140 240 V 270 H 292 Q 310 270 310 288 V 300",
+    );
+  });
 });
 
 const subParams = { pT: 200, pL: 0, pW: 160, pH: 40, cT: 100, cL: 160, cW: 200, cH: 30 };
@@ -130,5 +209,65 @@ describe("mindMapSubBranchPath", () => {
 
     expect(new Set(paths.map(trunkX)).size).toBe(1);
     expect(trunkX(paths[0])).toBe(160);
+  });
+
+  it("rounds only the child-side corner of a sub branch", () => {
+    expect(mindMapSubBranchPath({ ...subParams, direction: "rhs", isFirst: false }, NODE_GAP_X, true)).toBe(
+      "M 130 220 H 160 V 133 Q 160 115 178 115 H 190",
+    );
+  });
+});
+
+describe("structure-specific connectors", () => {
+  // 树形图：一根竖线从父节点底下挂下来，横着接进子节点靠根那一侧，兄弟共用同一根竖线。
+  it("hangs a tree's children off one shared trunk", () => {
+    const paths = [100, 300, 640].map((cT) =>
+      mindMapSubBranchPath(
+        { ...subParams, cT, direction: "down", isFirst: false },
+        NODE_GAP_X,
+        false,
+        { type: "tree", direction: "right" },
+      ),
+    );
+
+    expect(paths[0]).toBe("M 148 240 V 115 H 160");
+    expect(new Set(paths.map((path) => start(path).x)).size).toBe(1);
+    expect(paths.map(endX)).toEqual([160, 160, 160]);
+  });
+
+  it("mirrors a left-branching tree", () => {
+    expect(
+      mindMapSubBranchPath(
+        { ...subParams, pL: 200, cL: 0, direction: "down", isFirst: false },
+        NODE_GAP_X,
+        false,
+        { type: "tree", direction: "left" },
+      ),
+    ).toBe("M 212 240 V 115 H 200");
+  });
+
+  // 时间轴的根被 CSS 搬到了轴的侧面，所以主干沿着轴走，再逐个拐进首层节点。
+  it("combs a timeline's first level off the spine", () => {
+    expect(
+      mindMapMainBranchPath({ ...mainParams, ...child, direction: "down" }, false, {
+        type: "timeline",
+        direction: "right",
+      }),
+    ).toBe("M 180 220 H 310 V 100");
+    expect(
+      mindMapMainBranchPath({ ...mainParams, ...child, direction: "rhs" }, false, {
+        type: "timeline",
+        direction: "down",
+      }),
+    ).toBe("M 140 240 V 115 H 280");
+  });
+
+  it("keeps an organisation chart's centre-to-centre drop", () => {
+    expect(
+      mindMapMainBranchPath({ ...mainParams, ...child, cT: 300, direction: "down" }, false, {
+        type: "org-chart",
+        direction: "down",
+      }),
+    ).toBe("M 140 240 V 270 H 310 V 300");
   });
 });
