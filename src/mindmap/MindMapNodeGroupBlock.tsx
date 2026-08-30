@@ -19,6 +19,7 @@ import {
 import { ZhiJianFormattingToolbar } from "../shared/ZhiJianFormattingToolbar";
 import { zhijianDictionary } from "../shared/zhijianDictionary";
 import type { MindMapTextSelection } from "./MindMapEditor";
+import { bindMindMapImageResize } from "./mindMapImageResize";
 import { nodeDocumentSignature, nodeTextSelectionOffsets, resolveMindMapFocusBlockId, suppressMindMapEnter } from "./mindMapInteraction";
 
 interface MindMapNodeContentProps {
@@ -390,6 +391,14 @@ function MindMapNodeEditor({
       container.removeEventListener("compositionend", onCompositionEnd, true);
     };
   }, [blockIds, editor, node, onFinishEdit, onFocusNode, onSelect, selected, store]);
+
+  // 图片的缩放手柄在收缩到内容的编辑器里会失效，节点框也不会跟着图片走。
+  // 见 `bindMindMapImageResize`。
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    return bindMindMapImageResize(container, () => onGeometryChange(node.id));
+  }, [node.id, onGeometryChange]);
 
   return (
     <div ref={containerRef} className={`mindmap-node-editor ${node.parentId === null ? "is-root" : ""}`}>

@@ -3032,8 +3032,14 @@ textarea {
    (both in core editor.css). Neither exists in the display layer, so a table node
    grew 31px in each direction and its columns nearly doubled the moment editing
    began. Retuning the variables leaves BlockNote's own rules in charge — widget
-   placement and column resizing keep working — and only changes the metrics. */
-.mindmap-node-editor [data-content-type="table"] .tableWrapper {
+   placement and column resizing keep working — and only changes the metrics.
+
+   `.bn-editor` is in the selector only to outweigh BlockNote's own
+   `.bn-editor [data-content-type="table"] .tableWrapper`, which declares the same
+   two variables at the same specificity and is loaded after this file — without
+   the extra class the override lost the cascade and the node grew 31px in each
+   direction again. */
+.mindmap-node-editor .bn-editor [data-content-type="table"] .tableWrapper {
   --bn-table-widget-size: 0px;
   --bn-table-handle-size: 0px;
 }
@@ -3043,10 +3049,13 @@ textarea {
   min-width: 0 !important;
 }
 
-.mindmap-node-editor [data-content-type="table"] td,
-.mindmap-node-editor [data-content-type="table"] th {
+.mindmap-node-editor .bn-editor [data-content-type="table"] td,
+.mindmap-node-editor .bn-editor [data-content-type="table"] th {
   /* Feeds BlockNote's own `min-width: var(--default-cell-min-width) !important`,
-     which is why this matches `.mindmap-node-table td` instead of fighting it. */
+     which is why this matches `.mindmap-node-table td` instead of fighting it.
+     The padding and the border colour, on the other hand, are set by BlockNote's
+     `.bn-editor [data-content-type="table"] td` at this same specificity, so
+     `.bn-editor` has to appear here too — see the `.tableWrapper` rule above. */
   --default-cell-min-width: 8em;
   max-width: var(--mindmap-table-cell-max-width);
   padding: 0.3em 0.45em;
