@@ -120,15 +120,16 @@ textarea {
 .toolbar .view-toggle-button {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   border: 0;
   background: transparent;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .toolbar .view-toggle-button svg {
-  width: 15px;
-  height: 15px;
+  width: 17px;
+  height: 17px;
+  flex: none;
 }
 
 .toolbar .view-toggle-button:hover {
@@ -137,13 +138,27 @@ textarea {
 
 .document-header-actions .editor-navigation-toolbar {
   flex-wrap: nowrap;
-  gap: 6px;
+  gap: 7px;
 }
 
 .document-header-actions .toolbar .view-toggle-button {
-  height: 30px;
-  padding: 0 9px;
+  height: 34px;
+  padding: 0 11px;
   border: 0;
+  /* 放大一档后按钮更宽，标题栏窄的时候不能让"思维导图"折成两行。 */
+  white-space: nowrap;
+}
+
+/* 图标按钮跟着长到同一高度，否则文字按钮 34px、图标按钮 32px，一排看着高低不齐。
+   下拉菜单里的按钮不是 .toolbar-icon-button，尺寸保持原样。 */
+.document-header-actions .toolbar .toolbar-icon-button {
+  width: 34px;
+  height: 34px;
+}
+
+.document-header-actions .toolbar .toolbar-icon-button svg {
+  width: 17px;
+  height: 17px;
 }
 
 .toolbar-more-wrap {
