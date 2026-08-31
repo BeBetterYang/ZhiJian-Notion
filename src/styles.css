@@ -1039,19 +1039,26 @@ textarea {
   left: var(--zhijian-guide-x);
 }
 
-/* The stop, at the end of the last child's own text. Every nested row's segment is
-   as tall as that row, so the line already reaches the bottom of the last one — but
+/* The stop, at the end of the last child's own last line. Every nested row's segment
+   is as tall as that row, so the line already reaches the bottom of the last one — but
    a row is as tall as everything nested inside it, so where the last child carries a
    note, a picture or children of its own the line ran on down beside them. That
-   stretch is painted back out in the canvas colour, over the child's nested rows,
-   which is exactly the region to lose: those rows are guided by the last child's own
-   line, one level to the right.
+   stretch is painted back out in the canvas colour, which is exactly the region to
+   lose: it is guided by the last child's own line, one level to the right.
 
-   The eraser is hung on the nested group because the group's box *is* that region;
-   the group has to be positioned for `left` to be read from its own left edge rather
-   than from the row's — and since that edge is one indent to the right of the row's,
-   the shared x needs that indent taken off again to land on the line. */
-.outline-panel .bn-block-group .bn-block-group {
+   The eraser is hung on the last child's grandchild *rows* rather than on the group
+   that holds them, because the group holds two kinds of row: the last child's own
+   notes and pictures, which are still its last lines and which the line has to cover,
+   and its children, which it must stop before. Attachments come ahead of children in
+   the projection, so erasing every row that is not one leaves the line ending exactly
+   where the last child's own content does — and where the last child has no children
+   at all, nothing is erased and the line runs to the bottom of its note.
+
+   A row has to be positioned for `left` to be read from its own left edge, and since
+   that edge is one indent to the right of the row the line belongs to, the shared x
+   needs that indent taken off again to land on the line. `::after` is the free
+   pseudo-element on a row: `::before` is BlockNote's own segment of the guide. */
+.outline-panel .bn-block-group .bn-block-outer {
   position: relative;
 }
 
@@ -1059,7 +1066,13 @@ textarea {
   .bn-block-group
   > .bn-block-outer:last-child
   > .bn-block
-  > .bn-block-group::before {
+  > .bn-block-group
+  > .bn-block-outer:has(
+      > .bn-block
+        > .bn-block-content:not([data-content-type="quote"]):not(
+            [data-content-type="image"]
+          )
+    )::after {
   content: "";
   position: absolute;
   left: calc(var(--zhijian-guide-x) - var(--zhijian-guide-indent));
@@ -1081,7 +1094,8 @@ textarea {
   > .bn-block-group
   > .bn-block-outer:last-child
   > .bn-block
-  > .bn-block-group::before {
+  > .bn-block-group
+  > .bn-block-outer::after {
   content: none;
 }
 
