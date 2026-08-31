@@ -19,6 +19,8 @@ Supabase 中的数据按 Auth 用户 UUID 归属：
 
 图片原文件保存在私有 Supabase Storage bucket `workspace-images`。文档树只保存稳定的 `assetId / storagePath`，页面加载和分享访问时由服务端签发短期（1 小时）访问 URL。IndexedDB 仅缓存图片 Blob：已缓存的图片优先使用本地 Blob URL，未缓存的会在加载后下载一次写入缓存，因此签名过期或换设备后图片仍可显示。缓存不是持久化来源，清空后会从 Storage 重新获取。保存分享文档时会复制其图片到当前用户目录并替换树中的资源引用。
 
+从文档里删掉图片不会立刻删除资源本身。设置 → 偏好 → 清理无用图片会调用 `POST /api/workspace/cleanup-assets`：扫描该用户所有 `workspace_documents.tree` 收齐还在引用的 `assetId`，把 `workspace_assets` 里无人引用、且创建超过 24 小时的行连同 Storage 对象一起删掉。24 小时是安全窗口，盖住"图片已上传、引用它的文档还没 autosave 回服务器"这段空档；回收站里的文档仍是 `workspace_documents` 的行，所以恢复出来的文档图片一直都在。没有定时任务，只有这个手动入口。
+
 ## Auth 与分享
 
 登录、注册、token 刷新以及邮箱/密码修改均调用 Supabase Auth。数据权限以 `user.id` 为准，email 只作为资料字段。Vercel API 使用 service role 访问已撤销客户端权限且启用 RLS 的数据表；service role 绝不能放入 `VITE_*` 环境变量。

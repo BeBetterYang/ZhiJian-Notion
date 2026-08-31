@@ -91,6 +91,16 @@ export async function uploadWorkspaceImage(session: WorkspaceSession, file: File
   return readJsonResponse(response, "服务器返回的图片信息格式不正确。") as Promise<ImageAssetReference>;
 }
 
+/**
+ * 手动清理没有任何文档引用的图片，返回本次删掉的数量。
+ */
+export async function cleanupWorkspaceAssets(session: WorkspaceSession, options?: WorkspaceApiOptions) {
+  const response = await workspaceFetch("/api/workspace/cleanup-assets", { method: "POST" }, session, options);
+  if (!response.ok) throw new WorkspaceApiError(await readApiError(response, "图片清理失败。"), response.status);
+  const payload = await readJsonResponse(response, "服务器返回的清理结果格式不正确。") as { removed?: unknown };
+  return { removed: Number(payload.removed) || 0 };
+}
+
 export async function updateWorkspaceAccount(
   session: WorkspaceSession,
   update: { name?: string; email?: string; password?: string },

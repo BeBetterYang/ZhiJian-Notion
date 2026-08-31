@@ -126,16 +126,53 @@ async function deleteUnreferencedAssets(userId, candidateIds) {
   const remaining = await supabaseRequest(`${DOCUMENTS_TABLE}?user_id=eq.${encodeURIComponent(userId)}&select=tree`, { method: "GET" });
   const stillUsed = new Set(collectAssetReferences(remaining).map((ref) => ref.assetId));
   const unused = [...new Set(candidateIds)].filter((assetId) => !stillUsed.has(assetId) && UUID_PATTERN.test(assetId));
-  if (!unused.length) return;
-  const rows = await supabaseRequest(`${ASSETS_TABLE}?user_id=eq.${encodeURIComponent(userId)}&asset_id=in.(${unused.join(",")})&select=asset_id,storage_path`, {
+  await deleteAssetRows(userId, unused);
+}
+
+async function deleteAssetRows(userId, assetIds) {
+  if (!assetIds.length) return 0;
+  const rows = await supabaseRequest(`${ASSETS_TABLE}?user_id=eq.${encodeURIComponent(userId)}&asset_id=in.(${assetIds.join(",")})&select=asset_id,storage_path`, {
     method: "DELETE",
     headers: { Prefer: "return=representation" },
   });
-  await Promise.all((Array.isArray(rows) ? rows : []).map((row) =>
+  const deleted = Array.isArray(rows) ? rows : [];
+  await Promise.all(deleted.map((row) =>
     // The row is gone either way; a stranded object only costs storage, never correctness.
     storageRequest(`object/${ASSET_BUCKET}/${encodeStoragePath(row.storage_path)}`, { method: "DELETE" }).catch(() => undefined)
   ));
+  return deleted.length;
 }
+
+/**
+ * 删除没有任何文档还引用着的图片。
+ *
+ * 图片是从文档里删掉的，行和 Storage 对象却留着，所以这里反过来做一次对账：把这个用户
+ * 所有 `workspace_documents.tree` 扫一遍收齐还在用的 `assetId`，剩下的就是没人要的。
+ * 不做引用计数——一个人的项目里，一次全量扫描比一套计数器可靠得多，也不会因为某次写入
+ * 漏掉减一就永远删不掉。
+ *
+ * 只动够旧的资源。刚上传的图片会先落在 `workspace_assets` 里，引用它的文档要等
+ * autosave（400ms 防抖，加上一次网络往返）才写回服务器；这中间它看起来正好像是无人引用。
+ * 24 小时的安全窗口把这段空档整个盖住，代价只是无用图片多留一天。窗口交给 PostgREST
+ * 过滤，够旧的行才会成为候选。
+ *
+ * 回收站里的文档仍然是 `workspace_documents` 的行（真正的删除发生在清空回收站时），
+ * 所以从回收站恢复出来的文档，图片一直都在。
+ */
+export async function cleanupUnreferencedAssets(userId) {
+  const cutoff = new Date(Date.now() - UNREFERENCED_ASSET_GRACE_MS).toISOString();
+  const [documentRows, assetRows] = await Promise.all([
+    supabaseRequest(`${DOCUMENTS_TABLE}?user_id=eq.${encodeURIComponent(userId)}&select=tree`, { method: "GET" }),
+    supabaseRequest(`${ASSETS_TABLE}?user_id=eq.${encodeURIComponent(userId)}&created_at=lt.${encodeURIComponent(cutoff)}&select=asset_id`, { method: "GET" }),
+  ]);
+  const stillUsed = new Set(collectAssetReferences(documentRows).map((ref) => ref.assetId));
+  const unused = (Array.isArray(assetRows) ? assetRows : [])
+    .map((row) => String(row.asset_id))
+    .filter((assetId) => !stillUsed.has(assetId) && UUID_PATTERN.test(assetId));
+  return { removed: await deleteAssetRows(userId, unused) };
+}
+
+const UNREFERENCED_ASSET_GRACE_MS = 24 * 60 * 60 * 1000;
 
 export async function readWorkspaceDocument(userId, fileId) {
   const rows = await supabaseRequest(`${DOCUMENTS_TABLE}?user_id=eq.${encodeURIComponent(userId)}&file_id=eq.${encodeURIComponent(fileId)}&select=tree,revision,schema_version`, { method: "GET" });

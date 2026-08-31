@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createInitialTree } from "../core/tree";
 import type { WorkspaceSession } from "./auth";
-import { deleteWorkspaceDocument, loadWorkspaceState, saveWorkspaceDocument, saveWorkspaceState } from "./serverApi";
+import { cleanupWorkspaceAssets, deleteWorkspaceDocument, loadWorkspaceState, saveWorkspaceDocument, saveWorkspaceState } from "./serverApi";
 
 const expiringSession: WorkspaceSession = {
   email: "user@example.com",
@@ -141,5 +141,17 @@ describe("workspace server API session refresh", () => {
     }, "file-1");
 
     expect(fetch).toHaveBeenCalledWith("/api/workspace/documents/file-1", expect.objectContaining({ method: "DELETE" }));
+  });
+
+  it("asks the server to clean up unreferenced images", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({ removed: 3 }), { status: 200 }));
+
+    const result = await cleanupWorkspaceAssets({
+      ...expiringSession,
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    });
+
+    expect(result).toEqual({ removed: 3 });
+    expect(fetch).toHaveBeenCalledWith("/api/workspace/cleanup-assets", expect.objectContaining({ method: "POST" }));
   });
 });

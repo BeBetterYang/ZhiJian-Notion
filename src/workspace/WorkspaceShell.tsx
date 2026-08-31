@@ -36,6 +36,7 @@ import { markdownImportTitle, markdownToTree } from "../core/markdown/markdownDo
 import { TreeStore } from "../core/treeStore";
 import type { WorkspaceSession } from "./auth";
 import {
+  cleanupWorkspaceAssets,
   loadWorkspaceState,
   loadDocumentShare,
   deleteWorkspaceDocument,
@@ -117,6 +118,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const [shareCopied, setShareCopied] = useState(false);
   const [settingsView, setSettingsView] = useState<SettingsView>("account");
   const [settingsEdit, setSettingsEdit] = useState<SettingsEdit>(null);
+  const [assetCleanup, setAssetCleanup] = useState<{ busy: boolean; message: string; failed: boolean }>({ busy: false, message: "", failed: false });
   const [headerToolbarTarget, setHeaderToolbarTarget] = useState<HTMLDivElement | null>(null);
   const [focusBreadcrumbState, setFocusBreadcrumbState] = useState<FocusBreadcrumbState | null>(null);
   const [nodes, setNodes] = useState<WorkspaceNode[]>([]);
@@ -419,6 +421,17 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     setSettingsView(view);
     setSettingsOpen(true);
     setAccountOpen(false);
+    setAssetCleanup({ busy: false, message: "", failed: false });
+  };
+
+  const runAssetCleanup = async () => {
+    setAssetCleanup({ busy: true, message: "", failed: false });
+    try {
+      const { removed } = await cleanupWorkspaceAssets(sessionRef.current, { onSessionRefresh: handleSessionRefresh });
+      setAssetCleanup({ busy: false, failed: false, message: removed ? `已清理 ${removed} 张无用图片。` : "没有需要清理的图片。" });
+    } catch (error) {
+      setAssetCleanup({ busy: false, failed: true, message: errorMessage(error) });
+    }
   };
 
   const shareUrl = shareState.enabled && shareState.token
@@ -1116,7 +1129,20 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               ) : (
                 <div className="preferences-settings">
                   <header className="settings-content-header"><h2>偏好</h2><p>自定义工作区使用体验</p></header>
-                  <div className="preferences-empty">内容待定</div>
+                  <section className="settings-section">
+                    <h3>存储</h3>
+                    <div className="settings-rule">
+                      <span>
+                        <strong>清理无用图片</strong>
+                        <small role={assetCleanup.failed ? "alert" : "status"}>
+                          {assetCleanup.message || "删除已不被任何文档引用、且上传超过 24 小时的图片。"}
+                        </small>
+                      </span>
+                      <button type="button" disabled={assetCleanup.busy} onClick={() => void runAssetCleanup()}>
+                        {assetCleanup.busy ? "清理中…" : "开始清理"}
+                      </button>
+                    </div>
+                  </section>
                 </div>
               )}
             </div>

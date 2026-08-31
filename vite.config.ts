@@ -1,6 +1,6 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { ServerResponse } from "node:http";
@@ -13,6 +13,8 @@ const REGISTRATION_CODE = "nihaozhijian";
 const DOCUMENT_SCHEMA_VERSION = 1;
 const IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif"]);
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+// 与线上一致的安全窗口：刚上传的图片要等文档 autosave 写回才有引用，这段空档不能误删。
+const UNREFERENCED_ASSET_GRACE_MS = 24 * 60 * 60 * 1000;
 
 export default defineConfig(({ mode }) => {
   const appEnv = loadEnv(mode, process.cwd(), "");
@@ -208,11 +210,33 @@ function workspaceServerPlugin(appEnv: Record<string, string>) {
           return sendJson(response, 200, { ok: true, fileId: id });
         }
 
+        if (request.url === "/cleanup-assets" && request.method === "POST") {
+          const record = (await readUserRecord(user.id, user.email)) ?? {};
+          const documents = readRecord(record.documents);
+          const referenced = new Set<string>();
+          for (const value of Object.values(documents)) collectAssetIds(readRecord(value).tree, referenced);
+          const assets = readRecord(record.assets);
+          const cutoff = Date.now() - UNREFERENCED_ASSET_GRACE_MS;
+          const unused: string[] = [];
+          for (const assetId of Object.keys(assets)) {
+            if (referenced.has(assetId)) continue;
+            if (await assetCreatedAt(assetId) > cutoff) continue;
+            unused.push(assetId);
+          }
+          for (const assetId of unused) {
+            delete assets[assetId];
+            await removeAssetFiles(assetId);
+          }
+          if (unused.length) await writeUserRecord(user.id, { ...record, assets, updatedAt: Date.now() });
+          return sendJson(response, 200, { removed: unused.length });
+        }
+
         if (request.method === "GET" && (request.url === "/" || !request.url)) {
           const record = (await readUserRecord(user.id, user.email)) ?? {};
           const documents = readRecord(record.documents);
           return sendJson(response, 200, {
             profile: record.profile,
+            preferences: record.preferences,
             nodes: record.nodes,
             trash: record.trash,
             documents: Object.fromEntries(Object.entries(documents).map(([fileId, value]) => [fileId, readRecord(value).tree])),
@@ -252,6 +276,7 @@ function workspaceServerPlugin(appEnv: Record<string, string>) {
           await writeUserRecord(user.id, {
             ...record,
             profile: body.profile ?? record.profile,
+            preferences: body.preferences ?? record.preferences,
             nodes: body.nodes ?? record.nodes,
             trash: body.trash ?? record.trash,
             updatedAt: Date.now(),
@@ -435,6 +460,26 @@ async function writeAsset(assetId: string, bytes: Buffer, meta: Record<string, u
   await mkdir(ASSETS_DIR, { recursive: true });
   await writeFile(assetBytesPath(assetId), bytes);
   await writeFile(assetMetaPath(assetId), JSON.stringify(meta, null, 2), "utf8");
+}
+
+/**
+ * 本地图片的上传时间，从文件自己的 mtime 读。
+ *
+ * 线上 `workspace_assets` 有 `created_at` 一列，本地这边不想为了对账再给 scratch 数据
+ * 加一个字段——已经躺在 `.zhijian-server-data` 里的图片也就不会因为缺字段被算成"很旧"。
+ * 读不到就当成刚上传（`Date.now()`），宁可留着不删。
+ */
+async function assetCreatedAt(assetId: string) {
+  try {
+    return (await stat(assetBytesPath(assetId))).mtimeMs;
+  } catch {
+    return Date.now();
+  }
+}
+
+async function removeAssetFiles(assetId: string) {
+  await rm(assetBytesPath(assetId), { force: true });
+  await rm(assetMetaPath(assetId), { force: true });
 }
 
 function assetReferences(record: Record<string, unknown>, assetIds: string[]) {
