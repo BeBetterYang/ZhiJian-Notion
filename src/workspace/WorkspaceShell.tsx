@@ -51,6 +51,7 @@ import {
   WorkspaceApiError,
 } from "./serverApi";
 import { configureImageAssetUpload, hydrateRemoteImageAssets, rehydrateImageAssets } from "../shared/imageAssetStore";
+import { preloadEditorView } from "../shared/editorPreload";
 import { importMarkdownFiles, localizeRemoteImages } from "./markdownImageImport";
 import { compressAvatarFile } from "./avatarImage";
 import { workspaceNodeMenuPosition } from "./workspaceNodeMenuPosition";
@@ -168,6 +169,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const workspaceSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const pendingWorkspaceState = useRef<WorkspaceStateSnapshot | null>(null);
   const sessionRef = useRef(session);
+  const workspaceStartedAt = useRef(performance.now());
+  const documentMountedLogged = useRef(false);
   const [serverReady, setServerReady] = useState(false);
   const [serverAvailable, setServerAvailable] = useState(false);
   const [serverStatus, setServerStatus] = useState("");
@@ -269,12 +272,21 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   useEffect(() => {
     let canceled = false;
     const loadingSession = sessionRef.current;
+    const initialEditorView = loadInitialWorkspaceEditorView(loadingSession.userId);
+    const editorPreloadStartedAt = performance.now();
+    logWorkspacePerf(`editor preload start (${initialEditorView})`, workspaceStartedAt.current);
+    void preloadEditorView(initialEditorView)
+      .then(() => logWorkspacePerf(`editor preload ready (${initialEditorView})`, editorPreloadStartedAt))
+      .catch(() => logWorkspacePerf(`editor preload failed (${initialEditorView})`, editorPreloadStartedAt));
+    const workspaceApiStartedAt = performance.now();
+    logWorkspacePerf("workspace api start", workspaceStartedAt.current);
     setServerReady(false);
     setServerAvailable(false);
     setServerStatus("");
     void loadWorkspaceState(loadingSession, { onSessionRefresh: handleSessionRefresh })
       .then((state) => {
         if (canceled) return;
+        logWorkspacePerf("workspace api ready", workspaceApiStartedAt);
         const nextProfile = normalizeUserProfile(state?.profile, sessionRef.current);
         const nextNodes = state?.nodes ?? [];
         documentStores.current = new Map(
@@ -301,6 +313,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       })
       .catch((error) => {
         if (canceled) return;
+        logWorkspacePerf("workspace api failed", workspaceApiStartedAt);
         if (error instanceof WorkspaceApiError && error.status === 401) {
           onLogout();
           return;
@@ -318,6 +331,12 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       canceled = true;
     };
   }, [handleSessionRefresh, onLogout, session.userId]);
+
+  useEffect(() => {
+    if (!serverReady || !activeFile || !activeDocumentStore || documentMountedLogged.current) return;
+    documentMountedLogged.current = true;
+    logWorkspacePerf("document mounted", workspaceStartedAt.current);
+  }, [activeDocumentStore, activeFile, serverReady]);
 
   useEffect(() => {
     if (!serverReady || !activeFileId) return;
@@ -1237,6 +1256,19 @@ function documentViewStorageKey(fileId: string) {
   return `zhijian.workspace.document.${fileId}.view-state.v1`;
 }
 
+function loadInitialWorkspaceEditorView(userId: string): "outline" | "mindmap" {
+  const fileId = loadLastOpenFileId(userId);
+  if (!fileId) return "outline";
+  try {
+    const raw = window.localStorage.getItem(documentViewStorageKey(fileId));
+    if (!raw) return "outline";
+    const view = (JSON.parse(raw) as { activeView?: unknown }).activeView;
+    return view === "mindmap" ? "mindmap" : "outline";
+  } catch {
+    return "outline";
+  }
+}
+
 function searchWorkspace(nodes: WorkspaceNode[], stores: Map<string, TreeStore>, query: string, folderFilterIds: Set<string>): WorkspaceSearchResult[] {
   const normalized = normalizeSearchText(query);
   if (!normalized) return [];
@@ -1640,6 +1672,11 @@ function NodeMenu({ node, nodes, anchor, moveOpen, onRename, onMoveToggle, onMov
 
 function errorMessage(error: unknown) {
   return error instanceof Error && error.message ? error.message : "未知错误";
+}
+
+function logWorkspacePerf(label: string, startedAt: number) {
+  if (!import.meta.env.DEV || import.meta.env.MODE === "test") return;
+  console.info(`[workspace-perf] ${label}: ${(performance.now() - startedAt).toFixed(1)}ms`);
 }
 
 function lastOpenFileStorageKey(userId: string) {

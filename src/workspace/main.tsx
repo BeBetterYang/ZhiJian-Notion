@@ -1,7 +1,4 @@
-import "@fontsource/source-sans-pro/400.css";
-import "@fontsource/source-sans-pro/400-italic.css";
-import "@fontsource/source-sans-pro/600.css";
-import "@fontsource/source-sans-pro/700.css";
+import "../shared/sourceSansPro.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { WorkspaceApp } from "./WorkspaceApp";

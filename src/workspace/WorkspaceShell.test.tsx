@@ -10,6 +10,7 @@ const serverMocks = vi.hoisted(() => ({
   saveWorkspaceDocument: vi.fn(),
   saveWorkspaceState: vi.fn(),
 }));
+const editorPreloadMocks = vi.hoisted(() => ({ preloadEditorView: vi.fn() }));
 
 vi.mock("../App", () => ({
   default: ({ store }: { store: TreeStore }) => {
@@ -34,6 +35,7 @@ vi.mock("./serverApi", () => ({
     }
   },
 }));
+vi.mock("../shared/editorPreload", () => editorPreloadMocks);
 
 import { WorkspaceShell } from "./WorkspaceShell";
 import { workspaceNodeMenuPosition } from "./workspaceNodeMenuPosition";
@@ -46,6 +48,10 @@ const session: WorkspaceSession = {
   refreshToken: "refresh-token",
   expiresAt: 1000,
 };
+
+beforeEach(() => {
+  editorPreloadMocks.preloadEditorView.mockReset().mockResolvedValue({});
+});
 
 describe("侧边栏更多菜单定位", () => {
   it("底部空间不足时显示在按钮上方", () => {
@@ -111,6 +117,35 @@ describe("WorkspaceShell session refresh", () => {
     render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
 
     expect(await screen.findByTestId("document-editor")).toHaveTextContent("第二个文档");
+  });
+
+  it("starts the remembered editor preload before the workspace API settles", () => {
+    const starts: string[] = [];
+    window.localStorage.setItem("zhijian.workspace.last-open-file.v1:user-1", "file-2");
+    window.localStorage.setItem("zhijian.workspace.document.file-2.view-state.v1", JSON.stringify({ activeView: "mindmap" }));
+    editorPreloadMocks.preloadEditorView.mockImplementation(() => {
+      starts.push("editor");
+      return new Promise(() => undefined);
+    });
+    serverMocks.loadWorkspaceState.mockImplementation(() => {
+      starts.push("api");
+      return new Promise(() => undefined);
+    });
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+
+    expect(editorPreloadMocks.preloadEditorView).toHaveBeenCalledWith("mindmap");
+    expect(starts).toEqual(["editor", "api"]);
+  });
+
+  it("falls back to the outline editor when the remembered view state is invalid", () => {
+    window.localStorage.setItem("zhijian.workspace.last-open-file.v1:user-1", "file-2");
+    window.localStorage.setItem("zhijian.workspace.document.file-2.view-state.v1", "not-json");
+    serverMocks.loadWorkspaceState.mockReturnValue(new Promise(() => undefined));
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+
+    expect(editorPreloadMocks.preloadEditorView).toHaveBeenCalledWith("outline");
   });
 
   it("does not reload workspace data when only the access token changes", async () => {

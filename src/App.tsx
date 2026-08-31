@@ -171,11 +171,16 @@ export default function App({
   }, [viewStateKey]);
 
   const changeView = useCallback((view: "outline" | "mindmap") => {
+    void preloadEditorView(view).catch(() => undefined);
     setActiveView(view);
     setSelectionActive(false);
     setMindMapTextSelection(null);
     persistViewStatePatch({ activeView: view });
   }, [persistViewStatePatch]);
+
+  const preloadAlternateView = useCallback(() => {
+    void preloadEditorView(activeView === "outline" ? "mindmap" : "outline").catch(() => undefined);
+  }, [activeView]);
 
   /**
    * The shortcuts that belong to the app rather than to a node — 搜索, 缩放, 切换视图,
@@ -428,10 +433,13 @@ export default function App({
         type="button"
         aria-label={activeView === "outline" ? "切换到思维导图" : "切换到大纲笔记"}
         title={activeView === "outline" ? "切换到思维导图" : "切换到大纲笔记"}
-          onClick={() => {
-            changeView(activeView === "outline" ? "mindmap" : "outline");
-            setToolbarMoreOpen(false);
-            setExportMenuOpen(false);
+        onPointerEnter={preloadAlternateView}
+        onPointerDown={preloadAlternateView}
+        onFocus={preloadAlternateView}
+        onClick={() => {
+          changeView(activeView === "outline" ? "mindmap" : "outline");
+          setToolbarMoreOpen(false);
+          setExportMenuOpen(false);
         }}
       >
         {activeView === "outline" ? <FiGitBranch /> : <FiList />}
