@@ -140,6 +140,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
   const [editingTarget, setEditingTarget] = useState<EditingTarget>(null);
   const [styleSubmenu, setStyleSubmenu] = useState<"scale" | "layout" | "theme" | null>(null);
   const [styleMoreMenu, setStyleMoreMenu] = useState<"layout" | "theme" | null>(null);
+  const styleMenuCloseTimer = useRef(0);
   const [scalePercent, setScalePercent] = useState(100);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [readOnlyLayout, setReadOnlyLayout] = useState<ZhiJianMindMapLayout | null>(null);
@@ -197,6 +198,20 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
   }, [styleSubmenu]);
+
+  useEffect(() => () => window.clearTimeout(styleMenuCloseTimer.current), []);
+
+  const cancelStyleMenuClose = () => {
+    window.clearTimeout(styleMenuCloseTimer.current);
+  };
+
+  const scheduleStyleMenuClose = () => {
+    window.clearTimeout(styleMenuCloseTimer.current);
+    styleMenuCloseTimer.current = window.setTimeout(() => {
+      setStyleSubmenu(null);
+      setStyleMoreMenu(null);
+    }, 180);
+  };
 
   useEffect(() => {
     const updateFullscreenState = () => {
@@ -1063,7 +1078,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
           it does in the editor — see `.mindmap-canvas.bn-root` in `styles.css`. */}
       <div className={`mindmap-canvas bn-root ${mindMapLayoutClassName(activeLayout)} ${zoomedNodeId ? "is-focus-mode" : ""} ${revealAllCloze ? CLOZE_REVEAL_ALL_CLASS : ""}`} ref={containerRef} />
       <div className="mindmap-canvas-toolbar" aria-label="导图视图工具栏">
-        <div className="mindmap-style-menu-wrap" onPointerLeave={() => { setStyleSubmenu(null); setStyleMoreMenu(null); }}>
+        <div className="mindmap-style-menu-wrap" onPointerEnter={cancelStyleMenuClose} onPointerLeave={scheduleStyleMenuClose}>
           <button
             type="button"
             className="mindmap-scale-reset"
@@ -1077,7 +1092,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
             {scalePercent}%
           </button>
           {styleSubmenu === "scale" ? (
-            <div className="mindmap-viewport-controls mindmap-toolbar-flyout" role="group" aria-label="缩放调节">
+            <div className="mindmap-viewport-controls mindmap-toolbar-flyout" role="group" aria-label="缩放调节" onPointerEnter={cancelStyleMenuClose}>
               <button type="button" title="定位到中心" aria-label="定位到中心" onClick={() => mindRef.current?.toCenter()}><FiCrosshair /></button>
               <button type="button" title="缩小" aria-label="缩小" onClick={() => setMindMapScale((scalePercent - 10) / 100)}><FiZoomOut /></button>
               <input
@@ -1103,7 +1118,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
               {hasCloze ? <button type="button" className={`mindmap-style-menu-trigger ${revealAllCloze ? "is-active" : ""}`} title={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"} aria-label={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"} aria-pressed={revealAllCloze} onPointerEnter={() => { setStyleSubmenu(null); setStyleMoreMenu(null); }} onClick={toggleAllCloze}>{revealAllCloze ? <RiEyeLine /> : <RiEyeOffLine />}</button> : null}
             </div>
             {styleSubmenu === "layout" ? (
-              <div className="mindmap-style-menu mindmap-layout-panel" role="menu" aria-label="导图样式">
+              <div className="mindmap-style-menu mindmap-layout-panel" role="menu" aria-label="导图样式" onPointerEnter={cancelStyleMenuClose}>
                 <div className="mindmap-panel-heading">
                   <span>结构</span>
                   {!readOnly && onMindMapDefaultsChange ? (
@@ -1166,7 +1181,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
               </div>
             ) : null}
             {styleSubmenu === "theme" ? (
-              <div className="mindmap-style-menu mindmap-theme-panel" role="menu" aria-label="导图主题">
+              <div className="mindmap-style-menu mindmap-theme-panel" role="menu" aria-label="导图主题" onPointerEnter={cancelStyleMenuClose}>
                 <div className="mindmap-panel-heading">
                   <span>配色</span>
                   {onMindMapDefaultsChange ? (
