@@ -1133,8 +1133,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
             </label>
             {shareError ? <p className="share-error" role="alert">{shareError}</p> : null}
             {shareUrl ? <>
-              <div className="share-link-row"><input value={shareUrl} readOnly aria-label="文档分享链接" /><button type="button" onClick={() => void copyShareUrl()}>复制链接</button></div>
-              {shareCopied ? <div className="share-copy-success" role="status">复制成功</div> : null}
+              <div className="share-link-row"><input value={shareUrl} readOnly aria-label="文档分享链接" /><button type="button" aria-live="polite" onClick={() => void copyShareUrl()}>{shareCopied ? "复制成功" : "复制链接"}</button></div>
               <div className="share-qr">{shareQrCode ? <img src={shareQrCode} alt="文档分享二维码" /> : null}<span>扫描二维码查看文档</span></div>
             </> : null}
           </section>

@@ -366,7 +366,6 @@ button { color: inherit; }
 .share-link-row { display: flex; gap: 8px; margin-top: 16px; }
 .share-link-row input { min-width: 0; height: 34px; flex: 1; padding: 0 9px; border: 1px solid rgba(55, 53, 47, 0.14); border-radius: 5px; outline: 0; color: #55534e; font: inherit; font-size: 13px; }
 .share-link-row button { height: 34px; flex: none; padding: 0 11px; border: 0; border-radius: 5px; background: #2383e2; color: #fff; font-size: 13px; cursor: pointer; }
-.share-copy-success { margin-top: 8px; color: #448361; font-size: 12px; }
 .share-qr { display: flex; align-items: center; flex-direction: column; gap: 8px; padding-top: 18px; color: #8b8a85; font-size: 12px; }
 .share-qr img { width: 196px; height: 196px; }
 .workspace-import-error { position: fixed; right: 16px; bottom: 16px; z-index: 200; max-width: 360px; }
