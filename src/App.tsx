@@ -22,6 +22,7 @@ import type { MindMapTextSelection } from "./mindmap/MindMapEditor";
 import { zoomPath } from "./outline/outlineZoom";
 import type { DocumentViewState, MindMapViewportState } from "./shared/documentViewState";
 import { captureOutlinePng, downloadBlob, imageBlobToPdf } from "./shared/exportFiles";
+import type { CapturedImage } from "./shared/exportFiles";
 import { matchingNodeIds, replaceSearchMatch, searchVisibleNodeIds } from "./shared/treeSearch";
 import {
   isAppShortcut,
@@ -110,7 +111,7 @@ export default function App({
   // picture blocks, which it does through its own toolbar in the shared host.
   const [mindMapNodeToolbarActive, setMindMapNodeToolbarActive] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
-  const mindMapExportImageRef = useRef<(() => Promise<Blob | null>) | null>(null);
+  const mindMapExportImageRef = useRef<(() => Promise<CapturedImage | null>) | null>(null);
   const handledFocusRequestIdRef = useRef<number | null>(null);
   const searchResultHighlightTimerRef = useRef<number | null>(null);
   const toolbarMoreRef = useRef<HTMLDivElement>(null);
@@ -376,18 +377,18 @@ export default function App({
 
   const exportOutlineImage = async (pdf = false) => {
     const image = await withExportView("outline", captureOutlinePng);
-    downloadBlob(pdf ? await imageBlobToPdf(image, "outline") : image, outlineExportFileName(tree, pdf ? "大纲.pdf" : "大纲.png"));
+    downloadBlob(pdf ? await imageBlobToPdf(image, "outline") : image.blob, outlineExportFileName(tree, pdf ? "大纲.pdf" : "大纲.png"));
   };
 
   const exportMindMapImage = async (pdf = false) => {
     const image = await withExportView("mindmap", async () => {
       const exporter = mindMapExportImageRef.current;
       if (!exporter) throw new Error("思维导图尚未准备好。");
-      const blob = await exporter();
-      if (!blob) throw new Error("思维导图图片生成失败。");
-      return blob;
+      const captured = await exporter();
+      if (!captured) throw new Error("思维导图图片生成失败。");
+      return captured;
     });
-    downloadBlob(pdf ? await imageBlobToPdf(image, "mindmap") : image, outlineExportFileName(tree, pdf ? "思维导图.pdf" : "思维导图.png"));
+    downloadBlob(pdf ? await imageBlobToPdf(image, "mindmap") : image.blob, outlineExportFileName(tree, pdf ? "思维导图.pdf" : "思维导图.png"));
   };
 
   const exportOutlineDocument = async (word: boolean) => {
@@ -743,7 +744,7 @@ export default function App({
 
 async function waitForExportView(
   view: "outline" | "mindmap",
-  mindMapExportImageRef: { current: (() => Promise<Blob | null>) | null },
+  mindMapExportImageRef: { current: (() => Promise<CapturedImage | null>) | null },
 ) {
   for (let frame = 0; frame < 120; frame += 1) {
     const ready = view === "outline"

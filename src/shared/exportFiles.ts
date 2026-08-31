@@ -1,3 +1,15 @@
+/**
+ * 一张拍好的图，连同它该配的底色。
+ *
+ * 底色跟着图一起走，而不是在写文件时另外定一次：导图的画布颜色是主题的一部分，而
+ * PDF 那一步已经离开了导图视图（`withExportView` 在 `finally` 里就切回去了），到那时
+ * 再去量画布已经量不到了。
+ */
+export interface CapturedImage {
+  blob: Blob;
+  background: string;
+}
+
 export function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -9,7 +21,7 @@ export function downloadBlob(blob: Blob, fileName: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-export async function captureOutlinePng() {
+export async function captureOutlinePng(): Promise<CapturedImage> {
   const element = document.querySelector<HTMLElement>(".outline-panel .bn-container");
   if (!element) throw new Error("大纲视图尚未准备好。");
   await document.fonts?.ready;
@@ -18,7 +30,7 @@ export async function captureOutlinePng() {
   const height = outlineCaptureHeight(element);
   const pixelRatio = Math.min(2, 15_000 / Math.max(width, height));
   const blob = await toBlob(element, {
-    backgroundColor: "#ffffff",
+    backgroundColor: PAPER_WHITE,
     cacheBust: true,
     width,
     height,
@@ -41,7 +53,7 @@ export async function captureOutlinePng() {
     ),
   });
   if (!blob) throw new Error("大纲图片生成失败。");
-  return blob;
+  return { blob, background: PAPER_WHITE };
 }
 
 /**
@@ -78,17 +90,18 @@ const OUTLINE_CAPTURE_TAIL = 24;
  * layer, so the picture holds the whole map rather than the part currently scrolled
  * into view.
  */
-export async function captureMindMapPng() {
+export async function captureMindMapPng(): Promise<CapturedImage> {
   const canvas = document.querySelector<HTMLElement>(".mindmap-canvas .map-canvas");
   const nodes = canvas?.querySelector<HTMLElement>("me-nodes");
   if (!canvas || !nodes) throw new Error("思维导图尚未准备好。");
   await document.fonts?.ready;
   const { toBlob } = await import("html-to-image");
+  const background = mindMapCaptureBackground(canvas);
   const width = Math.ceil(Math.max(nodes.scrollWidth, nodes.getBoundingClientRect().width));
   const height = Math.ceil(Math.max(nodes.scrollHeight, nodes.getBoundingClientRect().height));
   const pixelRatio = Math.min(2, 15_000 / Math.max(width, height));
   const blob = await toBlob(canvas, {
-    backgroundColor: "#ffffff",
+    backgroundColor: background,
     cacheBust: true,
     width,
     height,
@@ -107,10 +120,43 @@ export async function captureMindMapPng() {
     ),
   });
   if (!blob) throw new Error("思维导图图片生成失败。");
-  return blob;
+  return { blob, background };
 }
 
-export async function imageBlobToPdf(blob: Blob, layout: "outline" | "mindmap") {
+const PAPER_WHITE = "#ffffff";
+
+/**
+ * 主题给导图定的画布颜色。
+ *
+ * 主题把它画在 `.map-container` 上（mind-elixir 的 `--bgcolor`），而这里取景的是它
+ * 里面的 `.map-canvas`——底色本身不在画面里。以前这里写死白色，于是深色主题导出成
+ * 白纸配浅色字，几乎看不见；浅色主题也丢掉那层米白或浅灰的底。从容器上量一次现用的
+ * 颜色，导出的就是屏幕上那一张。
+ *
+ * 量出来的是 `rgb(...)`，这里换成十六进制：同一个值还要交给 jsPDF 铺页面底色，而
+ * `setFillColor` 认的是十六进制。
+ */
+function mindMapCaptureBackground(canvas: HTMLElement) {
+  const container = canvas.closest<HTMLElement>(".map-container");
+  return toHexColor(container ? window.getComputedStyle(container).backgroundColor : "") ?? PAPER_WHITE;
+}
+
+function toHexColor(color: string) {
+  if (/^#[0-9a-f]{6}$/i.test(color)) return color;
+  const channels = color.match(/^rgba?\(([^)]+)\)$/i)?.[1].split(",").map((part) => Number.parseFloat(part));
+  if (!channels || channels.length < 3 || channels.some((channel) => !Number.isFinite(channel))) return null;
+  // A fully transparent canvas is the browser's default, not a colour anyone chose.
+  if (channels.length > 3 && channels[3] === 0) return null;
+  return `#${channels.slice(0, 3).map((channel) => Math.round(channel).toString(16).padStart(2, "0")).join("")}`;
+}
+
+/**
+ * 图片装进 PDF。
+ *
+ * 页面底色跟着图走，而不是一律白纸：横放的导图是整张居中缩放的，四周留白如果是白的，
+ * 深色主题就成了白框里嵌一块深色，主题也就没导出来。
+ */
+export async function imageBlobToPdf({ blob, background }: CapturedImage, layout: "outline" | "mindmap") {
   const { jsPDF } = await import("jspdf");
   const image = await decodeImage(blob);
   try {
@@ -121,12 +167,18 @@ export async function imageBlobToPdf(blob: Blob, layout: "outline" | "mindmap") 
     const margin = 10;
     const usableWidth = pageWidth - margin * 2;
     const usableHeight = pageHeight - margin * 2;
+    const paintPage = () => {
+      if (background === PAPER_WHITE) return;
+      pdf.setFillColor(background);
+      pdf.rect(0, 0, pageWidth, pageHeight, "F");
+    };
 
     if (landscape) {
       const scale = Math.min(usableWidth / image.width, usableHeight / image.height);
       const width = image.width * scale;
       const height = image.height * scale;
-      pdf.addImage(await imageSliceDataUrl(image, 0, image.height), "JPEG", (pageWidth - width) / 2, (pageHeight - height) / 2, width, height, undefined, "FAST");
+      paintPage();
+      pdf.addImage(await imageSliceDataUrl(image, 0, image.height, background), "JPEG", (pageWidth - width) / 2, (pageHeight - height) / 2, width, height, undefined, "FAST");
       return pdf.output("blob");
     }
 
@@ -137,7 +189,8 @@ export async function imageBlobToPdf(blob: Blob, layout: "outline" | "mindmap") 
     while (sourceY < image.height) {
       const sliceHeight = Math.min(sourcePageHeight, image.height - sourceY);
       if (page > 0) pdf.addPage();
-      const dataUrl = await imageSliceDataUrl(image, sourceY, sliceHeight);
+      paintPage();
+      const dataUrl = await imageSliceDataUrl(image, sourceY, sliceHeight, background);
       pdf.addImage(dataUrl, "JPEG", margin, margin, usableWidth, sliceHeight * scale, undefined, "FAST");
       sourceY += sliceHeight;
       page += 1;
@@ -169,13 +222,14 @@ async function decodeImage(blob: Blob): Promise<DecodedImage> {
   }
 }
 
-async function imageSliceDataUrl(image: DecodedImage, sourceY: number, sourceHeight: number) {
+async function imageSliceDataUrl(image: DecodedImage, sourceY: number, sourceHeight: number, background: string) {
   const canvas = document.createElement("canvas");
   canvas.width = image.width;
   canvas.height = Math.max(1, Math.ceil(sourceHeight));
   const context = canvas.getContext("2d");
   if (!context) throw new Error("浏览器无法创建导出画布。");
-  context.fillStyle = "#ffffff";
+  // JPEG 没有透明通道，所以底下先铺一层主题的画布色，而不是一律白。
+  context.fillStyle = background;
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.drawImage(image.source, 0, sourceY, image.width, sourceHeight, 0, 0, image.width, sourceHeight);
   return canvas.toDataURL("image/jpeg", 0.94);

@@ -11,6 +11,7 @@ import type { TreeStore } from "../core/treeStore";
 import { useTree } from "../core/treeStore/useTree";
 import type { MindMapViewportState } from "../shared/documentViewState";
 import { captureMindMapPng } from "../shared/exportFiles";
+import type { CapturedImage } from "../shared/exportFiles";
 import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 import { handleShortcutKeyDown } from "../shared/shortcuts";
 import { createMindMapStructureSignature, treeToMindElixir } from "./mindElixirAdapter";
@@ -65,7 +66,7 @@ interface MindMapEditorProps {
   onViewportChange?: (viewport: MindMapViewportState) => void;
   initialDirection?: 0 | 1 | 2;
   onDirectionChange?: (direction: 0 | 1 | 2) => void;
-  onExportImageReady?: (exportImage: (() => Promise<Blob | null>) | null) => void;
+  onExportImageReady?: (exportImage: (() => Promise<CapturedImage | null>) | null) => void;
   mindMapDefaults?: ZhiJianMindMapDefaults;
   onMindMapDefaultsChange?: (patch: ZhiJianMindMapDefaults) => void;
 }
