@@ -107,8 +107,8 @@ describe("mindElixirAdapter", () => {
     const tree = createInitialTree();
     tree.mindMap = { frame: { rounded: true } };
     const rounded = treeToMindElixir(tree).nodeData;
-    expect(rounded.style).toMatchObject({ borderRadius: "999px" });
-    expect(rounded.children?.[0].style).toMatchObject({ borderRadius: "999px" });
+    expect(rounded.style).toMatchObject({ borderRadius: "16px" });
+    expect(rounded.children?.[0].style).toMatchObject({ borderRadius: "16px" });
 
     tree.mindMap.frame = { rounded: false };
     const square = treeToMindElixir(tree).nodeData;

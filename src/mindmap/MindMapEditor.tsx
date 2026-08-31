@@ -3,7 +3,8 @@ import MindElixir, { type MindElixirData, type NodeObj, type Operation, type Top
 import { zh_CN } from "mind-elixir/i18n";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type MutableRefObject, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { FiCheck, FiDroplet, FiGitBranch, FiMoreHorizontal, FiPlus } from "react-icons/fi";
+import { FiCheck, FiCrosshair, FiGitBranch, FiMaximize2, FiMinimize2, FiMoreHorizontal, FiPlus, FiZoomIn, FiZoomOut } from "react-icons/fi";
+import { IoColorPaletteOutline } from "react-icons/io5";
 import { RiEyeLine, RiEyeOffLine } from "react-icons/ri";
 import type { ZhiJianMindMapDefaults, ZhiJianMindMapLayout, ZhiJianTree } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
@@ -136,9 +137,10 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
   const contentHosts = useRef(new Map<string, HTMLDivElement>());
   const [contentTargets, setContentTargets] = useState<Array<{ id: string; host: HTMLElement }>>([]);
   const [editingTarget, setEditingTarget] = useState<EditingTarget>(null);
-  const [styleToolbarHost, setStyleToolbarHost] = useState<HTMLElement | null>(null);
-  const [styleSubmenu, setStyleSubmenu] = useState<"layout" | "theme" | null>(null);
+  const [styleSubmenu, setStyleSubmenu] = useState<"scale" | "layout" | "theme" | null>(null);
   const [styleMoreMenu, setStyleMoreMenu] = useState<"layout" | "theme" | null>(null);
+  const [scalePercent, setScalePercent] = useState(100);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [readOnlyLayout, setReadOnlyLayout] = useState<ZhiJianMindMapLayout | null>(null);
   const activeLayout = readOnlyLayout ?? resolveMindMapLayout(tree.mindMap?.layout, initialDirection);
   const activeLayoutKey = mindMapLayoutKey(activeLayout);
@@ -170,6 +172,19 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
     setStyleMoreMenu(null);
   };
 
+  const setMindMapScale = (scale: number) => {
+    const mind = mindRef.current;
+    if (!mind) return;
+    mind.scale(scale);
+  };
+
+  const toggleFullscreen = async () => {
+    const fullscreenTarget = containerRef.current?.closest<HTMLElement>(".mindmap-pane-body");
+    if (!fullscreenTarget) return;
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await fullscreenTarget.requestFullscreen();
+  };
+
   useEffect(() => {
     if (!styleSubmenu) return;
     const close = (event: PointerEvent) => {
@@ -181,6 +196,16 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
   }, [styleSubmenu]);
+
+  useEffect(() => {
+    const updateFullscreenState = () => {
+      const fullscreenTarget = containerRef.current?.closest<HTMLElement>(".mindmap-pane-body");
+      setIsFullscreen(Boolean(fullscreenTarget && document.fullscreenElement === fullscreenTarget));
+      window.requestAnimationFrame(() => mindRef.current?.toCenter());
+    };
+    document.addEventListener("fullscreenchange", updateFullscreenState);
+    return () => document.removeEventListener("fullscreenchange", updateFullscreenState);
+  }, []);
   const [revealAllCloze, setRevealAllCloze] = useState(false);
   const hasCloze = treeHasClozeContent(tree);
 
@@ -390,7 +415,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
           },
         ],
       },
-      toolBar: true,
+      toolBar: false,
       keypress: true,
       allowUndo: false,
       newTopicName: " ",
@@ -408,13 +433,10 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
       ),
     });
     mind.init({ ...treeToMindElixir(initialTree.current, projectionOptionsRef.current), direction: directionRef.current });
-    // mind-elixir's own layout switcher, top left. 一键显示/隐藏挖空内容 belongs with it
-    // rather than in the app's toolbar: it is a way of looking at the map, like the
-    // three layouts next to it, and it only appears while the document has a cloze.
-    setStyleToolbarHost(containerRef.current.querySelector<HTMLElement>(".mind-elixir-toolbar.lt"));
     correctMindMapSummaryOffsets(mind, initialTree.current);
     if (initialViewportRef.current && !projectionOptionsRef.current.rootNodeId) {
       restoreMindMapViewport(mind, initialViewportRef.current);
+      setScalePercent(Math.round(initialViewportRef.current.scale * 100));
     }
     mind.beginEdit = async (element) => {
       const nodeId = (element ?? mind.currentNode)?.nodeObj.id;
@@ -501,7 +523,8 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
       const viewport = readMindMapViewport(mind);
       if (viewport) onViewportChange?.(viewport);
     });
-    mind.bus.addListener("scale", () => {
+    mind.bus.addListener("scale", (scale: number) => {
+      setScalePercent(Math.round(scale * 100));
       const viewport = readMindMapViewport(mind);
       if (viewport) onViewportChange?.(viewport);
     });
@@ -1038,13 +1061,45 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
           borrows so a coloured run of text or table cell looks the same at rest as
           it does in the editor — see `.mindmap-canvas.bn-root` in `styles.css`. */}
       <div className={`mindmap-canvas bn-root ${mindMapLayoutClassName(activeLayout)} ${zoomedNodeId ? "is-focus-mode" : ""} ${revealAllCloze ? CLOZE_REVEAL_ALL_CLASS : ""}`} ref={containerRef} />
-      {styleToolbarHost
-        ? createPortal(
-          <div className="mindmap-style-menu-wrap">
+      <div className="mindmap-canvas-toolbar" aria-label="导图视图工具栏">
+        <div className="mindmap-style-menu-wrap" onPointerLeave={() => { setStyleSubmenu(null); setStyleMoreMenu(null); }}>
+          <button
+            type="button"
+            className="mindmap-scale-reset"
+            title="缩放"
+            aria-label={`缩放 ${scalePercent}%`}
+            aria-expanded={styleSubmenu === "scale"}
+            onPointerEnter={() => { setStyleMoreMenu(null); setStyleSubmenu("scale"); }}
+            onFocus={() => { setStyleMoreMenu(null); setStyleSubmenu("scale"); }}
+            onClick={() => setMindMapScale(1)}
+          >
+            {scalePercent}%
+          </button>
+          {styleSubmenu === "scale" ? (
+            <div className="mindmap-viewport-controls mindmap-toolbar-flyout" role="group" aria-label="缩放调节">
+              <button type="button" title="定位到中心" aria-label="定位到中心" onClick={() => mindRef.current?.toCenter()}><FiCrosshair /></button>
+              <button type="button" title="缩小" aria-label="缩小" onClick={() => setMindMapScale((scalePercent - 10) / 100)}><FiZoomOut /></button>
+              <input
+                type="range"
+                min="0"
+                max="160"
+                step="1"
+                value={mindMapScaleSliderPosition(scalePercent)}
+                aria-label="导图缩放"
+                aria-valuemin={20}
+                aria-valuemax={140}
+                aria-valuenow={scalePercent}
+                aria-valuetext={`${scalePercent}%`}
+                onChange={(event) => setMindMapScale(mindMapScalePercentFromSlider(Number(event.target.value)) / 100)}
+              />
+              <button type="button" title="放大" aria-label="放大" onClick={() => setMindMapScale((scalePercent + 10) / 100)}><FiZoomIn /></button>
+              <button type="button" title={isFullscreen ? "退出全屏" : "全屏显示"} aria-label={isFullscreen ? "退出全屏" : "全屏显示"} onClick={() => void toggleFullscreen()}>{isFullscreen ? <FiMinimize2 /> : <FiMaximize2 />}</button>
+            </div>
+          ) : null}
             <div className="mindmap-style-menu-buttons">
-              <button type="button" className="mindmap-style-menu-trigger" title="布局" aria-label="布局" aria-expanded={styleSubmenu === "layout"} onClick={() => { setStyleMoreMenu(null); setStyleSubmenu(styleSubmenu === "layout" ? null : "layout"); }}><FiGitBranch /></button>
-              {!readOnly ? <button type="button" className="mindmap-style-menu-trigger" title="样式" aria-label="样式" aria-expanded={styleSubmenu === "theme"} onClick={() => { setStyleMoreMenu(null); setStyleSubmenu(styleSubmenu === "theme" ? null : "theme"); }}><FiDroplet /></button> : null}
-              {hasCloze ? <button type="button" className={`mindmap-style-menu-trigger ${revealAllCloze ? "is-active" : ""}`} title={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"} aria-label={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"} aria-pressed={revealAllCloze} onClick={toggleAllCloze}>{revealAllCloze ? <RiEyeLine /> : <RiEyeOffLine />}</button> : null}
+              <button type="button" className="mindmap-style-menu-trigger" title="布局" aria-label="布局" aria-expanded={styleSubmenu === "layout"} onPointerEnter={() => { setStyleMoreMenu(null); setStyleSubmenu("layout"); }} onFocus={() => { setStyleMoreMenu(null); setStyleSubmenu("layout"); }} onClick={() => { setStyleMoreMenu(null); setStyleSubmenu(styleSubmenu === "layout" ? null : "layout"); }}><FiGitBranch /></button>
+              {!readOnly ? <button type="button" className="mindmap-style-menu-trigger" title="样式" aria-label="样式" aria-expanded={styleSubmenu === "theme"} onPointerEnter={() => { setStyleMoreMenu(null); setStyleSubmenu("theme"); }} onFocus={() => { setStyleMoreMenu(null); setStyleSubmenu("theme"); }} onClick={() => { setStyleMoreMenu(null); setStyleSubmenu(styleSubmenu === "theme" ? null : "theme"); }}><IoColorPaletteOutline /></button> : null}
+              {hasCloze ? <button type="button" className={`mindmap-style-menu-trigger ${revealAllCloze ? "is-active" : ""}`} title={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"} aria-label={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"} aria-pressed={revealAllCloze} onPointerEnter={() => { setStyleSubmenu(null); setStyleMoreMenu(null); }} onClick={toggleAllCloze}>{revealAllCloze ? <RiEyeLine /> : <RiEyeOffLine />}</button> : null}
             </div>
             {styleSubmenu === "layout" ? (
               <div className="mindmap-style-menu mindmap-layout-panel" role="menu" aria-label="导图样式">
@@ -1222,10 +1277,8 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
                 </div>
               </div>
             ) : null}
-          </div>,
-          styleToolbarHost,
-        )
-        : null}
+        </div>
+      </div>
       {/* Hovering a link anywhere in the map — a node's own text, a quote or a table
           cell — opens the outline's link toolbar over it. The popup itself is rendered
           by `MindMapLinkToolbar`, inside the outline editor whose component it is. */}
@@ -1299,6 +1352,14 @@ function mindMapThemeDefaultsKey(defaults?: ZhiJianMindMapDefaults) {
     defaults.connector?.rounded ?? false,
     defaults.frame?.rounded ?? false,
   ].join(":");
+}
+
+function mindMapScaleSliderPosition(percent: number) {
+  return percent <= 100 ? percent - 20 : 80 + (percent - 100) * 2;
+}
+
+function mindMapScalePercentFromSlider(position: number) {
+  return position <= 80 ? position + 20 : 100 + (position - 80) / 2;
 }
 
 function MindMapLayoutPreview({ type }: { type: ZhiJianMindMapLayout["type"] }) {

@@ -50,6 +50,7 @@ const HEADING_FONT_SIZE = {
 } as const;
 const BODY_FONT_SIZE = "var(--zhijian-type-body-size)";
 const ROOT_FONT_SIZE = "20px";
+const ROUNDED_FRAME_RADIUS = "16px";
 
 /**
  * The node box's own typography. Deliberately blind to the text's marks: a mark
@@ -91,7 +92,7 @@ export function getMindMapNodeVisualStyle(
     textDecoration: style.textDecorationLine || style.textDecoration,
     borderColor: userStyle.borderColor ?? themed.border,
     borderRadius: userStyle.borderRadius
-      ?? (context.roundedFrames === undefined ? themed.radius : context.roundedFrames ? "999px" : "6px"),
+      ?? (context.roundedFrames === undefined ? themed.radius : context.roundedFrames ? ROUNDED_FRAME_RADIUS : "6px"),
     accentColor: context.branchColor ?? theme.connector.color,
     userColor: style.color,
   };
