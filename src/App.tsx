@@ -22,7 +22,7 @@ import type { MindMapTextSelection } from "./mindmap/MindMapEditor";
 import { zoomPath } from "./outline/outlineZoom";
 import type { DocumentViewState, MindMapViewportState } from "./shared/documentViewState";
 import { preloadEditorView } from "./shared/editorPreload";
-import { captureOutlinePng, downloadBlob, imageBlobToPdf } from "./shared/exportFiles";
+import { captureOutlinePng, downloadBlob, imageBlobToPdf, preloadImageExporter } from "./shared/exportFiles";
 import type { CapturedImage } from "./shared/exportFiles";
 import { matchingNodeIds, replaceSearchMatch, searchVisibleNodeIds } from "./shared/treeSearch";
 import {
@@ -511,7 +511,12 @@ export default function App({
                 role="menuitem"
                 aria-haspopup="menu"
                 aria-expanded={exportMenuOpen}
-                onClick={() => setExportMenuOpen((open) => !open)}
+                onClick={() => {
+                  // 打开导出子菜单就是最早的明确意图：这时候把编码器要过来，等真的点了
+                  // "大纲图片"，模块通常已经在手里。
+                  if (!exportMenuOpen) preloadImageExporter();
+                  setExportMenuOpen((open) => !open);
+                }}
               >
                 <FiDownload />
                 <span>导出</span>

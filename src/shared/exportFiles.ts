@@ -21,17 +21,116 @@ export function downloadBlob(blob: Blob, fileName: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+/**
+ * 一次导出愿意画多大的位图。
+ *
+ * 只限制最长边是不够的：一张 9000×7000 的导图两边都没超线，乘以 2× 就是两亿多像素、
+ * 将近 1GB 的 canvas，浏览器要么卡住要么直接把画布判成无效。所以三条线一起卡——倍数、
+ * 最长边、总像素——取最小的那个。小文档照旧 2× 高清，大文档自己降到 1.x，超大导图落到
+ * 下限 0.5×（再低就看不清字了，宁可让它慢也不要交一张没法读的图）。
+ *
+ * 总像素那条用开方：像素数是按面积涨的，要把面积压到预算内，倍数得按 √ 缩。
+ */
+const MAX_EXPORT_PIXEL_RATIO = 2;
+const MAX_EXPORT_DIMENSION = 12_000;
+const MAX_EXPORT_PIXELS = 32_000_000;
+
+export function exportPixelRatio(width: number, height: number) {
+  const longestSide = Math.max(width, height, 1);
+  const area = Math.max(width * height, 1);
+  return Math.max(0.5, Math.min(
+    MAX_EXPORT_PIXEL_RATIO,
+    MAX_EXPORT_DIMENSION / longestSide,
+    Math.sqrt(MAX_EXPORT_PIXELS / area),
+  ));
+}
+
+let htmlToImagePromise: Promise<typeof import("html-to-image")> | null = null;
+
+/**
+ * 在用户露出导出意图时就把 html-to-image 拉下来。
+ *
+ * 它连着 canvas 编码那一套，是个不小的 chunk；等到点了"导出图片"再下载，这段网络时间
+ * 全落在等待条上。所以打开导出菜单时先要，真正导出时大概已经在手里了。不改回静态
+ * import：工作区首屏用不到它。
+ */
+export function preloadImageExporter() {
+  void loadHtmlToImage().catch(() => undefined);
+}
+
+function loadHtmlToImage() {
+  if (!htmlToImagePromise) {
+    const startedAt = performance.now();
+    htmlToImagePromise = import("html-to-image")
+      .then((module) => {
+        exportLog("preload html-to-image", startedAt);
+        return module;
+      })
+      .catch((error: unknown) => {
+        // 失败的 Promise 不能留在缓存里，否则一次网络抖动之后再也导不出来了。
+        htmlToImagePromise = null;
+        throw error;
+      });
+  }
+  return htmlToImagePromise;
+}
+
+let fontEmbedCssPromise: Promise<string> | null = null;
+
+/**
+ * 等字体就位，并拿到只需算一次的字体嵌入 CSS。
+ *
+ * html-to-image 默认每次 `toBlob` 都要把页面里用到的 `@font-face` 找出来、把字体文件抓
+ * 下来转成 base64 塞进克隆节点。Source Sans Pro 有 400/italic/600/700 四份，每次导出重来
+ * 一遍纯属白费。`getFontEmbedCSS` 就是官方给的复用口子，算一次之后大纲和导图共用。
+ *
+ * 从 `document.body` 上取，而不是从被拍的那棵子树：它按"节点里实际用到的字族"筛
+ * `@font-face`，两个视图各自取会得到两份不同的 CSS，缓存就串味了。整页取到的是超集，多
+ * 出来的规则不会改变画面。
+ *
+ * 算失败就退回 html-to-image 自己的老路（返回 `undefined` 即不传这个选项），并把缓存清空
+ * 让下次再试——导出不能因为这层优化而失败。
+ */
+async function prepareExportFonts() {
+  const startedAt = performance.now();
+  await document.fonts?.ready;
+  if (!fontEmbedCssPromise) {
+    fontEmbedCssPromise = loadHtmlToImage()
+      .then((module) => module.getFontEmbedCSS(document.body))
+      .catch(() => {
+        fontEmbedCssPromise = null;
+        return "";
+      });
+  }
+  const css = await fontEmbedCssPromise;
+  exportLog("fonts ready/embed", startedAt);
+  return css || undefined;
+}
+
+function exportLog(label: string, startedAt: number) {
+  if (import.meta.env.DEV) console.info(`[export] ${label}: ${(performance.now() - startedAt).toFixed(1)}ms`);
+}
+
+function logCaptureSize(width: number, height: number, pixelRatio: number) {
+  if (!import.meta.env.DEV) return;
+  const pixels = width * pixelRatio * height * pixelRatio;
+  console.info(`[export] capture size: ${width}x${height} @ ${pixelRatio.toFixed(2)}x = ${(pixels / 1_000_000).toFixed(1)}M px`);
+}
+
 export async function captureOutlinePng(): Promise<CapturedImage> {
+  const startedAt = performance.now();
   const element = document.querySelector<HTMLElement>(".outline-panel .bn-container");
   if (!element) throw new Error("大纲视图尚未准备好。");
-  await document.fonts?.ready;
-  const { toBlob } = await import("html-to-image");
+  const { toBlob } = await loadHtmlToImage();
+  const fontEmbedCSS = await prepareExportFonts();
   const width = Math.ceil(Math.max(element.scrollWidth, element.getBoundingClientRect().width));
   const height = outlineCaptureHeight(element);
-  const pixelRatio = Math.min(2, 15_000 / Math.max(width, height));
+  const pixelRatio = exportPixelRatio(width, height);
+  logCaptureSize(width, height, pixelRatio);
+  const renderStartedAt = performance.now();
   const blob = await toBlob(element, {
     backgroundColor: PAPER_WHITE,
-    cacheBust: true,
+    fontEmbedCSS,
     width,
     height,
     pixelRatio,
@@ -52,7 +151,9 @@ export async function captureOutlinePng(): Promise<CapturedImage> {
       ".bn-side-menu, .bn-formatting-toolbar, .bn-slash-menu, .bn-table-handle, .bn-resize-handle",
     ),
   });
+  exportLog("html-to-image", renderStartedAt);
   if (!blob) throw new Error("大纲图片生成失败。");
+  exportLog("total", startedAt);
   return { blob, background: PAPER_WHITE };
 }
 
@@ -91,18 +192,21 @@ const OUTLINE_CAPTURE_TAIL = 24;
  * into view.
  */
 export async function captureMindMapPng(): Promise<CapturedImage> {
+  const startedAt = performance.now();
   const canvas = document.querySelector<HTMLElement>(".mindmap-canvas .map-canvas");
   const nodes = canvas?.querySelector<HTMLElement>("me-nodes");
   if (!canvas || !nodes) throw new Error("思维导图尚未准备好。");
-  await document.fonts?.ready;
-  const { toBlob } = await import("html-to-image");
+  const { toBlob } = await loadHtmlToImage();
+  const fontEmbedCSS = await prepareExportFonts();
   const background = mindMapCaptureBackground(canvas);
   const width = Math.ceil(Math.max(nodes.scrollWidth, nodes.getBoundingClientRect().width));
   const height = Math.ceil(Math.max(nodes.scrollHeight, nodes.getBoundingClientRect().height));
-  const pixelRatio = Math.min(2, 15_000 / Math.max(width, height));
+  const pixelRatio = exportPixelRatio(width, height);
+  logCaptureSize(width, height, pixelRatio);
+  const renderStartedAt = performance.now();
   const blob = await toBlob(canvas, {
     backgroundColor: background,
-    cacheBust: true,
+    fontEmbedCSS,
     width,
     height,
     pixelRatio,
@@ -119,7 +223,9 @@ export async function captureMindMapPng(): Promise<CapturedImage> {
       ".mindmap-node-editor, .bn-formatting-toolbar, .bn-slash-menu, #input-box, .selection-area, .circle, .mind-elixir-ghost",
     ),
   });
+  exportLog("html-to-image", renderStartedAt);
   if (!blob) throw new Error("思维导图图片生成失败。");
+  exportLog("total", startedAt);
   return { blob, background };
 }
 
@@ -157,6 +263,7 @@ function toHexColor(color: string) {
  * 深色主题就成了白框里嵌一块深色，主题也就没导出来。
  */
 export async function imageBlobToPdf({ blob, background }: CapturedImage, layout: "outline" | "mindmap") {
+  const startedAt = performance.now();
   const { jsPDF } = await import("jspdf");
   const image = await decodeImage(blob);
   try {
@@ -198,6 +305,7 @@ export async function imageBlobToPdf({ blob, background }: CapturedImage, layout
     return pdf.output("blob");
   } finally {
     image.close?.();
+    exportLog("pdf encode", startedAt);
   }
 }
 
