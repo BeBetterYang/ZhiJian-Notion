@@ -2295,7 +2295,7 @@ textarea {
 .mindmap-canvas-toolbar {
   position: absolute;
   top: 16px;
-  left: 16px;
+  right: 16px;
   z-index: 40;
   color: #37352f;
   font-family: var(--zhijian-font-family);
@@ -2313,22 +2313,23 @@ textarea {
   position: absolute;
   z-index: 90;
   top: 0;
-  right: auto;
-  left: calc(100% + 12px);
+  right: calc(100% + 12px);
+  left: auto;
   display: flex;
   width: min(278px, calc(100vw - 74px));
   height: 40px;
   align-items: center;
   gap: 3px;
   padding: 3px;
-  transform-origin: top left;
+  transform-origin: top right;
 }
 
 .mindmap-toolbar-flyout::before,
 .mindmap-style-menu::before {
   position: absolute;
   top: 0;
-  right: 100%;
+  right: auto;
+  left: 100%;
   width: 12px;
   height: 100%;
   content: "";
@@ -2457,9 +2458,9 @@ textarea {
   position: absolute;
   z-index: 90;
   top: 0;
-  right: auto;
-  left: calc(100% + 12px);
-  transform-origin: top left;
+  right: calc(100% + 12px);
+  left: auto;
+  transform-origin: top right;
   width: 168px;
   padding: 6px;
   border: 1px solid rgba(55, 53, 47, 0.12);
