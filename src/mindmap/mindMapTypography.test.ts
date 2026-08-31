@@ -111,4 +111,16 @@ describe("mind map display/editor typography", () => {
     expect(paragraph).toContain("padding: 0");
     expect(paragraph).toContain("line-height: inherit");
   });
+
+  it("applies neutral outline ink only to the three plain document themes", () => {
+    const bodyRule = /\.outline-panel:is\(([^{}]+)\) \.bn-container \{([^{}]+)\}/.exec(flattened);
+    expect(bodyRule?.[1]).toContain('[data-document-theme="pure"]');
+    expect(bodyRule?.[1]).toContain('[data-document-theme="outline"]');
+    expect(bodyRule?.[1]).toContain('[data-document-theme="paper"]');
+    expect(bodyRule?.[1]).not.toContain('[data-document-theme="ink"]');
+    expect(bodyRule?.[2]).toContain("--bn-colors-editor-text: #202020");
+
+    const headingRule = /\.outline-panel:is\(([^{}]+)\) \.bn-block-content\[data-content-type="heading"\][^{}]+\{([^{}]+)\}/.exec(flattened);
+    expect(headingRule?.[2]).toContain("color: #181818");
+  });
 });

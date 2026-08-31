@@ -27,6 +27,49 @@ describe("mind map theme presets", () => {
     expect(MIND_MAP_THEME_PRESETS.filter((theme) => theme.group === "dark")).toHaveLength(6);
   });
 
+  it("uses neutral black text only for the three plain themes", () => {
+    const plainThemes = MIND_MAP_THEME_PRESETS.filter((theme) => ["pure", "outline", "paper"].includes(theme.id));
+    expect(plainThemes.map((theme) => ({
+      id: theme.id,
+      level1: theme.level1.text,
+      child: theme.child.text,
+    }))).toEqual([
+      { id: "pure", level1: "#181818", child: "#202020" },
+      { id: "outline", level1: "#181818", child: "#202020" },
+      { id: "paper", level1: "#181818", child: "#202020" },
+    ]);
+    expect(plainThemes.map((theme) => ({
+      id: theme.id,
+      rootBackground: theme.root.background,
+      rootText: theme.root.text,
+    }))).toEqual([
+      { id: "pure", rootBackground: "transparent", rootText: "#37352f" },
+      { id: "outline", rootBackground: "transparent", rootText: "#37352f" },
+      { id: "paper", rootBackground: "#414141", rootText: "#ffffff" },
+    ]);
+  });
+
+  it("keeps every non-plain theme's existing node text colours", () => {
+    expect(Object.fromEntries(
+      MIND_MAP_THEME_PRESETS
+        .filter((theme) => !["pure", "outline", "paper"].includes(theme.id))
+        .map((theme) => [theme.id, [theme.level1.text, theme.child.text]]),
+    )).toEqual({
+      ink: ["#4f5053", "#4f5053"],
+      yanpi: ["#5f5140", "#4f4942"],
+      mist: ["#52647d", "#46556a"],
+      breeze: ["#35783a", "#3f6542"],
+      pulse: ["#a34f2d", "#82503d"],
+      voyage: ["#236ca9", "#34627f"],
+      focus: ["#f2f2f3", "#dedee0"],
+      "deep-dive": ["#e4e9f5", "#cbd4e8"],
+      "night-map": ["#f0e4f7", "#dbc9e6"],
+      "secret-forest": ["#dfe7c8", "#c9d4ae"],
+      volcano: ["#f0d5c8", "#dec0b2"],
+      "dream-lake": ["#d8eceb", "#bededc"],
+    });
+  });
+
   it("offers every unique theme canvas colour in the background palette", () => {
     const themeBackgrounds = [...new Set(MIND_MAP_THEME_PRESETS.map((theme) => theme.canvas.background))];
     expect(MIND_MAP_BACKGROUND_PRESETS.map((background) => background.value)).toEqual(themeBackgrounds);

@@ -1,3 +1,5 @@
+import { createInitialTree, plainTextContent, type ZhiJianMindMapDecorations, type ZhiJianMindMapDefaults, type ZhiJianTree } from "../core/tree";
+
 export interface WorkspaceFolder {
   id: string;
   title: string;
@@ -152,6 +154,44 @@ export function createWorkspaceNode(nodes: WorkspaceNode[], type: WorkspaceNode[
     ? { ...base, type: "file", favorite: false, openedAt: Math.max(0, ...nodes.filter(isWorkspaceFile).map((file) => file.openedAt)) + 1 }
     : { ...base, type: "folder" };
   return { node, nodes: [...shiftedNodes, node] };
+}
+
+export function applyMindMapDefaults(tree: ZhiJianTree, defaults?: ZhiJianMindMapDefaults): ZhiJianTree {
+  if (!defaults || !Object.values(defaults).some(Boolean)) return tree;
+  const current = tree.mindMap;
+  const mindMap: ZhiJianMindMapDecorations = {
+    ...cloneMindMapDefaults(defaults),
+    ...current,
+    theme: current?.theme ? { ...current.theme } : defaults.theme ? { ...defaults.theme } : undefined,
+    connector: current?.connector ? { ...current.connector } : defaults.connector ? { ...defaults.connector } : undefined,
+    frame: current?.frame ? { ...current.frame } : defaults.frame ? { ...defaults.frame } : undefined,
+    canvas: current?.canvas ? { ...current.canvas } : defaults.canvas ? { ...defaults.canvas } : undefined,
+    layout: current?.layout ? { ...current.layout } : defaults.layout ? { ...defaults.layout } : undefined,
+  };
+  return { ...tree, mindMap };
+}
+
+export function createWorkspaceDocument(title: string, defaults?: ZhiJianMindMapDefaults): ZhiJianTree {
+  const tree = createInitialTree();
+  const root = tree.nodes[tree.rootId];
+  root.content = plainTextContent(title);
+  root.children = [];
+  tree.nodes = { [root.id]: root };
+  return applyMindMapDefaults(tree, defaults);
+}
+
+export function mergeMindMapDefaults(current: ZhiJianMindMapDefaults | undefined, patch: ZhiJianMindMapDefaults): ZhiJianMindMapDefaults {
+  return cloneMindMapDefaults({ ...current, ...patch });
+}
+
+function cloneMindMapDefaults(defaults: ZhiJianMindMapDefaults): ZhiJianMindMapDefaults {
+  return {
+    theme: defaults.theme ? { ...defaults.theme } : undefined,
+    connector: defaults.connector ? { ...defaults.connector } : undefined,
+    frame: defaults.frame ? { ...defaults.frame } : undefined,
+    canvas: defaults.canvas ? { ...defaults.canvas } : undefined,
+    layout: defaults.layout ? { ...defaults.layout } : undefined,
+  };
 }
 
 export function renameWorkspaceNode(nodes: WorkspaceNode[], nodeId: string, title: string) {

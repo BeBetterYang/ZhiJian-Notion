@@ -12,9 +12,18 @@ const serverMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../App", () => ({
-  default: ({ store }: { store: TreeStore }) => (
-    <div data-testid="document-editor">{store.getSnapshot().nodes[store.getSnapshot().rootId]?.content.text}</div>
-  ),
+  default: ({ store }: { store: TreeStore }) => {
+    const tree = store.getSnapshot();
+    return (
+      <div
+        data-testid="document-editor"
+        data-theme={tree.mindMap?.theme?.id ?? ""}
+        data-layout={tree.mindMap?.layout?.type ?? ""}
+      >
+        {tree.nodes[tree.rootId]?.content.text}
+      </div>
+    );
+  },
 }));
 
 vi.mock("./serverApi", () => ({
@@ -27,6 +36,7 @@ vi.mock("./serverApi", () => ({
 }));
 
 import { WorkspaceShell } from "./WorkspaceShell";
+import { workspaceNodeMenuPosition } from "./workspaceNodeMenuPosition";
 
 const session: WorkspaceSession = {
   email: "user@example.com",
@@ -36,6 +46,24 @@ const session: WorkspaceSession = {
   refreshToken: "refresh-token",
   expiresAt: 1000,
 };
+
+describe("侧边栏更多菜单定位", () => {
+  it("底部空间不足时显示在按钮上方", () => {
+    expect(workspaceNodeMenuPosition(
+      { top: 740, right: 300, bottom: 764 },
+      { width: 206, height: 230 },
+      { width: 1200, height: 800 },
+    )).toEqual({ top: 506, left: 94 });
+  });
+
+  it("空间足够时显示在按钮下方并限制在视口内", () => {
+    expect(workspaceNodeMenuPosition(
+      { top: 100, right: 150, bottom: 124 },
+      { width: 206, height: 230 },
+      { width: 320, height: 800 },
+    )).toEqual({ top: 128, left: 8 });
+  });
+});
 
 describe("WorkspaceShell session refresh", () => {
   beforeEach(() => {
@@ -106,6 +134,48 @@ describe("WorkspaceShell session refresh", () => {
     await waitFor(() => expect(screen.getByTestId("document-editor")).toBeInTheDocument());
     expect(screen.queryByText("正在加载服务器数据")).not.toBeInTheDocument();
     expect(serverMocks.loadWorkspaceState).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps an existing document's choices and applies user defaults to a new document", async () => {
+    const existing = createInitialTree();
+    existing.mindMap = {
+      theme: { id: "ocean", version: 1 },
+      layout: { type: "logic", direction: "left" },
+    };
+    serverMocks.loadWorkspaceState.mockResolvedValue({
+      profile: { name: "枝间用户", email: session.email, avatarUrl: "" },
+      preferences: {
+        mindMapDefaults: {
+          theme: { id: "yanpi", version: 1 },
+          layout: { type: "mind-map", direction: "both", order: "alternating" },
+        },
+      },
+      nodes: [{ id: "file-1", title: "产品规划", type: "file", parentId: null, order: 0, favorite: false, openedAt: 1 }],
+      documents: { "file-1": existing },
+    });
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+
+    const existingEditor = await screen.findByTestId("document-editor");
+    expect(existingEditor).toHaveAttribute("data-theme", "ocean");
+    expect(existingEditor).toHaveAttribute("data-layout", "logic");
+
+    fireEvent.click(screen.getByRole("button", { name: "新增" }));
+    fireEvent.click(screen.getByRole("button", { name: "新增文档" }));
+
+    await waitFor(() => expect(screen.getByTestId("document-editor")).toHaveAttribute("data-theme", "yanpi"));
+    expect(screen.getByTestId("document-editor")).toHaveAttribute("data-layout", "mind-map");
+  });
+
+  it("portals the sidebar node menu outside the scrolling sidebar", async () => {
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "产品规划的更多操作" }));
+    const menu = screen.getByRole("button", { name: "重命名" }).closest(".node-menu");
+
+    await waitFor(() => expect(menu).toHaveStyle({ visibility: "visible" }));
+    expect(menu?.parentElement).toBe(document.body);
+    expect(menu).toHaveStyle({ position: "fixed" });
   });
 });
 

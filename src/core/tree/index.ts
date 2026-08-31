@@ -3,6 +3,7 @@ export type {
   ZhiJianImageData,
   ZhiJianMindMapArrow,
   ZhiJianMindMapDecorations,
+  ZhiJianMindMapDefaults,
   ZhiJianMindMapLayout,
   ZhiJianMindMapSummary,
   ZhiJianNode,

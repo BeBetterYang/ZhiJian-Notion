@@ -1,4 +1,4 @@
-import type { ZhiJianTree } from "../core/tree";
+import type { ZhiJianMindMapDefaults, ZhiJianTree } from "../core/tree";
 import {
   refreshWorkspaceSession,
   saveWorkspaceSession,
@@ -14,8 +14,13 @@ export interface WorkspaceProfile {
   avatarUrl: string;
 }
 
+export interface WorkspacePreferences {
+  mindMapDefaults?: ZhiJianMindMapDefaults;
+}
+
 export interface WorkspaceServerState {
   profile?: WorkspaceProfile;
+  preferences?: WorkspacePreferences;
   nodes?: WorkspaceNode[];
   trash?: WorkspaceTrashEntry[];
   documents?: Record<string, ZhiJianTree>;

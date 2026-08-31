@@ -15,7 +15,7 @@ import {
 } from "react-icons/fi";
 import { markdownFileName, markdownImportTitle, markdownToTree, treeToMarkdown } from "./core/markdown/markdownDocument";
 import { outlineExportFileName, treeToOutlineHtmlDocument } from "./core/export/outlineDocument";
-import { createInitialTree, richTextToPlainText } from "./core/tree";
+import { createInitialTree, richTextToPlainText, type ZhiJianMindMapDefaults } from "./core/tree";
 import { TreeStore, attachTreePersistence, loadPersistedTree } from "./core/treeStore";
 import { useTree } from "./core/treeStore/useTree";
 import type { MindMapTextSelection } from "./mindmap/MindMapEditor";
@@ -60,6 +60,8 @@ interface AppProps {
    * 没有这个回调（分享页、独立预览）时导入只接受单个文件。
    */
   onImportDocuments?: (files: File[]) => void;
+  mindMapDefaults?: ZhiJianMindMapDefaults;
+  onMindMapDefaultsChange?: (patch: ZhiJianMindMapDefaults) => void;
   readOnly?: boolean;
 }
 
@@ -85,6 +87,8 @@ export default function App({
   focusNodeRequest = null,
   onShare,
   onImportDocuments,
+  mindMapDefaults,
+  onMindMapDefaultsChange,
   readOnly = false,
 }: AppProps) {
   const viewStateKey = viewStateStorageKey ?? DEFAULT_VIEW_STATE_STORAGE_KEY;
@@ -661,6 +665,8 @@ export default function App({
                   onExportImageReady={(exportImage) => {
                     mindMapExportImageRef.current = exportImage;
                   }}
+                  mindMapDefaults={mindMapDefaults}
+                  onMindMapDefaultsChange={onMindMapDefaultsChange}
                   onFocusRequestHandled={(requestId) => {
                     setMindMapFocusRequest((current) =>
                       current?.requestId === requestId ? null : current,

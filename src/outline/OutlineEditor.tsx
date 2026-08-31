@@ -296,6 +296,7 @@ export function OutlineEditor({
     <section
       ref={panelRef}
       className="outline-panel"
+      data-document-theme={tree.mindMap?.theme?.id ?? "paper"}
       onMouseDownCapture={(event) => {
         if (readOnly) return;
         const target = event.target as Element;

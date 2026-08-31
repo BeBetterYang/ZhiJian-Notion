@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent } from "react";
 import { createPortal } from "react-dom";
 import {
   FiCamera,
@@ -31,7 +31,7 @@ import {
 } from "react-icons/fi";
 import { FaStar } from "react-icons/fa";
 import App, { type FocusBreadcrumbState } from "../App";
-import { createInitialTree, plainTextContent, richTextToPlainText, type ZhiJianNode, type ZhiJianTree } from "../core/tree";
+import { richTextToPlainText, type ZhiJianMindMapDefaults, type ZhiJianNode, type ZhiJianTree } from "../core/tree";
 import { markdownImportTitle, markdownToTree } from "../core/markdown/markdownDocument";
 import { TreeStore } from "../core/treeStore";
 import type { WorkspaceSession } from "./auth";
@@ -45,20 +45,25 @@ import {
   updateDocumentShare,
   uploadWorkspaceImage,
   type WorkspaceDocumentShare,
+  type WorkspacePreferences,
   type WorkspaceServerState,
   WorkspaceApiError,
 } from "./serverApi";
 import { configureImageAssetUpload, hydrateRemoteImageAssets, rehydrateImageAssets } from "../shared/imageAssetStore";
 import { compressAvatarFile } from "./avatarImage";
+import { workspaceNodeMenuPosition } from "./workspaceNodeMenuPosition";
 import { AppErrorBoundary } from "../shared/AppErrorBoundary";
 import {
   childNodes,
+  applyMindMapDefaults,
   canMoveNode,
+  createWorkspaceDocument,
   createWorkspaceNode,
   duplicateWorkspaceNode,
   folderPath,
   isWorkspaceFile,
   markFileOpened,
+  mergeMindMapDefaults,
   moveWorkspaceNode,
   placeWorkspaceNode,
   renameWorkspaceNode,
@@ -78,7 +83,7 @@ interface WorkspaceShellProps {
 }
 
 /** 工作区行里由这个组件负责的三个字段，文档和图片各有自己的存储路径。 */
-type WorkspaceStateSnapshot = Pick<WorkspaceServerState, "profile" | "nodes" | "trash">;
+type WorkspaceStateSnapshot = Pick<WorkspaceServerState, "profile" | "preferences" | "nodes" | "trash">;
 
 type QuickSection = "recent" | "favorites";
 type DropTarget = { nodeId: string; mode: DropMode } | null;
@@ -101,6 +106,7 @@ interface UserProfile {
 export function WorkspaceShell({ session, onSessionRefresh, onLogout }: WorkspaceShellProps) {
   const [userProfile, setUserProfile] = useState<UserProfile>(() => profileFromSession(session));
   const [profileDraft, setProfileDraft] = useState<UserProfile>(() => profileFromSession(session));
+  const [workspacePreferences, setWorkspacePreferences] = useState<WorkspacePreferences>({});
   const [newPassword, setNewPassword] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -117,6 +123,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const [trash, setTrash] = useState<WorkspaceTrashEntry[]>([]);
   const [trashOpen, setTrashOpen] = useState(false);
   const [selectedTrashIds, setSelectedTrashIds] = useState(() => new Set<string>());
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [activeFileId, setActiveFileId] = useState("");
   const [selectedMenuKey, setSelectedMenuKey] = useState("");
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
@@ -219,7 +226,9 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const focusBreadcrumbItems = focusBreadcrumbState?.items ?? [];
   const focusedTitle = focusBreadcrumbItems.at(-1)?.label ?? null;
   const focusAncestorItems = focusedTitle ? focusBreadcrumbItems.slice(0, -1) : [];
-  const activeDocumentStore = activeFile ? getDocumentStore(documentStores.current, activeFile) : null;
+  const activeDocumentStore = activeFile
+    ? getDocumentStore(documentStores.current, activeFile, workspacePreferences.mindMapDefaults)
+    : null;
   const sidebarDisplayWidth = searchMode ? Math.max(sidebarWidth, 448) : sidebarWidth;
 
   useEffect(() => {
@@ -261,6 +270,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         void rehydrateImageAssets();
         setUserProfile(nextProfile);
         setProfileDraft(nextProfile);
+        setWorkspacePreferences(state?.preferences ?? {});
         setNodes(nextNodes);
         setTrash(state?.trash ?? []);
         const firstFile = nextNodes.find(isWorkspaceFile);
@@ -321,10 +331,17 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   useEffect(() => {
     if (!serverReady || !serverAvailable) return;
     const timer = setTimeout(() => {
-      void persistWorkspaceState({ profile: userProfile, nodes, trash });
+      void persistWorkspaceState({ profile: userProfile, preferences: workspacePreferences, nodes, trash });
     }, 500);
     return () => clearTimeout(timer);
-  }, [nodes, persistWorkspaceState, serverAvailable, serverReady, trash, userProfile]);
+  }, [nodes, persistWorkspaceState, serverAvailable, serverReady, trash, userProfile, workspacePreferences]);
+
+  const updateMindMapDefaults = useCallback((patch: ZhiJianMindMapDefaults) => {
+    setWorkspacePreferences((current) => ({
+      ...current,
+      mindMapDefaults: mergeMindMapDefaults(current.mindMapDefaults, patch),
+    }));
+  }, []);
 
   useEffect(() => {
     if (!activeFile || !activeDocumentStore) return;
@@ -550,7 +567,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         setExpandedFolders((expanded) => new Set(expanded).add(result.node!.parentId!));
       }
       if (result.node.type === "file") {
-        documentStores.current.set(result.node.id, new TreeStore(createWorkspaceDocument(result.node.title)));
+        documentStores.current.set(result.node.id, new TreeStore(createWorkspaceDocument(result.node.title, workspacePreferences.mindMapDefaults)));
         setActiveFileId(result.node.id);
         setSelectedMenuKey(`tree:${result.node.id}`);
         setSelectedFolderId(null);
@@ -598,7 +615,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       if (!result.node) continue;
       const fileId = result.node.id;
       nextNodes = result.nodes.map((node) => node.id === fileId ? { ...node, title: document.title } : node);
-      created.unshift({ fileId, tree: document.tree });
+      created.unshift({ fileId, tree: applyMindMapDefaults(document.tree, workspacePreferences.mindMapDefaults) });
     }
     if (!created.length) return;
 
@@ -829,12 +846,13 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
           )}
           <span className="tree-row-actions">
             {node.type === "folder" ? <button className="tree-action icon-button" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file", node.id)} aria-label={`在${nodeLabel}中新建文档`} title="新增文档"><FiPlus /></button> : null}
-            <button className="tree-action icon-button" type="button" onClick={() => { setMenuNodeId(menuOpen ? null : node.id); setMoveMenuOpen(false); }} aria-label={`${nodeLabel}的更多操作`} title="更多"><FiMoreHorizontal /></button>
+            <button className="tree-action icon-button" type="button" onClick={(event) => { setMenuNodeId(menuOpen ? null : node.id); setMenuAnchor(menuOpen ? null : event.currentTarget); setMoveMenuOpen(false); }} aria-label={`${nodeLabel}的更多操作`} title="更多"><FiMoreHorizontal /></button>
           </span>
           {menuOpen ? (
             <NodeMenu
               node={node}
               nodes={nodes}
+              anchor={menuAnchor}
               moveOpen={moveMenuOpen}
               onRename={() => beginRename(node)}
               onMoveToggle={() => setMoveMenuOpen((open) => !open)}
@@ -1042,6 +1060,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               viewStateStorageKey={documentViewStorageKey(activeFile.id)}
               onShare={() => void openShare()}
               onImportDocuments={(files) => void importDocuments(files)}
+              mindMapDefaults={workspacePreferences.mindMapDefaults}
+              onMindMapDefaultsChange={updateMindMapDefaults}
               focusNodeRequest={
                 documentFocusRequest?.fileId === activeFile.id
                   ? documentFocusRequest
@@ -1173,19 +1193,10 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   );
 }
 
-function createWorkspaceDocument(title: string): ZhiJianTree {
-  const tree = createInitialTree();
-  const root = tree.nodes[tree.rootId];
-  root.content = plainTextContent(title);
-  root.children = [];
-  tree.nodes = { [root.id]: root };
-  return tree;
-}
-
-function getDocumentStore(stores: Map<string, TreeStore>, file: WorkspaceFile) {
+function getDocumentStore(stores: Map<string, TreeStore>, file: WorkspaceFile, defaults?: ZhiJianMindMapDefaults) {
   const existing = stores.get(file.id);
   if (existing) return existing;
-  const store = new TreeStore(createWorkspaceDocument(file.title));
+  const store = new TreeStore(createWorkspaceDocument(file.title, defaults));
   stores.set(file.id, store);
   return store;
 }
@@ -1530,9 +1541,10 @@ function QuickFileSection({ title, source, icon, expanded, files, selectedMenuKe
   );
 }
 
-function NodeMenu({ node, nodes, moveOpen, onRename, onMoveToggle, onMove, onFavorite, onCopyLink, onDuplicate, onDelete, onOpen }: {
+function NodeMenu({ node, nodes, anchor, moveOpen, onRename, onMoveToggle, onMove, onFavorite, onCopyLink, onDuplicate, onDelete, onOpen }: {
   node: WorkspaceNode;
   nodes: WorkspaceNode[];
+  anchor: HTMLElement | null;
   moveOpen: boolean;
   onRename: () => void;
   onMoveToggle: () => void;
@@ -1543,6 +1555,8 @@ function NodeMenu({ node, nodes, moveOpen, onRename, onMoveToggle, onMove, onFav
   onDelete: () => void;
   onOpen: () => void;
 }) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
   const [moveSearch, setMoveSearch] = useState("");
   const [movePosition, setMovePosition] = useState({ top: 0, left: 0, maxHeight: 0 });
   const folders = nodes.filter((item) => item.type === "folder" && item.id !== node.id && canMoveNode(nodes, node.id, item.id) && item.title.toLocaleLowerCase("zh-CN").includes(moveSearch.trim().toLocaleLowerCase("zh-CN")));
@@ -1554,8 +1568,30 @@ function NodeMenu({ node, nodes, moveOpen, onRename, onMoveToggle, onMove, onFav
     setMovePosition({ top, left, maxHeight: Math.max(120, window.innerHeight - top - 8) });
     onMoveToggle();
   };
-  return (
-    <div className="node-menu">
+  useLayoutEffect(() => {
+    const reposition = () => {
+      const menu = menuRef.current;
+      if (!anchor?.isConnected || !menu) return;
+      setPosition(workspaceNodeMenuPosition(
+        anchor.getBoundingClientRect(),
+        menu.getBoundingClientRect(),
+        { width: window.innerWidth, height: window.innerHeight },
+      ));
+    };
+    reposition();
+    window.addEventListener("resize", reposition);
+    document.addEventListener("scroll", reposition, true);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      document.removeEventListener("scroll", reposition, true);
+    };
+  }, [anchor]);
+  return createPortal(
+    <div
+      ref={menuRef}
+      className="node-menu"
+      style={{ position: "fixed", top: position?.top ?? 0, left: position?.left ?? 0, visibility: position ? "visible" : "hidden" }}
+    >
       <button type="button" onClick={onRename}><FiEdit2 />重命名</button>
       <button type="button" onClick={toggleMovePopover}><FiMove />移动<FiChevronRight className="menu-chevron" /></button>
       {moveOpen ? createPortal(<div className="move-popover" style={{ top: movePosition.top, left: movePosition.left, maxHeight: movePosition.maxHeight }}><label className="move-search"><FiSearch /><input value={moveSearch} onChange={(event) => setMoveSearch(event.target.value)} placeholder="搜索文件夹" autoFocus /></label><div className="move-options"><button type="button" onClick={() => onMove(null)}>工作空间顶层</button>{folders.map((folder) => <button type="button" key={folder.id} onClick={() => onMove(folder.id)}><FiFolder />{folder.title}</button>)}{!folders.length ? <div className="move-empty">没有匹配的文件夹</div> : null}</div></div>, document.body) : null}
@@ -1565,7 +1601,8 @@ function NodeMenu({ node, nodes, moveOpen, onRename, onMoveToggle, onMove, onFav
       <button type="button" onClick={onOpen}><FiExternalLink />在新选项卡中打开</button>
       <div className="menu-divider" />
       <button type="button" className="danger" onClick={onDelete}><FiTrash2 />删除</button>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

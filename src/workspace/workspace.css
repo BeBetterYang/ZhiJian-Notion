@@ -210,7 +210,7 @@ button { color: inherit; }
 .tree-node-row:hover > .tree-row-actions, .tree-node-row:focus-within > .tree-row-actions { opacity: 1; }
 .tree-action { width: 24px; height: 24px; color: #7f7e79; }
 .tree-action svg { width: 15px; height: 15px; }
-.node-menu { top: 29px; right: 2px; width: 206px; }
+.node-menu { width: 206px; }
 .node-menu svg { width: 15px; height: 15px; flex: none; color: #777670; }
 .node-menu .favorite-filled { color: #d89b26; }
 .node-menu .menu-chevron { margin-left: auto; }

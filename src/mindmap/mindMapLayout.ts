@@ -11,15 +11,22 @@ export interface MindMapLayoutPreset {
   defaultDirection: ZhiJianMindMapLayout["direction"];
 }
 
+export const MIND_MAP_BRANCH_ORDERS: Array<{
+  id: NonNullable<ZhiJianMindMapLayout["order"]>;
+  name: string;
+}> = [
+  { id: "left-first", name: "先左后右" },
+  { id: "right-first", name: "先右后左" },
+  { id: "alternating", name: "左右交叉" },
+];
+
+const DEFAULT_MIND_MAP_BRANCH_ORDER: NonNullable<ZhiJianMindMapLayout["order"]> = "right-first";
+
 export const MIND_MAP_LAYOUT_PRESETS: MindMapLayoutPreset[] = [
   {
     id: "mind-map",
     name: "思维导图",
-    directions: [
-      { id: "both", name: "双向" },
-      { id: "right", name: "向右" },
-      { id: "left", name: "向左" },
-    ],
+    directions: [],
     defaultDirection: "both",
   },
   {
@@ -61,7 +68,7 @@ export const MIND_MAP_LAYOUT_PRESETS: MindMapLayoutPreset[] = [
 ];
 
 export const DEFAULT_MIND_MAP_LAYOUT: ZhiJianMindMapLayout = {
-  type: "mind-map",
+  type: "logic",
   direction: "right",
 };
 
@@ -70,11 +77,18 @@ export function resolveMindMapLayout(
   legacyDirection?: 0 | 1 | 2,
 ): ZhiJianMindMapLayout {
   const preset = MIND_MAP_LAYOUT_PRESETS.find((candidate) => candidate.id === layout?.type);
+  if (preset?.id === "mind-map") {
+    const order = MIND_MAP_BRANCH_ORDERS.some((candidate) => candidate.id === layout?.order)
+      ? layout!.order
+      : DEFAULT_MIND_MAP_BRANCH_ORDER;
+    return { type: "mind-map", direction: "both", order };
+  }
   if (preset && preset.directions.some((direction) => direction.id === layout?.direction)) {
     return { type: preset.id, direction: layout!.direction };
   }
-  if (legacyDirection === MindElixir.LEFT) return { type: "mind-map", direction: "left" };
-  if (legacyDirection === MindElixir.SIDE) return { type: "mind-map", direction: "both" };
+  if (legacyDirection === MindElixir.LEFT || legacyDirection === MindElixir.RIGHT || legacyDirection === MindElixir.SIDE) {
+    return { ...DEFAULT_MIND_MAP_LAYOUT };
+  }
   return { ...DEFAULT_MIND_MAP_LAYOUT };
 }
 
@@ -83,6 +97,7 @@ export function mindMapLayoutDirection(layout: ZhiJianMindMapLayout): 0 | 1 | 2 
   // 子树往下长，这正是 MindElixir 的 DOWN；"向下"的时间轴同理落在 RIGHT 上。
   // 根节点再由 `styles.css` 从这根轴的顶端搬到左边（或反过来），这样首层的排布
   // 和更深层的连线全都还是 MindElixir 自己算的。
+  if (layout.type === "mind-map") return MindElixir.SIDE;
   if (layout.type === "timeline") return layout.direction === "down" ? MindElixir.RIGHT : MindElixir.DOWN;
   if (layout.type === "org-chart" || layout.type === "tree") return MindElixir.DOWN;
   if (layout.direction === "left") return MindElixir.LEFT;
@@ -91,9 +106,9 @@ export function mindMapLayoutDirection(layout: ZhiJianMindMapLayout): 0 | 1 | 2 
 }
 
 export function mindMapLayoutKey(layout: ZhiJianMindMapLayout) {
-  return `${layout.type}:${layout.direction}`;
+  return `${layout.type}:${layout.direction}:${layout.order ?? ""}`;
 }
 
 export function mindMapLayoutClassName(layout: ZhiJianMindMapLayout) {
-  return `mindmap-layout-${layout.type} mindmap-layout-direction-${layout.direction}`;
+  return `mindmap-layout-${layout.type} mindmap-layout-direction-${layout.direction}${layout.order ? ` mindmap-layout-order-${layout.order}` : ""}`;
 }

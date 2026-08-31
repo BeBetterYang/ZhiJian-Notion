@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  applyMindMapDefaults,
+  createWorkspaceDocument,
   createWorkspaceNode,
   deleteWorkspaceNode,
   duplicateWorkspaceNode,
@@ -29,6 +31,43 @@ describe("workspace tree helpers", () => {
     const blocked = createWorkspaceNode(levelThree.nodes, "folder", levelThree.node!.id);
     expect(blocked.node).toBeNull();
     vi.restoreAllMocks();
+  });
+
+  it("applies the user's default mind-map style and theme to new documents", () => {
+    const defaults = {
+      layout: { type: "mind-map" as const, direction: "both" as const, order: "alternating" as const },
+      theme: { id: "yanpi", version: 1 },
+      connector: { rounded: true },
+      frame: { rounded: true },
+      canvas: { background: "#faf9f7" },
+    };
+
+    const document = createWorkspaceDocument("新文档", defaults);
+
+    expect(document.nodes[document.rootId].content.text).toBe("新文档");
+    expect(document.mindMap).toMatchObject(defaults);
+    expect(document.mindMap?.layout).not.toBe(defaults.layout);
+    expect(document.mindMap?.theme).not.toBe(defaults.theme);
+  });
+
+  it("keeps a document's own mind-map choices ahead of user defaults", () => {
+    const document = createWorkspaceDocument("已有文档");
+    document.mindMap = {
+      layout: { type: "logic", direction: "left" },
+      theme: { id: "ocean", version: 1 },
+    };
+
+    const result = applyMindMapDefaults(document, {
+      layout: { type: "mind-map", direction: "both", order: "left-first" },
+      theme: { id: "yanpi", version: 1 },
+      connector: { rounded: true },
+    });
+
+    expect(result.mindMap).toMatchObject({
+      layout: { type: "logic", direction: "left" },
+      theme: { id: "ocean", version: 1 },
+      connector: { rounded: true },
+    });
   });
 
   it("moves and reorders nodes without exceeding folder depth", () => {

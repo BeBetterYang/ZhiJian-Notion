@@ -727,6 +727,41 @@ textarea {
   --bn-colors-editor-background: var(--zhijian-canvas);
 }
 
+.outline-panel:is(
+  [data-document-theme="pure"],
+  [data-document-theme="minimal"],
+  [data-document-theme="outline"],
+  [data-document-theme="paper"],
+  [data-document-theme="zhijian"]
+) .bn-container {
+  --bn-colors-editor-text: #202020;
+}
+
+.outline-panel:is(
+  [data-document-theme="pure"],
+  [data-document-theme="minimal"],
+  [data-document-theme="outline"],
+  [data-document-theme="paper"],
+  [data-document-theme="zhijian"]
+) .bn-block-content[data-content-type="heading"],
+.outline-panel:is(
+  [data-document-theme="pure"],
+  [data-document-theme="minimal"],
+  [data-document-theme="outline"],
+  [data-document-theme="paper"],
+  [data-document-theme="zhijian"]
+)
+  .bn-editor
+  > .bn-block-group
+  > .bn-block-outer:first-child
+  > .bn-block
+  > .bn-block-group
+  > .bn-block-outer
+  > .bn-block
+  > .bn-block-content {
+  color: #181818;
+}
+
 /* Match the outline scale: fixed document title, normal body text, and
    quieter attachment/description text. */
 .outline-panel
@@ -2377,34 +2412,82 @@ textarea {
 }
 
 .mindmap-layout-panel {
-  width: min(390px, calc(100vw - 84px));
+  width: min(500px, calc(100vw - 84px));
   padding: 10px;
 }
 
-.mindmap-layout-panel-title {
-  padding: 0 2px 8px;
+.mindmap-panel-heading {
+  position: relative;
+  display: flex;
+  min-height: 24px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 0 0 8px 2px;
   color: #787774;
   font-size: 12px;
   font-weight: 600;
 }
 
+.mindmap-panel-more-wrap {
+  position: relative;
+  margin-top: -4px;
+}
+
+.mindmap-style-menu .mindmap-panel-more-button {
+  width: 24px;
+  height: 24px;
+  justify-content: center;
+  padding: 0;
+  color: #787774;
+}
+
+.mindmap-panel-more-menu {
+  position: absolute;
+  z-index: 2;
+  top: 28px;
+  right: 0;
+  width: 142px;
+  padding: 4px;
+  border: 1px solid rgba(55, 53, 47, 0.12);
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 15, 15, 0.14), 0 2px 5px rgba(15, 15, 15, 0.08);
+}
+
+.mindmap-style-menu .mindmap-panel-more-menu button {
+  height: 30px;
+  justify-content: flex-start;
+  padding: 0 8px;
+  color: #37352f;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.mindmap-style-menu .mindmap-panel-more-menu button:disabled {
+  color: #9b9a97;
+  cursor: default;
+}
+
+.mindmap-style-menu .mindmap-panel-more-menu button:disabled:hover {
+  background: transparent;
+}
+
 .mindmap-layout-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
 .mindmap-style-menu .mindmap-layout-grid > button {
   position: relative;
-  display: grid;
-  height: 94px;
-  grid-template-rows: 66px 20px;
-  justify-items: center;
-  padding: 4px 8px 2px;
+  display: block;
+  height: 96px;
+  padding: 8px;
   border: 1px solid rgba(55, 53, 47, 0.1);
   border-radius: 7px;
   color: #53514d;
   font-size: 12px;
+  white-space: normal;
 }
 
 .mindmap-style-menu .mindmap-layout-grid > button:hover,
@@ -2420,88 +2503,68 @@ textarea {
   color: #2383e2;
 }
 
+.mindmap-layout-card-name {
+  display: block;
+  height: 18px;
+  padding-right: 20px;
+  overflow: hidden;
+  color: #53514d;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .mindmap-layout-preview {
-  position: relative;
   display: block;
-  width: 126px;
-  height: 64px;
-  color: #a9a9a6;
+  width: 100%;
+  height: 60px;
 }
 
-.mindmap-layout-preview-root,
-.mindmap-layout-preview-node {
-  position: absolute;
-  z-index: 2;
+/* The generic menu icon rule is intentionally overridden here: this SVG is the
+   structure preview itself, not a 15px action icon. Fixed viewBox coordinates
+   keep every framework legible at the same scale. */
+.mindmap-style-menu button .mindmap-layout-preview-svg {
   display: block;
-  height: 12px;
-  border-radius: 3px;
-  background: #53514d;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 
-.mindmap-layout-preview-root {
-  width: 29px;
+.mindmap-layout-preview-svg path {
+  fill: none;
+  stroke: #aaa9a5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+  vector-effect: non-scaling-stroke;
 }
 
-.mindmap-layout-preview-node {
-  width: 21px;
-  height: 9px;
-  background: #d6d6d3;
+.mindmap-layout-preview-svg path.is-axis {
+  stroke-width: 2.2;
 }
 
-.mindmap-layout-preview-line {
-  position: absolute;
-  z-index: 1;
-  display: block;
-  border-color: currentColor;
-  border-style: solid;
+.mindmap-layout-preview-svg rect {
+  fill: #d8d8d5;
 }
 
-.mindmap-layout-preview.is-mind-map .mindmap-layout-preview-root {
-  top: 26px;
-  left: 49px;
+.mindmap-layout-preview-svg rect.is-root {
+  fill: #53514d;
 }
 
-.mindmap-layout-preview.is-mind-map .node-a { top: 8px; left: 96px; }
-.mindmap-layout-preview.is-mind-map .node-b { top: 43px; left: 96px; }
-.mindmap-layout-preview.is-mind-map .node-c { top: 26px; left: 8px; }
-.mindmap-layout-preview.is-mind-map .line-a { top: 13px; left: 63px; width: 44px; height: 35px; border-width: 1.5px 1.5px 1.5px 0; }
-.mindmap-layout-preview.is-mind-map .line-b { top: 31px; left: 27px; width: 22px; border-width: 1.5px 0 0; }
-
-.mindmap-layout-preview.is-logic .mindmap-layout-preview-root {
-  top: 26px;
-  left: 8px;
+.mindmap-layout-preview-svg circle {
+  fill: #8f8e8a;
+  stroke: #ffffff;
+  stroke-width: 1.5;
 }
 
-.mindmap-layout-preview.is-logic .node-a { top: 8px; left: 96px; }
-.mindmap-layout-preview.is-logic .node-b { top: 26px; left: 96px; }
-.mindmap-layout-preview.is-logic .node-c { top: 44px; left: 96px; }
-.mindmap-layout-preview.is-logic .line-a { top: 13px; left: 37px; width: 69px; height: 36px; border-width: 1.5px 1.5px 1.5px 0; }
-.mindmap-layout-preview.is-logic .line-b { top: 31px; left: 37px; width: 69px; border-width: 1.5px 0 0; }
-
-.mindmap-layout-preview.is-org-chart .mindmap-layout-preview-root,
-.mindmap-layout-preview.is-tree .mindmap-layout-preview-root {
-  top: 5px;
-  left: 49px;
+@media (max-width: 560px) {
+  .mindmap-layout-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
-
-.mindmap-layout-preview.is-org-chart .node-a { top: 46px; left: 12px; }
-.mindmap-layout-preview.is-org-chart .node-b { top: 46px; left: 53px; }
-.mindmap-layout-preview.is-org-chart .node-c { top: 46px; left: 94px; }
-.mindmap-layout-preview.is-org-chart .line-a { top: 17px; left: 22px; width: 84px; height: 33px; border-width: 0 1.5px 1.5px; }
-.mindmap-layout-preview.is-org-chart .line-b { top: 17px; left: 63px; height: 30px; border-width: 0 0 0 1.5px; }
-
-.mindmap-layout-preview.is-timeline .mindmap-layout-preview-root { top: 26px; left: 4px; }
-.mindmap-layout-preview.is-timeline .node-a { top: 8px; left: 48px; }
-.mindmap-layout-preview.is-timeline .node-b { top: 43px; left: 79px; }
-.mindmap-layout-preview.is-timeline .node-c { top: 8px; left: 104px; }
-.mindmap-layout-preview.is-timeline .line-a { top: 31px; left: 33px; width: 82px; border-width: 1.5px 0 0; }
-.mindmap-layout-preview.is-timeline .line-b { top: 13px; left: 58px; width: 31px; height: 35px; border-width: 0 1.5px; }
-
-.mindmap-layout-preview.is-tree .node-a { top: 29px; left: 24px; }
-.mindmap-layout-preview.is-tree .node-b { top: 46px; left: 50px; }
-.mindmap-layout-preview.is-tree .node-c { top: 46px; left: 85px; }
-.mindmap-layout-preview.is-tree .line-a { top: 17px; left: 34px; width: 30px; height: 17px; border-width: 0 0 1.5px 1.5px; }
-.mindmap-layout-preview.is-tree .line-b { top: 33px; left: 34px; width: 62px; height: 18px; border-width: 0 1.5px 1.5px 0; }
 
 .mindmap-layout-direction {
   display: flex;
@@ -2545,13 +2608,6 @@ textarea {
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
-}
-
-.mindmap-theme-panel-title {
-  padding: 0 2px 8px;
-  color: #787774;
-  font-size: 12px;
-  font-weight: 600;
 }
 
 .mindmap-theme-grid {

@@ -2,6 +2,7 @@ import type { MindElixirData, NodeObj } from "mind-elixir";
 import MindElixir from "mind-elixir";
 import {
   richTextToPlainText,
+  type ZhiJianMindMapLayout,
   type ZhiJianNode,
   type ZhiJianTree,
 } from "../core/tree";
@@ -23,6 +24,7 @@ export interface MindElixirProjectionOptions {
 export function treeToMindElixir(tree: ZhiJianTree, options: MindElixirProjectionOptions = {}): MindElixirData {
   const rootId = options.rootNodeId && tree.nodes[options.rootNodeId] ? options.rootNodeId : tree.rootId;
   const theme = resolveMindMapTheme(tree.mindMap?.theme, tree.mindMap?.canvas?.background);
+  const layout = resolveMindMapLayout(tree.mindMap?.layout);
   const visit = (node: ZhiJianNode, level = 0): NodeObj<MindMapNodeMetadata> => {
     const branchColor = mindMapBranchColor(tree, node.id, theme);
     const visual = getMindMapNodeVisualStyle(node, node.id === rootId, {
@@ -84,10 +86,10 @@ export function treeToMindElixir(tree: ZhiJianTree, options: MindElixirProjectio
   // structural rebuild — or a switch to the outline and back, which is an `init`
   // over a fresh instance — no longer leaves the map's own annotations behind.
   const nodeData = visit(tree.nodes[rootId]);
-  assignGroupedSideDirections(nodeData.children ?? []);
+  assignGroupedSideDirections(nodeData.children ?? [], layout.order);
   return {
     nodeData,
-    direction: mindMapLayoutDirection(resolveMindMapLayout(tree.mindMap?.layout)),
+    direction: mindMapLayoutDirection(layout),
     summaries: visibleSummaries(tree, rootId, theme, options.visibleNodeIds),
     arrows: visibleArrows(tree, rootId, theme, options.visibleNodeIds),
   };
@@ -109,14 +111,24 @@ export function mindMapBranchColor(
 }
 
 /**
- * MindElixir alternates unspecified main branches left/right in SIDE mode. Keep
- * document order readable instead: the first half stays together on the right,
- * followed by the second half on the left.
+ * MindElixir alternates unspecified main branches itself in SIDE mode. Assign
+ * every first-level branch explicitly so the document's selected order remains
+ * stable after refreshes and across devices.
  */
-export function assignGroupedSideDirections(children: NodeObj[]) {
-  const rightCount = Math.ceil(children.length / 2);
+export function assignGroupedSideDirections(
+  children: NodeObj[],
+  order: NonNullable<ZhiJianMindMapLayout["order"]> = "right-first",
+) {
+  const firstSideCount = Math.ceil(children.length / 2);
   children.forEach((child, index) => {
-    child.direction = index < rightCount ? MindElixir.RIGHT : MindElixir.LEFT;
+    if (order === "alternating") {
+      child.direction = index % 2 === 0 ? MindElixir.LEFT : MindElixir.RIGHT;
+      return;
+    }
+    const firstSide = order === "left-first" ? MindElixir.LEFT : MindElixir.RIGHT;
+    child.direction = index < firstSideCount
+      ? firstSide
+      : firstSide === MindElixir.LEFT ? MindElixir.RIGHT : MindElixir.LEFT;
   });
 }
 

@@ -105,6 +105,7 @@ export interface ZhiJianMindMapArrow {
 export type ZhiJianMindMapLayout = {
   type: "mind-map" | "logic" | "org-chart" | "timeline" | "tree";
   direction: "left" | "right" | "both" | "up" | "down";
+  order?: "left-first" | "right-first" | "alternating";
 };
 
 /**
@@ -134,6 +135,11 @@ export interface ZhiJianMindMapDecorations {
   };
   layout?: ZhiJianMindMapLayout;
 }
+
+export type ZhiJianMindMapDefaults = Pick<
+  ZhiJianMindMapDecorations,
+  "theme" | "connector" | "frame" | "canvas" | "layout"
+>;
 
 export interface ZhiJianTree {
   rootId: string;

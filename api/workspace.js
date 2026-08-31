@@ -17,6 +17,7 @@ export default async function handler(request, response) {
       const body = await readJsonBody(request);
       await upsertWorkspace(user.id, {
         profile: body.profile,
+        preferences: body.preferences,
         nodes: body.nodes,
         trash: body.trash,
       });

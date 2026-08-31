@@ -25,10 +25,11 @@ export async function readRawBody(request) {
 export function sendJson(response, status, body) { response.status(status).json(body); }
 
 export async function readWorkspaceState(userId) {
-  const rows = await supabaseRequest(`${WORKSPACE_TABLE}?user_id=eq.${encodeURIComponent(userId)}&select=profile,nodes,trash`, { method: "GET" });
+  const rows = await supabaseRequest(`${WORKSPACE_TABLE}?user_id=eq.${encodeURIComponent(userId)}&select=profile,preferences,nodes,trash`, { method: "GET" });
   const state = Array.isArray(rows) ? rows[0] : null;
   return {
     profile: state?.profile ?? undefined,
+    preferences: state?.preferences ?? undefined,
     nodes: state?.nodes ?? undefined,
     trash: state?.trash ?? undefined,
   };
@@ -61,6 +62,7 @@ export async function upsertWorkspace(userId, patch) {
     body: JSON.stringify({
       user_id: userId,
       profile: patch.profile ?? null,
+      preferences: patch.preferences ?? null,
       nodes: patch.nodes ?? null,
       trash: patch.trash ?? null,
       updated_at: new Date().toISOString(),

@@ -139,7 +139,7 @@ describe("theme style priority", () => {
     const node = textNode([{ text: "自定义" }]);
     node.props = { style: { color: "#123456", backgroundColor: "#fedcba" } };
     const style = getMindMapNodeVisualStyle(node, false, {
-      theme: resolveMindMapTheme({ id: "ocean", version: 1 }),
+      theme: resolveMindMapTheme({ id: "paper", version: 1 }),
       level: 1,
       branchColor: "#337da5",
     });

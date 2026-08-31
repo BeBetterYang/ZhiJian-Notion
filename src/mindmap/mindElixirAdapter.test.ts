@@ -1,4 +1,4 @@
-import type { NodeObj } from "mind-elixir";
+import MindElixir, { type NodeObj } from "mind-elixir";
 import { describe, expect, it } from "vitest";
 import { createInitialTree } from "../core/tree";
 import { assignGroupedSideDirections, createMindMapStructureSignature, treeToMindElixir } from "./mindElixirAdapter";
@@ -8,6 +8,36 @@ describe("mindElixirAdapter", () => {
     const children = Array.from({ length: 6 }, (_, index) => ({ id: String(index + 1), topic: String(index + 1) })) as NodeObj[];
     assignGroupedSideDirections(children);
     expect(children.map((child) => child.direction)).toEqual([1, 1, 1, 0, 0, 0]);
+  });
+
+  it("supports left-first and alternating mind-map branch order", () => {
+    const leftFirst = Array.from({ length: 5 }, (_, index) => ({ id: String(index + 1), topic: String(index + 1) })) as NodeObj[];
+    assignGroupedSideDirections(leftFirst, "left-first");
+    expect(leftFirst.map((child) => child.direction)).toEqual([0, 0, 0, 1, 1]);
+
+    const alternating = Array.from({ length: 5 }, (_, index) => ({ id: String(index + 1), topic: String(index + 1) })) as NodeObj[];
+    assignGroupedSideDirections(alternating, "alternating");
+    expect(alternating.map((child) => child.direction)).toEqual([0, 1, 0, 1, 0]);
+  });
+
+  it("alternates first-level branches as left 1, right 2, left 3, right 4", () => {
+    const children = Array.from({ length: 4 }, (_, index) => ({ id: String(index + 1), topic: String(index + 1) })) as NodeObj[];
+    assignGroupedSideDirections(children, "alternating");
+    expect(children.map((child) => child.direction)).toEqual([
+      MindElixir.LEFT,
+      MindElixir.RIGHT,
+      MindElixir.LEFT,
+      MindElixir.RIGHT,
+    ]);
+  });
+
+  it("projects the saved mind-map order onto first-level branches", () => {
+    const tree = createInitialTree();
+    tree.mindMap = { layout: { type: "mind-map", direction: "both", order: "left-first" } };
+    const projected = treeToMindElixir(tree);
+
+    expect(projected.direction).toBe(2);
+    expect(projected.nodeData.children?.map((child) => child.direction)).toEqual([0, 1]);
   });
 
   it("projects the document layout direction without changing the tree", () => {

@@ -1,7 +1,7 @@
 /* global process, fetch, Response */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { supabaseRequest } from "./_workspaceStorage.js";
+import { readWorkspaceState, supabaseRequest, upsertWorkspace } from "./_workspaceStorage.js";
 
 describe("Supabase service requests", () => {
   beforeEach(() => {
@@ -42,5 +42,23 @@ describe("Supabase service requests", () => {
     await supabaseRequest("workspace_states?user_id=eq.user-1", { method: "GET" });
 
     expect(vi.mocked(fetch).mock.calls[0][1].headers["Content-Type"]).toBeUndefined();
+  });
+
+  it("reads mind-map defaults with the workspace preferences", async () => {
+    const preferences = { mindMapDefaults: { theme: { id: "yanpi", version: 1 } } };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify([{ preferences }]), { status: 200 }));
+
+    await expect(readWorkspaceState("user-1")).resolves.toMatchObject({ preferences });
+    expect(vi.mocked(fetch).mock.calls[0][0]).toContain("select=profile,preferences,nodes,trash");
+  });
+
+  it("persists mind-map defaults with the workspace preferences", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify([]), { status: 200 }));
+    const preferences = { mindMapDefaults: { layout: { type: "logic", direction: "right" } } };
+
+    await upsertWorkspace("user-1", { preferences });
+
+    const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1].body));
+    expect(body.preferences).toEqual(preferences);
   });
 });
