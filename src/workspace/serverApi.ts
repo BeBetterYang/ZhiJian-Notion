@@ -91,6 +91,15 @@ export async function uploadWorkspaceImage(session: WorkspaceSession, file: File
   return readJsonResponse(response, "服务器返回的图片信息格式不正确。") as Promise<ImageAssetReference>;
 }
 
+export async function importWorkspaceImageUrl(session: WorkspaceSession, url: string, name?: string, options?: WorkspaceApiOptions): Promise<ImageAssetReference & { name?: string }> {
+  const response = await workspaceFetch("/api/workspace/import-image-url", {
+    method: "POST",
+    body: JSON.stringify({ url, name }),
+  }, session, options);
+  if (!response.ok) throw new WorkspaceApiError(await readApiError(response, "外部图片导入失败。"), response.status);
+  return readJsonResponse(response, "服务器返回的图片信息格式不正确。") as Promise<ImageAssetReference & { name?: string }>;
+}
+
 /**
  * 手动清理没有任何文档引用的图片，返回本次删掉的数量。
  */

@@ -32,7 +32,6 @@ import {
 import { FaStar } from "react-icons/fa";
 import App, { type FocusBreadcrumbState } from "../App";
 import { richTextToPlainText, type ZhiJianMindMapDefaults, type ZhiJianNode, type ZhiJianTree } from "../core/tree";
-import { markdownImportTitle, markdownToTree } from "../core/markdown/markdownDocument";
 import { TreeStore } from "../core/treeStore";
 import type { WorkspaceSession } from "./auth";
 import {
@@ -44,6 +43,7 @@ import {
   saveWorkspaceState,
   updateWorkspaceAccount,
   updateDocumentShare,
+  importWorkspaceImageUrl,
   uploadWorkspaceImage,
   type WorkspaceDocumentShare,
   type WorkspacePreferences,
@@ -51,6 +51,7 @@ import {
   WorkspaceApiError,
 } from "./serverApi";
 import { configureImageAssetUpload, hydrateRemoteImageAssets, rehydrateImageAssets } from "../shared/imageAssetStore";
+import { importMarkdownFiles, localizeRemoteImages } from "./markdownImageImport";
 import { compressAvatarFile } from "./avatarImage";
 import { workspaceNodeMenuPosition } from "./workspaceNodeMenuPosition";
 import { AppErrorBoundary } from "../shared/AppErrorBoundary";
@@ -221,6 +222,18 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     configureImageAssetUpload((file) => uploadWorkspaceImage(sessionRef.current, file, { onSessionRefresh: handleSessionRefresh }));
     return () => configureImageAssetUpload(null);
   }, [handleSessionRefresh]);
+
+  const importMarkdownImage = useCallback(async (url: string, name?: string) => {
+    const asset = await importWorkspaceImageUrl(sessionRef.current, url, name, { onSessionRefresh: handleSessionRefresh });
+    hydrateRemoteImageAssets([asset]);
+    return asset;
+  }, [handleSessionRefresh]);
+
+  const localizeImportedTree = useCallback(async (tree: ZhiJianTree) => {
+    const result = await localizeRemoteImages(tree, importMarkdownImage);
+    setServerStatus(result.failedCount ? `文档已导入，${result.failedCount} 张外部图片未能保存到枝间。` : "");
+    return result.tree;
+  }, [importMarkdownImage]);
 
   const files = useMemo(() => nodes.filter(isWorkspaceFile), [nodes]);
   const activeFile = files.find((file) => file.id === activeFileId) ?? files[0];
@@ -605,20 +618,12 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
    */
   const importDocuments = async (files: File[]) => {
     setCreateMenuOpen(false);
-    const parsed: Array<{ title: string; tree: ZhiJianTree }> = [];
-    const failed: string[] = [];
-    for (const file of files) {
-      try {
-        const fallbackTitle = markdownImportTitle(file.name);
-        const tree = markdownToTree(await file.text(), { fallbackTitle });
-        const root = tree.nodes[tree.rootId];
-        const title = root ? richTextToPlainText(root.content).trim() : "";
-        parsed.push({ title: title || fallbackTitle || "无标题", tree });
-      } catch {
-        failed.push(file.name);
-      }
-    }
-    setServerStatus(failed.length ? `${failed.length} 个文件导入失败：${failed.join("、")}` : "");
+    const { documents: parsed, failedFiles, failedImageCount } = await importMarkdownFiles(files, importMarkdownImage);
+    const notices = [
+      failedFiles.length ? `${failedFiles.length} 个文件导入失败：${failedFiles.join("、")}` : "",
+      failedImageCount ? `文档已导入，${failedImageCount} 张外部图片未能保存到枝间。` : "",
+    ].filter(Boolean);
+    setServerStatus(notices.join("；"));
     if (!parsed.length) return;
 
     const targetParent = activeFile?.parentId ?? null;
@@ -1074,6 +1079,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               viewStateStorageKey={documentViewStorageKey(activeFile.id)}
               onShare={() => void openShare()}
               onImportDocuments={(files) => void importDocuments(files)}
+              onLocalizeImportedTree={localizeImportedTree}
               mindMapDefaults={workspacePreferences.mindMapDefaults}
               onMindMapDefaultsChange={updateMindMapDefaults}
               focusNodeRequest={

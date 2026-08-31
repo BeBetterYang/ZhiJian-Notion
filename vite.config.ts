@@ -5,6 +5,8 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { ServerResponse } from "node:http";
 import { loadEnv, type Connect } from "vite";
+// @ts-expect-error Shared by Vercel functions and the local Node middleware.
+import { downloadRemoteImage } from "./api/_remoteImageImport.js";
 
 const DATA_DIR = path.resolve(".zhijian-server-data", "users");
 const ASSETS_DIR = path.resolve(".zhijian-server-data", "assets");
@@ -164,6 +166,28 @@ function workspaceServerPlugin(appEnv: Record<string, string>) {
             await writeLocalShares([...shares.filter((item) => !(item.ownerUserId === user.id && item.fileId === fileId)), next]);
             return sendJson(response, 200, { token: next.token, enabled: next.enabled });
           }
+        }
+
+        if (request.url === "/import-image-url" && request.method === "POST") {
+          const body = await readJsonBody(request);
+          const remoteImage = await downloadRemoteImage(body.url, body.name);
+          const assetId = randomUUID();
+          const storagePath = `${user.id}/${assetId}${remoteImage.extension}`;
+          await writeAsset(assetId, remoteImage.bytes, {
+            mimeType: remoteImage.mimeType,
+            fileName: remoteImage.fileName,
+            storagePath,
+          });
+          const record = (await readUserRecord(user.id, user.email)) ?? {};
+          await writeUserRecord(user.id, {
+            ...record,
+            assets: {
+              ...readRecord(record.assets),
+              [assetId]: { storagePath, fileName: remoteImage.fileName, mimeType: remoteImage.mimeType },
+            },
+            updatedAt: Date.now(),
+          });
+          return sendJson(response, 201, { assetId, storagePath, url: assetUrl(assetId), name: remoteImage.fileName });
         }
 
         if (request.url === "/assets" && request.method === "POST") {

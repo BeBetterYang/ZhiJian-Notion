@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ZhiJianTree } from "../tree";
-import { markdownFileName, markdownToTree, treeToMarkdown } from "./markdownDocument";
+import { markdownFileName, markdownToTree, normalizeMarkdownImageUrl, treeToMarkdown } from "./markdownDocument";
 
 /** The mubu export the user handed us as the import/export template. */
 const TEMPLATE = `# 新手入门
@@ -214,6 +214,24 @@ describe("markdownToTree", () => {
     expect(node.blocks).toEqual([
       { id: expect.any(String), type: "image", image: { assetId: "abc", name: "p" } },
     ]);
+  });
+
+  it.each([
+    ["![a](https://example.com/a.png)", { url: "https://example.com/a.png", name: "a" }],
+    ["![a]([https://example.com/a.png](https://example.com/a.png))", { url: "https://example.com/a.png", name: "a" }],
+    ["![a]([查看图片](https://example.com/a.png))", { url: "https://example.com/a.png", name: "a" }],
+    ["![a](asset:123)", { assetId: "123", name: "a" }],
+  ])("normalizes imported image syntax: %s", (markdown, expectedImage) => {
+    const tree = markdownToTree(`# T\n\n- ${markdown}\n`, { createId: sequentialIds() });
+    expect(topLevel(tree, "").blocks?.[0]).toEqual({ id: expect.any(String), type: "image", image: expectedImage });
+  });
+
+  it("keeps an invalid nested image target without failing the document import", () => {
+    const raw = "[查看图片](not-a-remote-url)";
+    expect(normalizeMarkdownImageUrl(raw)).toBe(raw);
+    const tree = markdownToTree(`# T\n\n- ![a](${raw})\n- 正文\n`, { createId: sequentialIds() });
+    expect(topLevel(tree, "").blocks?.[0]).toMatchObject({ type: "image", image: { url: raw } });
+    expect(topLevel(tree, "正文")).toBeDefined();
   });
 });
 

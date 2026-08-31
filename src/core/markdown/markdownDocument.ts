@@ -26,8 +26,8 @@ const BULLET_LINE = /^(\s*)[-*+](\s+)(.*)$/;
 const HEADING_LINE = /^(\s*)(#{1,3})\s+(.*)$/;
 const HEADING_PREFIX = /^(#{1,3})\s+(.*)$/;
 const QUOTE_LINE = /^(\s*)>\s?(.*)$/;
-const IMAGE_LINE = /^(\s*)!\[([^\]]*)\]\((\S*)\)\s*$/;
-const IMAGE_ONLY = /^!\[([^\]]*)\]\((\S*)\)$/;
+const IMAGE_LINE = /^(\s*)!\[([^\]]*)\]\((.*)\)\s*$/;
+const IMAGE_ONLY = /^!\[([^\]]*)\]\((.*)\)$/;
 const TABLE_LINE = /^(\s*)\|(.*)\|\s*$/;
 const TODO_PREFIX = /^\[([ xX])\]\s+(.*)$/;
 const SEPARATOR_CELL = /^:?-{3,}:?$/;
@@ -368,8 +368,16 @@ function imageToMarkdownUrl(image: { url?: string; assetId?: string }) {
 }
 
 function markdownToImage(name: string, url: string) {
-  const asset = ASSET_URL.exec(url);
-  return asset ? { assetId: asset[1], name } : { url, name };
+  const normalizedUrl = normalizeMarkdownImageUrl(url);
+  const asset = ASSET_URL.exec(normalizedUrl);
+  return asset ? { assetId: asset[1], name } : { url: normalizedUrl, name };
+}
+
+export function normalizeMarkdownImageUrl(rawUrl: string) {
+  const value = rawUrl.trim();
+  if (ASSET_URL.test(value) || /^https?:\/\//i.test(value)) return value;
+  const nestedLink = /^\[[^\]]*\]\((https?:\/\/[^\s)]+)\)$/i.exec(value);
+  return nestedLink?.[1] ?? value;
 }
 
 /**

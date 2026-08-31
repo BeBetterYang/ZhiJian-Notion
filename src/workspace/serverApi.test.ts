@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createInitialTree } from "../core/tree";
 import type { WorkspaceSession } from "./auth";
-import { cleanupWorkspaceAssets, deleteWorkspaceDocument, loadWorkspaceState, saveWorkspaceDocument, saveWorkspaceState } from "./serverApi";
+import { cleanupWorkspaceAssets, deleteWorkspaceDocument, importWorkspaceImageUrl, loadWorkspaceState, saveWorkspaceDocument, saveWorkspaceState } from "./serverApi";
 
 const expiringSession: WorkspaceSession = {
   email: "user@example.com",
@@ -153,5 +153,25 @@ describe("workspace server API session refresh", () => {
 
     expect(result).toEqual({ removed: 3 });
     expect(fetch).toHaveBeenCalledWith("/api/workspace/cleanup-assets", expect.objectContaining({ method: "POST" }));
+  });
+
+  it("sends remote Markdown images to the authenticated import endpoint", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({
+      assetId: "asset-1",
+      storagePath: "user/asset-1.png",
+      url: "/signed",
+      name: "image.png",
+    }), { status: 201 }));
+
+    await importWorkspaceImageUrl({
+      ...expiringSession,
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    }, "https://example.com/image.png", "image");
+
+    expect(fetch).toHaveBeenCalledWith("/api/workspace/import-image-url", expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ url: "https://example.com/image.png", name: "image" }),
+      headers: expect.objectContaining({ Authorization: "Bearer old-token" }),
+    }));
   });
 });

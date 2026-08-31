@@ -57,6 +57,7 @@ interface AppProps {
    * 没有这个回调（分享页、独立预览）时导入只接受单个文件。
    */
   onImportDocuments?: (files: File[]) => void;
+  onLocalizeImportedTree?: (tree: ReturnType<typeof markdownToTree>) => Promise<ReturnType<typeof markdownToTree>>;
   mindMapDefaults?: ZhiJianMindMapDefaults;
   onMindMapDefaultsChange?: (patch: ZhiJianMindMapDefaults) => void;
   readOnly?: boolean;
@@ -84,6 +85,7 @@ export default function App({
   focusNodeRequest = null,
   onShare,
   onImportDocuments,
+  onLocalizeImportedTree,
   mindMapDefaults,
   onMindMapDefaultsChange,
   readOnly = false,
@@ -407,15 +409,16 @@ export default function App({
     setPendingImport({ fallbackTitle: markdownImportTitle(file.name), fileName: file.name, markdown });
   };
 
-  const confirmImportMarkdown = () => {
+  const confirmImportMarkdown = async () => {
     if (!pendingImport) return;
-    store.replaceTreeFromView(markdownToTree(pendingImport.markdown, {
+    const parsedTree = markdownToTree(pendingImport.markdown, {
       fallbackTitle: pendingImport.fallbackTitle,
-    }));
+    });
+    setPendingImport(null);
+    store.replaceTreeFromView(onLocalizeImportedTree ? await onLocalizeImportedTree(parsedTree) : parsedTree);
     setSelectedNodeId(null);
     setSelectionActive(false);
     setMindMapTextSelection(null);
-    setPendingImport(null);
   };
 
   const editorToolbar = (
@@ -725,7 +728,7 @@ export default function App({
             <p>导入「{pendingImport.fileName}」会替换当前文档的全部内容，可用撤销恢复。</p>
             <footer>
               <button type="button" onClick={() => setPendingImport(null)}>取消</button>
-              <button type="button" className="primary" onClick={confirmImportMarkdown}>确认导入</button>
+              <button type="button" className="primary" onClick={() => void confirmImportMarkdown()}>确认导入</button>
             </footer>
           </section>
         </div>
