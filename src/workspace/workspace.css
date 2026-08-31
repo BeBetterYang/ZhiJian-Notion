@@ -363,7 +363,6 @@ button { color: inherit; }
 .share-toggle-row small { color: #8b8a85; font-size: 12px; }
 .share-toggle-row input { width: 32px; height: 18px; accent-color: #2383e2; }
 .share-error { margin: 12px 0 0; color: #eb5757; font-size: 13px; }
-.share-loading { padding: 24px 0 8px; color: #8b8a85; font-size: 13px; text-align: center; }
 .share-link-row { display: flex; gap: 8px; margin-top: 16px; }
 .share-link-row input { min-width: 0; height: 34px; flex: 1; padding: 0 9px; border: 1px solid rgba(55, 53, 47, 0.14); border-radius: 5px; outline: 0; color: #55534e; font: inherit; font-size: 13px; }
 .share-link-row button { height: 34px; flex: none; padding: 0 11px; border: 0; border-radius: 5px; background: #2383e2; color: #fff; font-size: 13px; cursor: pointer; }

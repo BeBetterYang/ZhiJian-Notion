@@ -427,6 +427,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
 
   const openShare = async () => {
     if (!activeFile) return;
+    setShareState({ enabled: false });
     setShareOpen(true);
     setShareLoading(true);
     setShareError("");
@@ -1131,7 +1132,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               <input type="checkbox" checked={shareState.enabled} disabled={shareLoading} onChange={(event) => void toggleShare(event.target.checked)} />
             </label>
             {shareError ? <p className="share-error" role="alert">{shareError}</p> : null}
-            {shareLoading ? <div className="share-loading">正在更新分享设置…</div> : shareUrl ? <>
+            {shareUrl ? <>
               <div className="share-link-row"><input value={shareUrl} readOnly aria-label="文档分享链接" /><button type="button" onClick={() => void copyShareUrl()}>复制链接</button></div>
               {shareCopied ? <div className="share-copy-success" role="status">复制成功</div> : null}
               <div className="share-qr">{shareQrCode ? <img src={shareQrCode} alt="文档分享二维码" /> : null}<span>扫描二维码查看文档</span></div>

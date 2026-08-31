@@ -21,6 +21,7 @@ import { useTree } from "./core/treeStore/useTree";
 import type { MindMapTextSelection } from "./mindmap/MindMapEditor";
 import { zoomPath } from "./outline/outlineZoom";
 import type { DocumentViewState, MindMapViewportState } from "./shared/documentViewState";
+import { preloadEditorView } from "./shared/editorPreload";
 import { captureOutlinePng, downloadBlob, imageBlobToPdf } from "./shared/exportFiles";
 import type { CapturedImage } from "./shared/exportFiles";
 import { matchingNodeIds, replaceSearchMatch, searchVisibleNodeIds } from "./shared/treeSearch";
@@ -38,11 +39,6 @@ import "./styles.css";
 // 取大纲那一份，第一次切到导图才去取 MindElixir。
 const OutlineEditor = lazy(() => import("./outline/OutlineEditor").then((module) => ({ default: module.OutlineEditor })));
 const MindMapEditor = lazy(() => import("./mindmap/MindMapEditor").then((module) => ({ default: module.MindMapEditor })));
-
-/** 导出前先把目标视图的 chunk 取回来，否则慢网络下 waitForExportView 会等成"尚未准备好"。 */
-function preloadEditorView(view: "outline" | "mindmap") {
-  return view === "outline" ? import("./outline/OutlineEditor") : import("./mindmap/MindMapEditor");
-}
 
 interface AppProps {
   embedded?: boolean;

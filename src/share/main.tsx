@@ -10,19 +10,25 @@ import type { ZhiJianTree } from "../core/tree";
 import { TreeStore } from "../core/treeStore";
 import { hydrateRemoteImageAssets, type ImageAssetReference } from "../shared/imageAssetStore";
 import { AppErrorBoundary } from "../shared/AppErrorBoundary";
+import { preloadEditorView } from "../shared/editorPreload";
 import { loadWorkspaceSession } from "../workspace/auth";
 import { importSharedDocument, WorkspaceApiError } from "../workspace/serverApi";
 import "../workspace/workspace.css";
 import "./share.css";
 
-interface SharedDocument { token: string; title: string; tree: ZhiJianTree; assets?: ImageAssetReference[] }
+interface SharedDocument { token: string; title: string; tree: ZhiJianTree }
 const PENDING_SHARE_KEY = "zhijian.workspace.pending-share-token";
+const token = new URLSearchParams(window.location.search).get("token") ?? "";
+const viewStateStorageKey = `zhijian.share.${token}.view-state.v1`;
+const editorPreloadStartedAt = performance.now();
+const editorPreload = preloadEditorView(loadInitialShareView(viewStateStorageKey));
+void editorPreload.then(() => logShareTiming("editor preload", editorPreloadStartedAt)).catch(() => undefined);
 
 type SaveState = { status: "idle" | "saving" | "saved" } | { status: "failed"; message: string };
 
 function SharedDocumentApp() {
-  const token = new URLSearchParams(window.location.search).get("token") ?? "";
   const [sharedDocument, setSharedDocument] = useState<SharedDocument | null>(null);
+  const [assetRevision, setAssetRevision] = useState(0);
   const [error, setError] = useState("");
   const [save, setSave] = useState<SaveState>({ status: "idle" });
   const [toolbarTarget, setToolbarTarget] = useState<HTMLDivElement | null>(null);
@@ -34,11 +40,39 @@ function SharedDocumentApp() {
       .then(async (response) => {
         const result = await response.json() as SharedDocument & { error?: string };
         if (!response.ok) throw new Error(result.error ?? "无法打开分享文档。");
-        hydrateRemoteImageAssets(result.assets);
         setSharedDocument(result);
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "无法打开分享文档。"));
-  }, [token]);
+  }, []);
+
+  useEffect(() => {
+    if (!sharedDocument) return;
+    let cancelled = false;
+    const frame = window.requestAnimationFrame(() => {
+      void fetch(`/api/shares/${encodeURIComponent(token)}/assets`)
+        .then(async (response) => {
+          const result = await response.json() as { assets?: ImageAssetReference[]; error?: string };
+          if (!response.ok) throw new Error(result.error ?? "无法加载分享图片。");
+          if (cancelled) return;
+          hydrateRemoteImageAssets(result.assets);
+          if (result.assets?.length) setAssetRevision((current) => current + 1);
+        })
+        .catch((reason) => {
+          if (import.meta.env.DEV) console.info("[share] assets load failed", reason instanceof Error ? reason.message : reason);
+        });
+    });
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+    };
+  }, [sharedDocument]);
+
+  useEffect(() => {
+    if (!sharedDocument) return;
+    void editorPreload.then(() => {
+      window.requestAnimationFrame(() => logShareTiming("editor mount", editorPreloadStartedAt));
+    }).catch(() => undefined);
+  }, [sharedDocument]);
 
   useEffect(() => {
     if (sharedDocument) window.document.title = `${sharedDocument.title}-枝间`;
@@ -83,8 +117,21 @@ function SharedDocumentApp() {
       </div>
     </header>
     {save.status === "failed" ? <p className="shared-document-error" role="alert">{save.message}</p> : null}
-    <section className="shared-document-stage"><AppErrorBoundary scope="文档"><App embedded readOnly store={store} toolbarTarget={toolbarTarget} viewStateStorageKey={`zhijian.share.${token}.view-state.v1`} /></AppErrorBoundary></section>
+    <section className="shared-document-stage"><AppErrorBoundary scope="文档"><App key={assetRevision} embedded readOnly store={store} toolbarTarget={toolbarTarget} viewStateStorageKey={viewStateStorageKey} /></AppErrorBoundary></section>
   </main>;
+}
+
+function loadInitialShareView(storageKey: string): "outline" | "mindmap" {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(storageKey) ?? "null") as { activeView?: unknown } | null;
+    return value?.activeView === "mindmap" ? "mindmap" : "outline";
+  } catch {
+    return "outline";
+  }
+}
+
+function logShareTiming(label: string, startedAt: number) {
+  if (import.meta.env.DEV) console.info(`[share] ${label}: ${(performance.now() - startedAt).toFixed(1)}ms`);
 }
 
 createRoot(document.getElementById("share-root")!).render(<StrictMode><SharedDocumentApp /></StrictMode>);

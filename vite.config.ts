@@ -59,19 +59,33 @@ function workspaceServerPlugin(appEnv: Record<string, string>) {
 
     middlewares.use("/api/shares", async (request, response, next) => {
       if (request.method !== "GET") return next();
-      const token = decodeURIComponent(request.url?.slice(1).split("?")[0] ?? "");
+      const totalStartedAt = Date.now();
+      const [encodedToken = "", action = ""] = request.url?.slice(1).split("?")[0]?.split("/") ?? [];
+      if (action && action !== "assets") return next();
+      const token = decodeURIComponent(encodedToken);
+      const shareStartedAt = Date.now();
       const share = (await readLocalShares()).find((item) => item.token === token && item.enabled);
+      logLocalShareTiming("share lookup", shareStartedAt);
       if (!share) return sendJson(response, 404, { error: "分享链接不存在或已关闭。" });
+      const documentStartedAt = Date.now();
       const owner = (await readUserRecord(share.ownerUserId)) ?? {};
       const tree = readRecord(readRecord(owner.documents)[share.fileId]).tree;
+      logLocalShareTiming("document fetch", documentStartedAt);
       const nodes = Array.isArray(owner.nodes) ? owner.nodes : [];
       const file = nodes.find((node) => readRecord(node).id === share.fileId);
       if (!tree || !file) return sendJson(response, 404, { error: "分享的文档已不存在。" });
+      if (action === "assets") {
+        const signingStartedAt = Date.now();
+        const assets = assetReferences(owner, [...collectAssetIds(tree)]);
+        logLocalShareTiming("asset signing", signingStartedAt);
+        logLocalShareTiming("total share assets API", totalStartedAt);
+        return sendJson(response, 200, { assets });
+      }
+      logLocalShareTiming("total share API", totalStartedAt);
       return sendJson(response, 200, {
         token,
         title: String(readRecord(file).title || "无标题"),
         tree,
-        assets: assetReferences(owner, [...collectAssetIds(tree)]),
       });
     });
 
@@ -412,6 +426,10 @@ function userFilePath(userId: string) {
 function assetBytesPath(assetId: string) { return path.join(ASSETS_DIR, assetId); }
 function assetMetaPath(assetId: string) { return path.join(ASSETS_DIR, `${assetId}.json`); }
 function assetUrl(assetId: string) { return `/api/workspace/assets/${assetId}`; }
+
+function logLocalShareTiming(label: string, startedAt: number) {
+  console.info(`[share] ${label}: ${Date.now() - startedAt}ms`);
+}
 
 async function writeAsset(assetId: string, bytes: Buffer, meta: Record<string, unknown>) {
   await mkdir(ASSETS_DIR, { recursive: true });
