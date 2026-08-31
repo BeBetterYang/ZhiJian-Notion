@@ -21,6 +21,7 @@ import {
   readMindMapDecorations,
   sameMindMapDecorations,
 } from "./mindMapDecorations";
+import { mindMapFloatingFrameSize } from "./mindMapFloatingFrame";
 import { MINDMAP_DRAGGING_CLASS, displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, isMindMapAnnotationTarget, mindMapDisplayDragTopic, mindMapMeasuredSizeChanged, mindMapPressTarget, mindMapScaleFromTransform, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, unscaledMindMapSize, updateMindMapPointerSession, type EditingTarget, type MindMapMeasuredSize, type MindMapPointerSession, type MindMapPressTarget } from "./mindMapInteraction";
 import { createMindElixirTheme, MIND_MAP_BACKGROUND_PRESETS, MIND_MAP_THEME_GROUPS, MIND_MAP_THEME_PRESETS, resolveMindMapTheme, type MindMapTheme } from "./mindMapTheme";
 import {
@@ -261,7 +262,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
     geometryMeasureFrame.current = window.requestAnimationFrame(() => {
       geometryMeasureFrame.current = 0;
       if (editingTargetRef.current?.nodeId !== nodeId) return;
-      if (resizeFloatingFrameToEditor(mindRef.current, nodeId, floatingFrameSize)) scheduleLinkDiv();
+      if (resizeFloatingFrameToTopic(mindRef.current, nodeId, floatingFrameSize)) scheduleLinkDiv();
     });
   }, [scheduleLinkDiv]);
 
@@ -687,7 +688,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
       // Show the final display while the topic is still floating, then resize the
       // placeholder once to the display size before putting the topic back in flow.
       shellChanged = syncEditingShells(containerRef.current, undefined);
-      if (previousNodeId) frameChanged = resizeFloatingFrameToDisplay(mindRef.current, previousNodeId, floatingFrameSize);
+      if (previousNodeId) frameChanged = resizeFloatingFrameToTopic(mindRef.current, previousNodeId, floatingFrameSize);
       floatChanged = setEditingFloat(null);
       if ((previousNodeId || floatChanged) && (frameChanged || floatChanged || shellChanged)) scheduleLinkDiv();
     }
@@ -1274,52 +1275,30 @@ function measureElementSize(element: HTMLElement, mind: MindElixir | null): Mind
   return unscaledMindMapSize({ width: rect.width, height: rect.height }, mindMapCanvasScale(mind));
 }
 
-function visibleTopicContent(topic: HTMLElement) {
-  return topic.querySelector<HTMLElement>(
-    ":scope > .mindmap-node-shell.is-editing .mindmap-node-editor, :scope > .mindmap-node-shell:not(.is-editing) .mindmap-node-display, :scope > .mindmap-node-shell",
-  );
-}
-
-function resizeFloatingFrameToElement(
+/**
+ * 编辑期间重新钉住节点框的尺寸。进入编辑时 `setEditingFloat` 量的是框本身，这里
+ * 要和它一致——尺寸怎么算见 `mindMapFloatingFrameSize`。
+ */
+function resizeFloatingFrameToTopic(
   mind: MindElixir | null,
   nodeId: string,
   sizeRef: MutableRefObject<MindMapMeasuredSize | null>,
-  element: HTMLElement | null,
 ) {
+  let topic: HTMLElement | null = null;
+  try {
+    topic = mind?.findEle(nodeId) ?? null;
+  } catch {
+    // Collapsed descendants are not mounted.
+    return false;
+  }
   const frame = nodeFrame(mind, nodeId);
-  if (!frame || !element) return false;
-  const nextSize = measureElementSize(element, mind);
+  if (!topic || !frame) return false;
+  const nextSize = mindMapFloatingFrameSize(frame, topic, mindMapCanvasScale(mind));
   if (!nextSize.width || !nextSize.height || !mindMapMeasuredSizeChanged(sizeRef.current, nextSize)) return false;
   frame.style.width = `${nextSize.width}px`;
   frame.style.height = `${nextSize.height}px`;
   sizeRef.current = nextSize;
   return true;
-}
-
-function resizeFloatingFrameToEditor(
-  mind: MindElixir | null,
-  nodeId: string,
-  sizeRef: MutableRefObject<MindMapMeasuredSize | null>,
-) {
-  try {
-    const editor = mind?.findEle(nodeId).querySelector<HTMLElement>(":scope > .mindmap-node-shell .mindmap-node-editor") ?? null;
-    return resizeFloatingFrameToElement(mind, nodeId, sizeRef, editor);
-  } catch {
-    return false;
-  }
-}
-
-function resizeFloatingFrameToDisplay(
-  mind: MindElixir | null,
-  nodeId: string,
-  sizeRef: MutableRefObject<MindMapMeasuredSize | null>,
-) {
-  try {
-    const topic = mind?.findEle(nodeId);
-    return topic ? resizeFloatingFrameToElement(mind, nodeId, sizeRef, visibleTopicContent(topic)) : false;
-  } catch {
-    return false;
-  }
 }
 
 function refreshNodeDisplay(mind: MindElixir | null, tree: ZhiJianTree, nodeId: string, searchQuery = "") {
