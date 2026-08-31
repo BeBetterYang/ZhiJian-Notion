@@ -46,6 +46,10 @@ export function zoomedOutlineCss(tree: ZhiJianTree, zoomedNodeId: string | null)
     `.outline-panel ${zoomed} > .bn-block > .bn-block-content { font-size: 34px; font-weight: 700; line-height: 1.2; }`,
     `.outline-panel ${zoomed} > .bn-block > .bn-block-content[data-content-type="heading"] > :is(h1, h2, h3) { font-size: inherit; line-height: inherit; }`,
     `.outline-panel ${zoomed} > .bn-block > .bn-block-content::before { content: none !important; }`,
+    // 和文档标题一样不向子级引一条线：留着的话，标题下面会多出一截没有下文的引导线。
+    // `!important` 是因为画那条线的规则（`styles.css` 里 `:has(> .bn-block >
+    // .bn-block-group)` 那条）选择器更长，光靠后加载压不过它。
+    `.outline-panel ${zoomed} > .bn-block > .bn-block-content { background-image: none !important; }`,
     `.outline-panel ${zoomed} > .bn-block > .bn-block-content:has(.ProseMirror-trailingBreak:only-child)::after { content: "无标题" !important; }`,
     `.outline-panel ${zoomed} > .bn-block > .bn-block-group { margin-left: 0; margin-top: 16px; }`,
     `.outline-panel ${zoomed} > .bn-block > .bn-block-group > .bn-block-outer::before { display: none; }`,

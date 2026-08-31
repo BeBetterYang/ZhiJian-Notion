@@ -80,6 +80,7 @@ describe("zoomedOutlineCss", () => {
 
     expect(css).toContain('[data-id="a1"] > .bn-block > .bn-block-content { font-size: 34px; font-weight: 700; line-height: 1.2; }');
     expect(css).toContain('[data-id="a1"] > .bn-block > .bn-block-content::before { content: none !important; }');
+    expect(css).toContain('[data-id="a1"] > .bn-block > .bn-block-content { background-image: none !important; }');
     expect(css).toContain('[data-id="a1"] > .bn-block > .bn-block-group { margin-left: 0; margin-top: 16px; }');
     expect(css).toContain('[data-id="a1"] > .bn-block > .bn-block-group > .bn-block-outer::before { display: none; }');
   });

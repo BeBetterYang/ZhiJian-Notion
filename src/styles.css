@@ -930,6 +930,11 @@ textarea {
    own. */
 .outline-panel {
   --zhijian-guide-gap: 12px;
+  /* x of the line, read from the left edge of the row it guides: 2.5px in from the
+     row's own edge, one 24px indent to the left. Both halves and the eraser below
+     share it, so the whole line stands in one column. */
+  --zhijian-guide-indent: 24px;
+  --zhijian-guide-x: calc(2.5px - var(--zhijian-guide-indent));
 }
 
 /* The parent's piece, painted as a background gradient rather than a pseudo-element
@@ -988,10 +993,15 @@ textarea {
 }
 
 /* One x for both halves, centred on the bullet: BlockNote's own `-20px` put the
-   segment two pixels to the right of the bullet it descends from, which showed as a
-   kink where the parent's piece met the children's. */
-.outline-panel .bn-block-group .bn-block-group > .bn-block-outer::before {
-  left: -21.5px;
+   segment 1.5px to the right of the parent's piece, and since each half is only 1px
+   wide they shared no pixel column at all — the parent's piece read as a detached
+   tick under the bullet with the line seeming to start over below it.
+
+   `.bn-editor` is in the selector only to outweigh BlockNote's own `-20px`: its rule
+   carries the same specificity as ours (three classes plus a `:not([…])`) and its
+   stylesheet is injected after this file, so without the extra class it wins. */
+.outline-panel .bn-editor .bn-block-group .bn-block-group > .bn-block-outer::before {
+  left: var(--zhijian-guide-x);
 }
 
 /* The stop, at the end of the last child's own text. Every nested row's segment is
@@ -1004,7 +1014,8 @@ textarea {
 
    The eraser is hung on the nested group because the group's box *is* that region;
    the group has to be positioned for `left` to be read from its own left edge rather
-   than from the row's. */
+   than from the row's — and since that edge is one indent to the right of the row's,
+   the shared x needs that indent taken off again to land on the line. */
 .outline-panel .bn-block-group .bn-block-group {
   position: relative;
 }
@@ -1016,7 +1027,7 @@ textarea {
   > .bn-block-group::before {
   content: "";
   position: absolute;
-  left: -21.5px;
+  left: calc(var(--zhijian-guide-x) - var(--zhijian-guide-indent));
   top: 0;
   bottom: 0;
   width: 1px;
