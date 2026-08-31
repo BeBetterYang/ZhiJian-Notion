@@ -945,19 +945,17 @@ textarea {
 }
 
 /* ── The indent guide, drawn the way mubu draws it ────────────────────────────
-   One line per parent: it starts on the parent's first line, runs down past
+   One line per parent: it starts on the parent's first line and runs down past
    everything that parent carries — the rest of its wrapped text, its note, its
-   pictures — and ends with the last line of its last child.
+   pictures, its children and their children — ending level with the last line of
+   its subtree.
 
    BlockNote instead gives each nested row a segment as tall as that row, which
-   broke in three places: nothing was drawn beside a multi-line parent's own text,
-   so the line started somewhere below the row it belongs to; a quote hid its
-   segment, leaving a gap in the middle of the line; and where the last child had
-   rows of its own the line ran on down beside them, past the child it was meant to
-   end on.
+   broke in two places: nothing was drawn beside a multi-line parent's own text,
+   so the line started somewhere below the row it belongs to, and a quote hid its
+   segment, leaving a gap in the middle of the line.
 
-   The rules below are the parent's own piece, the shared x position, and the stop
-   after the last child's text.
+   The rules below are the parent's own piece and the shared x position.
 
    `--zhijian-guide-gap` is the air between the parent's bullet and the start of the
    line: 12px measured from the bullet's centre, which on a body row is exactly where
@@ -1039,65 +1037,14 @@ textarea {
   left: var(--zhijian-guide-x);
 }
 
-/* The stop, at the end of the last child's own last line. Every nested row's segment
-   is as tall as that row, so the line already reaches the bottom of the last one — but
-   a row is as tall as everything nested inside it, so where the last child carries a
-   note, a picture or children of its own the line ran on down beside them. That
-   stretch is painted back out in the canvas colour, which is exactly the region to
-   lose: it is guided by the last child's own line, one level to the right.
-
-   The eraser is hung on the last child's grandchild *rows* rather than on the group
-   that holds them, because the group holds two kinds of row: the last child's own
-   notes and pictures, which are still its last lines and which the line has to cover,
-   and its children, which it must stop before. Attachments come ahead of children in
-   the projection, so erasing every row that is not one leaves the line ending exactly
-   where the last child's own content does — and where the last child has no children
-   at all, nothing is erased and the line runs to the bottom of its note.
-
-   A row has to be positioned for `left` to be read from its own left edge, and since
-   that edge is one indent to the right of the row the line belongs to, the shared x
-   needs that indent taken off again to land on the line. `::after` is the free
-   pseudo-element on a row: `::before` is BlockNote's own segment of the guide. */
-.outline-panel .bn-block-group .bn-block-outer {
-  position: relative;
-}
-
-.outline-panel
-  .bn-block-group
-  > .bn-block-outer:last-child
-  > .bn-block
-  > .bn-block-group
-  > .bn-block-outer:has(
-      > .bn-block
-        > .bn-block-content:not([data-content-type="quote"]):not(
-            [data-content-type="image"]
-          )
-    )::after {
-  content: "";
-  position: absolute;
-  left: calc(var(--zhijian-guide-x) - var(--zhijian-guide-indent));
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--bn-colors-editor-background);
-}
-
-/* The root title's children are the one level not indented from their parent, so an
-   eraser hung there would sit in the same column as the lines those children draw to
-   their own children, and rub them out. There is no line at the root level to erase
-   in the first place. */
-.outline-panel
-  .bn-editor
-  > .bn-block-group
-  > .bn-block-outer:first-child
-  > .bn-block
-  > .bn-block-group
-  > .bn-block-outer:last-child
-  > .bn-block
-  > .bn-block-group
-  > .bn-block-outer::after {
-  content: none;
-}
+/* Nothing rubs the line out at the bottom any more. BlockNote gives each nested row a
+   segment as tall as that row, and a row is as tall as everything nested inside it, so
+   the last child's segment already runs to the end of the last line the child carries —
+   its note, its picture, its own children's rows. That is where the line is wanted:
+   it stops level with the end of its subtree, and each deeper level's line stops with
+   its own, so the levels read as a set of nested brackets. An earlier version painted
+   that stretch back out in the canvas colour to end the line on the last child's own
+   text; it cut every line short of the rows it was drawn for. */
 
 /* Nothing to guide, no line. A node whose nested rows are all notes and pictures —
    attachments come ahead of children in the projection, so this is exactly the
