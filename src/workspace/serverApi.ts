@@ -92,7 +92,7 @@ export async function uploadWorkspaceImage(session: WorkspaceSession, file: File
 }
 
 export async function importWorkspaceImageUrl(session: WorkspaceSession, url: string, name?: string, options?: WorkspaceApiOptions): Promise<ImageAssetReference & { name?: string }> {
-  const response = await workspaceFetch("/api/workspace/import-image-url", {
+  const response = await workspaceFetch("/api/workspace/assets", {
     method: "POST",
     body: JSON.stringify({ url, name }),
   }, session, options);

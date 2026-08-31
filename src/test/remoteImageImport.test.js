@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { assertPublicRemoteUrl, downloadRemoteImage, MAX_REMOTE_IMAGE_BYTES } from "../../api/_remoteImageImport.js";
-import importImageUrlHandler from "../../api/workspace/import-image-url.js";
+import assetsHandler from "../../api/workspace/assets.js";
 
 const publicLookup = vi.fn(async () => [{ address: "93.184.216.34", family: 4 }]);
 
@@ -65,7 +65,7 @@ describe("remote image import security", () => {
   it("requires an authenticated user before downloading", async () => {
     const response = createResponse();
 
-    await importImageUrlHandler({ method: "POST", headers: {} }, response);
+    await assetsHandler({ method: "POST", headers: {} }, response);
 
     expect(response.statusCode).toBe(401);
   });

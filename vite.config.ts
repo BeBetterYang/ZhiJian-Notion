@@ -168,30 +168,29 @@ function workspaceServerPlugin(appEnv: Record<string, string>) {
           }
         }
 
-        if (request.url === "/import-image-url" && request.method === "POST") {
-          const body = await readJsonBody(request);
-          const remoteImage = await downloadRemoteImage(body.url, body.name);
-          const assetId = randomUUID();
-          const storagePath = `${user.id}/${assetId}${remoteImage.extension}`;
-          await writeAsset(assetId, remoteImage.bytes, {
-            mimeType: remoteImage.mimeType,
-            fileName: remoteImage.fileName,
-            storagePath,
-          });
-          const record = (await readUserRecord(user.id, user.email)) ?? {};
-          await writeUserRecord(user.id, {
-            ...record,
-            assets: {
-              ...readRecord(record.assets),
-              [assetId]: { storagePath, fileName: remoteImage.fileName, mimeType: remoteImage.mimeType },
-            },
-            updatedAt: Date.now(),
-          });
-          return sendJson(response, 201, { assetId, storagePath, url: assetUrl(assetId), name: remoteImage.fileName });
-        }
-
         if (request.url === "/assets" && request.method === "POST") {
-          const mimeType = String(request.headers["content-type"] ?? "");
+          const mimeType = String(request.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase();
+          if (mimeType === "application/json") {
+            const body = await readJsonBody(request);
+            const remoteImage = await downloadRemoteImage(body.url, body.name);
+            const assetId = randomUUID();
+            const storagePath = `${user.id}/${assetId}${remoteImage.extension}`;
+            await writeAsset(assetId, remoteImage.bytes, {
+              mimeType: remoteImage.mimeType,
+              fileName: remoteImage.fileName,
+              storagePath,
+            });
+            const record = (await readUserRecord(user.id, user.email)) ?? {};
+            await writeUserRecord(user.id, {
+              ...record,
+              assets: {
+                ...readRecord(record.assets),
+                [assetId]: { storagePath, fileName: remoteImage.fileName, mimeType: remoteImage.mimeType },
+              },
+              updatedAt: Date.now(),
+            });
+            return sendJson(response, 201, { assetId, storagePath, url: assetUrl(assetId), name: remoteImage.fileName });
+          }
           if (!IMAGE_MIME_TYPES.has(mimeType)) return sendJson(response, 415, { error: "仅支持 JPEG/PNG/GIF/WebP/AVIF 图片。" });
           const bytes = await readRawBody(request);
           if (!bytes.byteLength) return sendJson(response, 400, { error: "图片内容为空。" });

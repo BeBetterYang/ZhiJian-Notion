@@ -168,10 +168,13 @@ describe("workspace server API session refresh", () => {
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
     }, "https://example.com/image.png", "image");
 
-    expect(fetch).toHaveBeenCalledWith("/api/workspace/import-image-url", expect.objectContaining({
+    expect(fetch).toHaveBeenCalledWith("/api/workspace/assets", expect.objectContaining({
       method: "POST",
       body: JSON.stringify({ url: "https://example.com/image.png", name: "image" }),
-      headers: expect.objectContaining({ Authorization: "Bearer old-token" }),
+      headers: expect.objectContaining({
+        Authorization: "Bearer old-token",
+        "Content-Type": "application/json",
+      }),
     }));
   });
 });
