@@ -30,13 +30,16 @@ import {
   FiX,
 } from "react-icons/fi";
 import { FaStar } from "react-icons/fa";
+// 展开态的文件夹图标：Feather 没有「打开的文件夹」，Lucide 本身是 Feather 的分支，线条粗细一致。
+import { LuFolderOpen } from "react-icons/lu";
 import App, { type FocusBreadcrumbState } from "../App";
-import { richTextToPlainText, type ZhiJianMindMapDefaults, type ZhiJianNode, type ZhiJianTree } from "../core/tree";
+import { richTextToPlainText, cloneTree, plainTextContent, type ZhiJianMindMapDefaults, type ZhiJianNode, type ZhiJianTree } from "../core/tree";
 import { TreeStore } from "../core/treeStore";
 import type { WorkspaceSession } from "./auth";
 import {
   cleanupWorkspaceAssets,
   loadWorkspaceState,
+  loadWorkspaceDocument,
   loadDocumentShare,
   deleteWorkspaceDocument,
   saveWorkspaceDocument,
@@ -57,6 +60,7 @@ import { compressAvatarFile } from "./avatarImage";
 import { workspaceNodeMenuPosition } from "./workspaceNodeMenuPosition";
 import { AppErrorBoundary } from "../shared/AppErrorBoundary";
 import { LoadingScreen } from "../shared/LoadingScreen";
+import logoUrl from "./assets/zhijian-logo.png";
 import {
   childNodes,
   applyMindMapDefaults,
@@ -91,6 +95,12 @@ type WorkspaceStateSnapshot = Pick<WorkspaceServerState, "profile" | "preference
 
 type QuickSection = "recent" | "favorites";
 type DropTarget = { nodeId: string; mode: DropMode } | null;
+/** 一篇文档相对服务器的保存状态。conflict 与 error 不同：冲突要用户选，重试是没用的。 */
+type DocumentSaveState =
+  | { status: "saved" }
+  | { status: "saving" }
+  | { status: "error"; message: string }
+  | { status: "conflict"; message: string };
 type SettingsView = "account" | "preferences";
 type SettingsEdit = "email" | "password" | null;
 type WorkspaceSearchMatch = { nodeId: string; text: string; path: string };
@@ -167,6 +177,10 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const documentStores = useRef(new Map<string, TreeStore>());
   const documentRevisions = useRef(new Map<string, number>());
   const documentSaveQueues = useRef(new Map<string, Promise<void>>());
+  /** 已经撞上 409 的文档：继续自动保存只会拿回同一个冲突，所以先停下等用户处理。 */
+  const conflictedDocuments = useRef(new Set<string>());
+  /** 取消当前文档待发的那次防抖保存，换成服务器版本前必须先把它掐掉。 */
+  const cancelPendingAutosave = useRef<() => void>(() => undefined);
   const workspaceSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const pendingWorkspaceState = useRef<WorkspaceStateSnapshot | null>(null);
   const sessionRef = useRef(session);
@@ -176,6 +190,10 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const [initialEditorReady, setInitialEditorReady] = useState(false);
   const [serverAvailable, setServerAvailable] = useState(false);
   const [serverStatus, setServerStatus] = useState("");
+  const [documentSaveStates, setDocumentSaveStates] = useState<Record<string, DocumentSaveState>>({});
+  const [conflictNoticeHidden, setConflictNoticeHidden] = useState(() => new Set<string>());
+  /** 换成服务器版本时换掉的是 Map 里的 TreeStore 实例，靠这个计数让 App 重新挂载。 */
+  const [documentStoreEpoch, setDocumentStoreEpoch] = useState(0);
 
   sessionRef.current = session;
   const handleSessionRefresh = useCallback((nextSession: WorkspaceSession) => {
@@ -189,20 +207,47 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     onSessionRefresh(nextSession);
   }, [onSessionRefresh]);
 
+  const updateDocumentSaveState = useCallback((fileId: string, state: DocumentSaveState) => {
+    setDocumentSaveStates((current) => ({ ...current, [fileId]: state }));
+  }, []);
+
+  /**
+   * 每篇文档一条保存队列，任何新内容都必须从这里过：并发的 PUT 会带着同一个 revision 出发，
+   * 后到的那个必然拿到 409。首存用 revision 0，成功后队列里记下服务器返回的 1。
+   *
+   * 撞上 409 之后直接返回：内存里的 tree 一个字都不动，但不再每 400ms 重发一个注定失败的
+   * 请求，改由用户在提示里决定是否换成服务器版本。
+   */
   const persistDocument = useCallback((fileId: string, tree: ZhiJianTree) => {
+    if (conflictedDocuments.current.has(fileId)) return Promise.resolve();
+    updateDocumentSaveState(fileId, { status: "saving" });
     const previous = documentSaveQueues.current.get(fileId) ?? Promise.resolve();
     const queued = previous.catch(() => undefined).then(async () => {
+      if (conflictedDocuments.current.has(fileId)) return;
       const revision = documentRevisions.current.get(fileId) ?? 0;
       const result = await saveWorkspaceDocument(sessionRef.current, fileId, tree, revision, { onSessionRefresh: handleSessionRefresh });
-      if (Number.isInteger(result.revision)) documentRevisions.current.set(fileId, result.revision);
+      if (Number.isInteger(result?.revision)) documentRevisions.current.set(fileId, result.revision);
+      updateDocumentSaveState(fileId, { status: "saved" });
     }).catch((error) => {
+      if (error instanceof WorkspaceApiError && error.status === 409) {
+        conflictedDocuments.current.add(fileId);
+        setConflictNoticeHidden((current) => {
+          if (!current.has(fileId)) return current;
+          const next = new Set(current);
+          next.delete(fileId);
+          return next;
+        });
+        updateDocumentSaveState(fileId, { status: "conflict", message: errorMessage(error) });
+        return;
+      }
+      updateDocumentSaveState(fileId, { status: "error", message: errorMessage(error) });
       setServerStatus(`文档保存到服务器失败：${errorMessage(error)}`);
     }).finally(() => {
       if (documentSaveQueues.current.get(fileId) === queued) documentSaveQueues.current.delete(fileId);
     });
     documentSaveQueues.current.set(fileId, queued);
     return queued;
-  }, [handleSessionRefresh]);
+  }, [handleSessionRefresh, updateDocumentSaveState]);
 
   /**
    * 资料、导航树和回收站共用一行，所以两个并发的 PUT 会互相覆盖，而且返回顺序无法保证——
@@ -227,6 +272,28 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     configureImageAssetUpload((file) => uploadWorkspaceImage(sessionRef.current, file, { onSessionRefresh: handleSessionRefresh }));
     return () => configureImageAssetUpload(null);
   }, [handleSessionRefresh]);
+
+  /**
+   * 冲突之后换成服务器版本：读回服务器的 tree 和 revision，替换掉这篇文档的 TreeStore，
+   * 然后解除冲突、恢复自动保存。第一版不做自动合并，也绝不拿本地内容去覆盖服务器——那等于
+   * 绕过乐观并发保护。
+   */
+  const reloadServerDocument = useCallback(async (fileId: string) => {
+    cancelPendingAutosave.current();
+    updateDocumentSaveState(fileId, { status: "saving" });
+    try {
+      const result = await loadWorkspaceDocument(sessionRef.current, fileId, { onSessionRefresh: handleSessionRefresh });
+      if (!result) throw new WorkspaceApiError("服务器上找不到这篇文档。", 404);
+      documentStores.current.set(fileId, new TreeStore(result.tree));
+      if (Number.isInteger(result.revision)) documentRevisions.current.set(fileId, result.revision);
+      conflictedDocuments.current.delete(fileId);
+      setDocumentStoreEpoch((epoch) => epoch + 1);
+      updateDocumentSaveState(fileId, { status: "saved" });
+      setServerStatus("");
+    } catch (error) {
+      updateDocumentSaveState(fileId, { status: "error", message: errorMessage(error) });
+    }
+  }, [handleSessionRefresh, updateDocumentSaveState]);
 
   const importMarkdownImage = useCallback(async (url: string, name?: string) => {
     const asset = await importWorkspaceImageUrl(sessionRef.current, url, name, { onSessionRefresh: handleSessionRefresh });
@@ -300,6 +367,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
           Object.entries(state?.documents ?? {}).map(([fileId, tree]) => [fileId, new TreeStore(tree)]),
         );
         documentRevisions.current = new Map(Object.entries(state?.documentRevisions ?? {}));
+        conflictedDocuments.current = new Set();
+        setDocumentSaveStates({});
         hydrateRemoteImageAssets(state?.assets);
         void rehydrateImageAssets();
         setUserProfile(nextProfile);
@@ -307,10 +376,15 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         setWorkspacePreferences(state?.preferences ?? {});
         setNodes(nextNodes);
         setTrash(state?.trash ?? []);
+        // 打开哪一篇：URL 参数 > 上次打开 > 第一篇。链接里的 id 已经不存在时安全退回，
+        // 不报错也不白屏——分享出去的链接指向被删掉的文档是很正常的事。
+        const deepLink = readWorkspaceDeepLink();
+        const linkedFile = nextNodes.find((node) => node.id === deepLink.fileId && node.type === "file");
+        const linkedFolder = nextNodes.find((node) => node.id === deepLink.folderId && node.type === "folder");
         const firstFile = nextNodes.find(isWorkspaceFile);
         const rememberedFileId = loadLastOpenFileId(sessionRef.current.userId);
         const restoredFile = nextNodes.find((node) => node.id === rememberedFileId && node.type === "file");
-        const nextActiveFileId = restoredFile?.id ?? firstFile?.id ?? "";
+        const nextActiveFileId = linkedFile?.id ?? restoredFile?.id ?? firstFile?.id ?? "";
         const activeEditorView = nextActiveFileId ? loadDocumentEditorView(nextActiveFileId) : initialEditorView;
         requiredEditorView = activeEditorView;
         if (activeEditorView !== initialEditorView) {
@@ -325,8 +399,16 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
             });
         }
         setActiveFileId(nextActiveFileId);
-        setSelectedMenuKey(nextActiveFileId ? `tree:${nextActiveFileId}` : "");
-        setExpandedFolders(new Set(nextNodes.filter((node) => node.type === "folder").map((node) => node.id)));
+        setSelectedMenuKey(linkedFolder ? `tree:${linkedFolder.id}` : nextActiveFileId ? `tree:${nextActiveFileId}` : "");
+        if (linkedFolder) setSelectedFolderId(linkedFolder.id);
+        // 目标节点的所有祖先都要展开，侧栏才能真的定位到它。
+        const nextExpanded = new Set(nextNodes.filter((node) => node.type === "folder").map((node) => node.id));
+        for (const target of [linkedFile, linkedFolder]) {
+          if (!target) continue;
+          for (const folder of folderPath(nextNodes, target.id)) nextExpanded.add(folder.id);
+          if (target.type === "folder") nextExpanded.add(target.id);
+        }
+        setExpandedFolders(nextExpanded);
         setServerStatus("");
         setServerAvailable(true);
         setServerReady(true);
@@ -366,6 +448,11 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   useEffect(() => {
     if (!serverReady || !serverAvailable || !activeFile || !activeDocumentStore) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    const clearPending = () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+    };
+    cancelPendingAutosave.current = clearPending;
     const unsubscribe = activeDocumentStore.subscribe((tree) => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
@@ -375,12 +462,25 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     });
     return () => {
       if (timer) {
-        clearTimeout(timer);
+        clearPending();
         void persistDocument(activeFile.id, activeDocumentStore.getSnapshot());
       }
+      if (cancelPendingAutosave.current === clearPending) cancelPendingAutosave.current = () => undefined;
       unsubscribe();
     };
   }, [activeDocumentStore, activeFile, persistDocument, serverAvailable, serverReady]);
+
+  /**
+   * 地址栏跟着当前文档走，这样刷新、收藏、复制地址栏都能回到同一篇。用 replaceState 而不是
+   * pushState：每点一次文档就多一条历史记录，返回键会变得没法用。
+   */
+  useEffect(() => {
+    if (!serverReady || !activeFileId || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("file") === activeFileId) return;
+    url.searchParams.set("file", activeFileId);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [activeFileId, serverReady]);
 
   useEffect(() => {
     if (!serverReady || !serverAvailable) return;
@@ -624,29 +724,37 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     closeSearchMode();
   };
 
+  /**
+   * 只要工作区里多了一个 fileId，就立刻在服务器上建出对应的文档行。等用户输入再由自动保存
+   * 触发是不够的：新建完不输入就刷新、或者马上分享，服务器上根本没有这一行。
+   */
+  const createAndPersistDocument = (fileId: string, tree: ZhiJianTree) => {
+    documentStores.current.set(fileId, new TreeStore(tree));
+    if (serverAvailable) void persistDocument(fileId, tree);
+  };
+
+  // 新建带着「立刻写一次服务器」的副作用，所以不放在 setNodes 的 updater 里：StrictMode 下
+  // updater 会跑两次，那就会对同一个 fileId 发两次首存。
   const createNode = (type: WorkspaceNode["type"], parentId?: string | null) => {
     const targetParent = parentId === undefined ? null : parentId;
-    setNodes((current) => {
-      const result = createWorkspaceNode(current, type, targetParent);
-      if (!result.node) return current;
-      if (result.node.parentId) {
-        setExpandedFolders((expanded) => new Set(expanded).add(result.node!.parentId!));
-      }
-      if (result.node.type === "file") {
-        documentStores.current.set(result.node.id, new TreeStore(createWorkspaceDocument(result.node.title, workspacePreferences.mindMapDefaults)));
-        setActiveFileId(result.node.id);
-        setSelectedMenuKey(`tree:${result.node.id}`);
-        setSelectedFolderId(null);
-      } else {
-        setSelectedMenuKey(`tree:${result.node.id}`);
-        setSelectedFolderId(result.node.id);
-      }
-      setRenamingId(result.node.id);
-      setRenameValue(result.node.title);
-      selectCreatedNameOnFocus.current = true;
-      return result.nodes;
-    });
     setCreateMenuOpen(false);
+    const result = createWorkspaceNode(nodes, type, targetParent);
+    const created = result.node;
+    if (!created) return;
+    setNodes(result.nodes);
+    if (created.parentId) setExpandedFolders((expanded) => new Set(expanded).add(created.parentId!));
+    if (created.type === "file") {
+      createAndPersistDocument(created.id, createWorkspaceDocument(created.title, workspacePreferences.mindMapDefaults));
+      setActiveFileId(created.id);
+      setSelectedMenuKey(`tree:${created.id}`);
+      setSelectedFolderId(null);
+    } else {
+      setSelectedMenuKey(`tree:${created.id}`);
+      setSelectedFolderId(created.id);
+    }
+    setRenamingId(created.id);
+    setRenameValue(created.title);
+    selectCreatedNameOnFocus.current = true;
   };
 
   /**
@@ -778,16 +886,34 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     setSelectedTrashIds(new Set());
   };
 
+  /**
+   * 创建副本。导航树的节点是 `duplicateWorkspaceNode` 复制的，文档内容得在这里跟着走一遍：
+   * 拿 `duplicatedNodes` 里的 sourceId → targetId，逐篇克隆源文档的 tree，各自建一个新的
+   * TreeStore，并立刻写一次服务器。少了这一步，副本在服务器上就是一行都没有，刷新之后会被
+   * 当成新文档兜底成空白——文件夹里的子文档更是全都丢掉。
+   *
+   * 图片继续引用同一个 assetId：源和副本属于同一个账号，同一张图不必重新上传一份。
+   */
   const duplicateNode = (node: WorkspaceNode) => {
     const result = duplicateWorkspaceNode(nodes, node.id);
     setNodes(result.nodes);
+    for (const { sourceId, targetId, type } of result.duplicatedNodes) {
+      if (type !== "file") continue;
+      const sourceFile = nodes.find((item) => item.id === sourceId);
+      if (!sourceFile || sourceFile.type !== "file") continue;
+      const sourceTree = getDocumentStore(documentStores.current, sourceFile, workspacePreferences.mindMapDefaults).getSnapshot();
+      const clonedTree = cloneTree(sourceTree);
+      // 标题的真正来源是文档根节点（重命名走的也是同一条路）。副本根节点的文字不跟着改成
+      // 「… 副本」的话，一激活副本，标题同步就会把「副本」两个字抹回去。
+      const targetTitle = result.nodes.find((item) => item.id === targetId)?.title ?? "";
+      const root = clonedTree.nodes[clonedTree.rootId];
+      if (root && root.content.text !== targetTitle) root.content = plainTextContent(targetTitle);
+      createAndPersistDocument(targetId, clonedTree);
+    }
     if (result.node?.type === "file") {
-      if (node.type === "file") {
-        const sourceStore = getDocumentStore(documentStores.current, node);
-        documentStores.current.set(result.node.id, new TreeStore(sourceStore.getSnapshot()));
-      }
       setActiveFileId(result.node.id);
       setSelectedMenuKey(`tree:${result.node.id}`);
+      setSelectedFolderId(null);
     }
     setMenuNodeId(null);
   };
@@ -795,8 +921,15 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const nodeUrl = (node: WorkspaceNode) => `${window.location.origin}/workspace.html?${node.type}=${encodeURIComponent(node.id)}`;
 
   const copyNodeLink = async (node: WorkspaceNode) => {
-    await navigator.clipboard.writeText(nodeUrl(node));
     setMenuNodeId(null);
+    // 剪贴板会因为权限或非安全上下文直接 reject，静默失败的话用户会以为链接已经拷走了。
+    try {
+      await navigator.clipboard.writeText(nodeUrl(node));
+      setServerStatus("复制成功");
+      window.setTimeout(() => setServerStatus((current) => current === "复制成功" ? "" : current), 1800);
+    } catch {
+      setServerStatus("复制失败，请手动复制链接。");
+    }
   };
 
   const resizeSidebar = (event: PointerEvent<HTMLDivElement>) => {
@@ -871,7 +1004,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               if (next.has(node.id)) next.delete(node.id); else next.add(node.id);
               return next;
             }); }} aria-label={expanded ? `收起${nodeLabel}` : `展开${nodeLabel}`}>
-              <FiFolder className="leading-default-icon" />
+              {expanded ? <LuFolderOpen className="leading-default-icon" /> : <FiFolder className="leading-default-icon" />}
               {expanded ? <FiChevronDown className="leading-state-icon" /> : <FiChevronRight className="leading-state-icon" />}
             </button>
           ) : <span className="tree-leading"><FiFileText /></span>}
@@ -938,7 +1071,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         <header className="sidebar-header">
           <div className="account-wrap">
             <button className="workspace-switcher" type="button" aria-expanded={accountOpen} onClick={() => setAccountOpen((open) => !open)}>
-              <span className="workspace-avatar">{userProfile.avatarUrl ? <img src={userProfile.avatarUrl} alt="" /> : userProfile.name.slice(0, 1).toUpperCase()}</span>
+              <span className="workspace-avatar">{userProfile.avatarUrl ? <img src={userProfile.avatarUrl} alt="" /> : <img src={logoUrl} alt="枝间默认头像" />}</span>
               <span className="workspace-name">{userProfile.name}</span>
               <FiChevronDown className="account-chevron" />
             </button>
@@ -1105,11 +1238,27 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
             )}
           </div>
           <div className="document-header-actions" ref={setHeaderToolbarTarget} />
+          {activeFile ? (
+            <DocumentSaveStatus
+              state={documentSaveStates[activeFile.id]}
+              noticeHidden={conflictNoticeHidden.has(activeFile.id)}
+              onRetry={() => {
+                if (activeDocumentStore) void persistDocument(activeFile.id, activeDocumentStore.getSnapshot());
+              }}
+              onReload={() => void reloadServerDocument(activeFile.id)}
+              onHideNotice={() => setConflictNoticeHidden((current) => new Set(current).add(activeFile.id))}
+              onShowNotice={() => setConflictNoticeHidden((current) => {
+                const next = new Set(current);
+                next.delete(activeFile.id);
+                return next;
+              })}
+            />
+          ) : null}
         </header>
         <div className="document-stage">
           {!serverReady ? null : activeDocumentStore && activeFile ? (
             <AppErrorBoundary scope="文档"><App
-              key={activeFile.id}
+              key={`${activeFile.id}:${documentStoreEpoch}`}
               embedded
               store={activeDocumentStore}
               toolbarTarget={headerToolbarTarget}
@@ -1138,7 +1287,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               <div className="settings-sidebar-group">
                 <div className="settings-sidebar-title">账号</div>
                 <button type="button" className={`settings-tab account-tab ${settingsView === "account" ? "is-active" : ""}`} onClick={() => setSettingsView("account")}>
-                  <span className="settings-tab-avatar">{profileDraft.avatarUrl ? <img src={profileDraft.avatarUrl} alt="" /> : profileDraft.name.slice(0, 1).toUpperCase()}</span>
+                  <span className="settings-tab-avatar">{profileDraft.avatarUrl ? <img src={profileDraft.avatarUrl} alt="" /> : <img src={logoUrl} alt="枝间默认头像" />}</span>
                   <span>{profileDraft.name}</span>
                 </button>
                 <button type="button" className={`settings-tab ${settingsView === "preferences" ? "is-active" : ""}`} onClick={() => setSettingsView("preferences")}><FiSliders /><span>偏好</span></button>
@@ -1153,7 +1302,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                     <h3>档案</h3>
                     <div className="profile-row">
                       <label className="settings-avatar editable-avatar" title="更换头像">
-                        {profileDraft.avatarUrl ? <img src={profileDraft.avatarUrl} alt="头像预览" /> : profileDraft.name.slice(0, 1).toUpperCase()}
+                        {profileDraft.avatarUrl ? <img src={profileDraft.avatarUrl} alt="头像预览" /> : <img src={logoUrl} alt="枝间默认头像" />}
                         <span><FiCamera /></span>
                         <input type="file" accept="image/*" onChange={(event) => updateAvatar(event.target.files?.[0])} />
                       </label>
@@ -1685,6 +1834,47 @@ function NodeMenu({ node, nodes, anchor, moveOpen, onRename, onMoveToggle, onMov
   );
 }
 
+/**
+ * 保存状态只有一行字，出问题时才多出一个按钮。
+ *
+ * conflict 和 error 要分开：error 重试一次通常就好了，而冲突意味着服务器上的版本比本地新，
+ * 重试只会拿回同一个 409，必须由用户决定要不要换成服务器版本。
+ */
+function DocumentSaveStatus({ state, noticeHidden, onRetry, onReload, onHideNotice, onShowNotice }: {
+  state: DocumentSaveState | undefined;
+  noticeHidden: boolean;
+  onRetry: () => void;
+  onReload: () => void;
+  onHideNotice: () => void;
+  onShowNotice: () => void;
+}) {
+  if (!state) return null;
+  if (state.status === "saving") return <span className="document-save-status">保存中…</span>;
+  if (state.status === "saved") return <span className="document-save-status">已保存</span>;
+  if (state.status === "error") {
+    return (
+      <span className="document-save-status is-error" title={state.message}>
+        保存失败
+        <button type="button" onClick={onRetry}>重试</button>
+      </span>
+    );
+  }
+  return (
+    <span className="document-save-status is-conflict">
+      <button type="button" className="conflict-summary" onClick={noticeHidden ? onShowNotice : onHideNotice}>存在保存冲突</button>
+      {noticeHidden ? null : (
+        <div className="document-conflict-notice" role="alert">
+          <p>此文档已在其他窗口或设备更新，当前内容尚未覆盖服务器版本。</p>
+          <div className="document-conflict-actions">
+            <button type="button" onClick={onReload}>重新加载服务器版本</button>
+            <button type="button" className="ghost" onClick={onHideNotice}>稍后处理</button>
+          </div>
+        </div>
+      )}
+    </span>
+  );
+}
+
 function errorMessage(error: unknown) {
   return error instanceof Error && error.message ? error.message : "未知错误";
 }
@@ -1692,6 +1882,19 @@ function errorMessage(error: unknown) {
 function logWorkspacePerf(label: string, startedAt: number) {
   if (!import.meta.env.DEV || import.meta.env.MODE === "test") return;
   console.info(`[workspace-perf] ${label}: ${(performance.now() - startedAt).toFixed(1)}ms`);
+}
+
+/**
+ * 读地址栏里的 `?file=` / `?folder=`。这里只负责取出字符串，节点是否真的存在由调用方核对：
+ * 链接指向一篇已经被删掉的文档是很常见的事，不该报错。
+ */
+function readWorkspaceDeepLink() {
+  if (typeof window === "undefined") return { fileId: "", folderId: "" };
+  const params = new URLSearchParams(window.location.search);
+  return {
+    fileId: params.get("file")?.trim() ?? "",
+    folderId: params.get("folder")?.trim() ?? "",
+  };
 }
 
 function lastOpenFileStorageKey(userId: string) {

@@ -74,6 +74,17 @@ export async function saveWorkspaceDocument(session: WorkspaceSession, fileId: s
   return readJsonResponse(response, "服务器未返回有效的文档保存结果。") as Promise<{ ok: true; revision: number }>;
 }
 
+/**
+ * 只读一篇文档。保存冲突之后用得上：客户端需要服务器上的最新 tree 和 revision，
+ * 才能让用户明确地用服务器版本覆盖本地。
+ */
+export async function loadWorkspaceDocument(session: WorkspaceSession, fileId: string, options?: WorkspaceApiOptions) {
+  const response = await workspaceFetch(`/api/workspace/documents/${encodeURIComponent(fileId)}`, {}, session, options);
+  if (response.status === 404) return null;
+  if (!response.ok) throw new WorkspaceApiError(await readApiError(response, "无法从服务器读取文档。"), response.status);
+  return readJsonResponse(response, "服务器返回的文档数据格式不正确。") as Promise<{ tree: ZhiJianTree; revision: number }>;
+}
+
 export async function deleteWorkspaceDocument(session: WorkspaceSession, fileId: string, options?: WorkspaceApiOptions) {
   const response = await workspaceFetch(`/api/workspace/documents/${encodeURIComponent(fileId)}`, {
     method: "DELETE",

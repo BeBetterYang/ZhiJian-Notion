@@ -9,6 +9,8 @@ export default defineConfig({
   webServer: {
     command: "npm run dev -- --port 4173",
     url: "http://127.0.0.1:4173/workspace.html",
+    // 端到端测试用开发服务器里的本地假身份登录，不碰真实 Supabase 账号，也不碰真人数据。
+    env: { ZHIJIAN_LOCAL_AUTH: "1" },
     reuseExistingServer: !process.env.CI,
   },
 });

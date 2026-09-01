@@ -792,6 +792,14 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
     if (!container) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Element | null;
+      const contextMenu = target?.closest<HTMLElement>(".context-menu");
+      if (contextMenu && target === contextMenu) {
+        contextMenu.hidden = true;
+        pointerSession.current = null;
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       if (target?.closest(".mindmap-add-child-button")) {
         event.preventDefault();
         event.stopPropagation();
@@ -815,7 +823,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
         return;
       }
       const shell = target?.closest<HTMLElement>(".mindmap-node-shell[data-node-id]");
-      if (shell?.dataset.nodeId) {
+      if (shell?.dataset.nodeId && event.button === 0) {
         const selectedAtPointerDown = shell.closest("me-tpc")?.classList.contains("selected")
           ? shell.dataset.nodeId
           : selectedNodeRef.current;
@@ -991,32 +999,34 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
       insertSiblingNode(nodeId);
     };
     // mind-elixir opens its node menu only for a right-click whose target is the
-    // `me-tpc` itself, and every node's box is filled here by our own display layer
-    // or editor — so the target is a div inside the topic and no menu ever appeared.
-    // Aiming the event at the topic is the whole fix; mind-elixir also wants
-    // `button === 2`, which a `contextmenu` event does not carry on every browser.
+    // `me-tpc` itself, and waits 200ms before firing `showContextMenu`. Our display
+    // fills the topic, so retarget the event and call the same menu bus immediately.
     const onContextMenu = (event: MouseEvent) => {
       if (readOnlyRef.current) return;
       const target = event.target as Element | null;
       const topic = target?.closest<HTMLElement>("me-tpc");
-      // The topic itself, or the blank surface: mind-elixir already handles both.
-      // Re-dispatched events land here too, and this is what stops them recursing.
-      if (!topic || target === topic) return;
+      if (!topic) return;
       // mind-elixir answers every right-click on the canvas with `preventDefault`,
       // so keeping the event away from it is what leaves a node being edited with
       // the browser's own copy/paste menu.
-      event.stopPropagation();
-      if (target?.closest(".mindmap-node-editor")) return;
+      if (target?.closest(".mindmap-node-editor")) {
+        event.stopImmediatePropagation();
+        return;
+      }
       event.preventDefault();
-      topic.dispatchEvent(new MouseEvent("contextmenu", {
-        bubbles: true,
-        cancelable: true,
+      event.stopImmediatePropagation();
+      const mind = mindRef.current;
+      if (!mind) return;
+      if (!topic.classList.contains("selected")) mind.selectNode(topic as Topic);
+      const menuEvent = new MouseEvent("contextmenu", {
         button: 2,
         buttons: 2,
         clientX: event.clientX,
         clientY: event.clientY,
         view: window,
-      }));
+      });
+      Object.defineProperty(menuEvent, "target", { value: topic });
+      mind.bus.fire("showContextMenu", menuEvent);
     };
     container.addEventListener("pointerdown", onPointerDown, true);
     container.addEventListener("pointermove", onPointerMove, true);

@@ -246,6 +246,16 @@ button { color: inherit; }
 .workspace-shell-ui.is-collapsed .document-header { padding-left: 48px; }
 .document-path { min-width: 0; display: flex; flex: 1; align-items: center; gap: 4px; overflow: hidden; color: #8b8a85; font-size: 14px; white-space: nowrap; }
 .document-header-actions { min-width: 0; display: flex; flex: none; align-items: center; justify-content: flex-end; }
+/* 保存状态是背景信息，正常情况下只是一行浅灰小字，出错才需要被看见。 */
+.document-save-status { position: relative; display: inline-flex; flex: none; align-items: center; gap: 6px; color: #a09e99; font-size: 12px; white-space: nowrap; }
+.document-save-status.is-error { color: #c0392b; }
+.document-save-status.is-conflict { color: #b7791f; }
+.document-save-status button { border: none; background: none; padding: 0; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
+.document-conflict-notice { position: absolute; top: calc(100% + 8px); right: 0; z-index: 40; width: 264px; padding: 12px; border: 1px solid rgba(55, 53, 47, 0.12); border-radius: 8px; background: #fff; box-shadow: 0 8px 24px rgba(15, 15, 15, 0.12); color: #37352f; text-align: left; white-space: normal; }
+.document-conflict-notice p { margin: 0 0 10px; font-size: 13px; line-height: 1.5; }
+.document-conflict-actions { display: flex; align-items: center; gap: 12px; }
+.document-conflict-actions button { text-decoration: none; color: #2f6fd0; }
+.document-conflict-actions button.ghost { color: #8b8a85; }
 .breadcrumb-part { min-width: 0; max-width: 150px; flex: 0 999 auto; display: inline-flex; align-items: center; gap: 4px; }
 .breadcrumb-part span,
 .breadcrumb-part button,

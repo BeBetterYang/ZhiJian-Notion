@@ -21,6 +21,13 @@ export interface WorkspaceFile {
 export type WorkspaceNode = WorkspaceFolder | WorkspaceFile;
 export type DropMode = "before" | "inside" | "after";
 
+/** 复制一棵子树时，每个被复制的节点的「源 id → 新 id」。 */
+export interface DuplicatedWorkspaceNode {
+  sourceId: string;
+  targetId: string;
+  type: WorkspaceNode["type"];
+}
+
 export interface WorkspaceTrashEntry {
   id: string;
   deletedAt: number;
@@ -228,20 +235,37 @@ export function restoreWorkspaceTrashEntry(nodes: WorkspaceNode[], entry: Worksp
   return normalizeOrders([...shifted, ...restored]);
 }
 
+/**
+ * 复制一个节点（文件夹会连着整棵子树一起复制）。
+ *
+ * `duplicatedNodes` 是旧 id → 新 id 的对照表，调用方靠它把每一篇源文档的内容也复制一份：
+ * 只克隆导航树的话，新的 fileId 在服务器上没有对应的文档行，刷新后就变成空文档了。
+ *
+ * 「副本」只加在用户点了复制的那个根节点上。子节点跟着一起复制是实现细节，把
+ * 「需求」改名成「需求 副本」并不是用户要的。
+ */
 export function duplicateWorkspaceNode(nodes: WorkspaceNode[], nodeId: string) {
   const source = nodes.find((node) => node.id === nodeId);
-  if (!source) return { node: null, nodes };
+  if (!source) return { node: null, nodes, duplicatedNodes: [] as DuplicatedWorkspaceNode[] };
   let sequence = 0;
   const clones: WorkspaceNode[] = [];
-  const clone = (node: WorkspaceNode, parentId: string | null): WorkspaceNode => {
+  const duplicatedNodes: DuplicatedWorkspaceNode[] = [];
+  const clone = (node: WorkspaceNode, parentId: string | null, isRoot: boolean): WorkspaceNode => {
     const id = makeId(node.type, `-${sequence++}`);
-    const copy = { ...node, id, title: `${node.title} 副本`, parentId, order: childNodes([...nodes, ...clones], parentId).length };
+    const copy = {
+      ...node,
+      id,
+      title: isRoot ? `${node.title} 副本` : node.title,
+      parentId,
+      order: childNodes([...nodes, ...clones], parentId).length,
+    };
     clones.push(copy);
-    if (node.type === "folder") childNodes(nodes, node.id).forEach((child) => clone(child, id));
+    duplicatedNodes.push({ sourceId: node.id, targetId: id, type: node.type });
+    if (node.type === "folder") childNodes(nodes, node.id).forEach((child) => clone(child, id, false));
     return copy;
   };
-  const root = clone(source, source.parentId);
-  return { node: root, nodes: normalizeOrders([...nodes, ...clones]) };
+  const root = clone(source, source.parentId, true);
+  return { node: root, nodes: normalizeOrders([...nodes, ...clones]), duplicatedNodes };
 }
 
 export function markFileOpened(nodes: WorkspaceNode[], fileId: string) {

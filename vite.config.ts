@@ -17,6 +17,9 @@ const IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 // 与线上一致的安全窗口：刚上传的图片要等文档 autosave 写回才有引用，这段空档不能误删。
 const UNREFERENCED_ASSET_GRACE_MS = 24 * 60 * 60 * 1000;
+// E2E 的假身份，见 localTestUser()。e2e/localSession.ts 里用的是同一对常量。
+const LOCAL_TEST_ACCESS_TOKEN = "zhijian-local-e2e-token";
+const LOCAL_TEST_USER_ID = "00000000-0000-4000-8000-0000000e2e00";
 
 export default defineConfig(({ mode }) => {
   const appEnv = loadEnv(mode, process.cwd(), "");
@@ -152,7 +155,18 @@ function workspaceServerPlugin(appEnv: Record<string, string>) {
       }
     });
 
-    middlewares.use("/api/workspace", async (request, response, next) => {
+    /**
+     * 开发服务器把一个用户的全部数据放在同一个 JSON 文件里，而线上是 Supabase 的两张表。
+     * 文档保存和导航树保存是两条并发请求，各自「读文件 → 改 → 写回」，读得早的那条会把对方刚
+     * 写进去的内容整段覆盖掉——新建副本最容易踩到：文档行刚写好，紧接着的导航树保存就把它抹掉。
+     * 把写请求排成一条队，行为就和线上按行更新一致了；读请求照旧并发。
+     */
+    let workspaceWriteQueue: Promise<void> = Promise.resolve();
+    const handleWorkspaceRequest = async (
+      request: Connect.IncomingMessage,
+      response: ServerResponse,
+      next: Connect.NextFunction,
+    ) => {
       try {
         const user = await requireAuthenticatedUser(appEnv, request);
         if (request.url?.startsWith("/shares/")) {
@@ -273,6 +287,11 @@ function workspaceServerPlugin(appEnv: Record<string, string>) {
           if (!fileId) return sendJson(response, 400, { error: "缺少文档 ID。" });
           const record = (await readUserRecord(user.id, user.email)) ?? {};
           const documents = readRecord(record.documents);
+          if (request.method === "GET") {
+            const stored = readRecord(documents[fileId]);
+            if (!documents[fileId] || !stored.tree) return sendJson(response, 404, { error: "文档不存在。" });
+            return sendJson(response, 200, { tree: stored.tree, revision: Number(stored.revision ?? 1) });
+          }
           if (request.method === "DELETE") {
             delete documents[fileId];
             await writeUserRecord(user.id, { ...record, documents, updatedAt: Date.now() });
@@ -313,6 +332,14 @@ function workspaceServerPlugin(appEnv: Record<string, string>) {
           error: error instanceof Error ? error.message : "服务器保存失败。",
         });
       }
+    };
+
+    middlewares.use("/api/workspace", (request, response, next) => {
+      if (request.method === "GET") {
+        void handleWorkspaceRequest(request, response, next);
+        return;
+      }
+      workspaceWriteQueue = workspaceWriteQueue.then(() => handleWorkspaceRequest(request, response, next));
     });
   };
 
@@ -337,11 +364,26 @@ async function requireAuthenticatedUser(appEnv: Record<string, string>, request:
   const header = request.headers.authorization ?? "";
   const accessToken = typeof header === "string" && header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
   if (!accessToken) throw statusError("请先登录。", 401);
+  const localUser = localTestUser(accessToken);
+  if (localUser) return localUser;
   const user = readRecord(await supabaseAuthRequest(appEnv, "user", { method: "GET", token: accessToken }));
   const email = normalizeEmail(user.email);
   const id = typeof user.id === "string" ? user.id : "";
   if (!email || !id) throw statusError("登录状态无效。", 401);
   return { id, email };
+}
+
+/**
+ * E2E 专用的本地登录：只有开发服务器带着 `ZHIJIAN_LOCAL_AUTH=1` 启动时才认这个固定假 token。
+ *
+ * 这样跑端到端测试既不需要真实的 Supabase 账号密码，也不会碰到任何真人数据——假用户有自己的
+ * user id，工作区数据都落在 `.zhijian-server-data` 里它自己那一份下面。生产用的是
+ * `api/` 下的 Vercel Function，根本没有这段代码。
+ */
+function localTestUser(accessToken: string) {
+  if (process.env.ZHIJIAN_LOCAL_AUTH !== "1") return null;
+  if (accessToken !== LOCAL_TEST_ACCESS_TOKEN) return null;
+  return { id: LOCAL_TEST_USER_ID, email: "e2e@local.test" };
 }
 
 async function supabaseAuthRequest(appEnv: Record<string, string>, pathname: string, init: RequestInit & { token?: string }) {

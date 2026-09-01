@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createInitialTree } from "../core/tree";
 import { TreeStore } from "../core/treeStore";
@@ -6,6 +6,7 @@ import type { WorkspaceSession } from "./auth";
 
 const serverMocks = vi.hoisted(() => ({
   deleteWorkspaceDocument: vi.fn(),
+  loadWorkspaceDocument: vi.fn(),
   loadWorkspaceState: vi.fn(),
   saveWorkspaceDocument: vi.fn(),
   saveWorkspaceState: vi.fn(),
@@ -38,6 +39,7 @@ vi.mock("./serverApi", () => ({
 vi.mock("../shared/editorPreload", () => editorPreloadMocks);
 
 import { WorkspaceShell } from "./WorkspaceShell";
+import { WorkspaceApiError } from "./serverApi";
 import { workspaceNodeMenuPosition } from "./workspaceNodeMenuPosition";
 
 const session: WorkspaceSession = {
@@ -121,6 +123,12 @@ describe("WorkspaceShell session refresh", () => {
     expect(await screen.findByTestId("document-editor")).toHaveTextContent("第二个文档");
   });
 
+  it("uses the ZhiJian logo when the user has not uploaded an avatar", async () => {
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+
+    expect(await screen.findByAltText("枝间默认头像")).toBeInTheDocument();
+  });
+
   it("starts the remembered editor preload before the workspace API settles", () => {
     const starts: string[] = [];
     window.localStorage.setItem("zhijian.workspace.last-open-file.v1:user-1", "file-2");
@@ -198,7 +206,7 @@ describe("WorkspaceShell session refresh", () => {
     expect(existingEditor).toHaveAttribute("data-theme", "ocean");
     expect(existingEditor).toHaveAttribute("data-layout", "logic");
 
-    fireEvent.click(screen.getByRole("button", { name: "新增" }));
+    fireEvent.click(await screen.findByRole("button", { name: "新增" }));
     fireEvent.click(screen.getByRole("button", { name: "新增文档" }));
 
     await waitFor(() => expect(screen.getByTestId("document-editor")).toHaveAttribute("data-theme", "yanpi"));
@@ -323,5 +331,240 @@ describe("批量导入文档", () => {
     await importFiles([markdownFile("会议记录.md", "只有正文\n"), markdownFile("乙.md", "# 文档乙\n")]);
 
     await waitFor(() => expect(within(fileTree()).getByText("会议记录")).toBeInTheDocument());
+  });
+});
+
+describe("文档服务器记录的生命周期", () => {
+  /** `Folder ├─ 需求 └─ 子文件夹 └─ 会议记录`，用来验证文件夹副本连子文档内容一起复制。 */
+  const folderNodes = [
+    { id: "folder", title: "项目 A", type: "folder" as const, parentId: null, order: 0 },
+    { id: "file-a", title: "需求", type: "file" as const, parentId: "folder", order: 0, favorite: false, openedAt: 1 },
+    { id: "sub", title: "子文件夹", type: "folder" as const, parentId: "folder", order: 1 },
+    { id: "file-b", title: "会议记录", type: "file" as const, parentId: "sub", order: 0, favorite: false, openedAt: 2 },
+  ];
+
+  function treeWithRootText(text: string) {
+    const tree = createInitialTree();
+    tree.nodes[tree.rootId].content.text = text;
+    return tree;
+  }
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    serverMocks.saveWorkspaceState.mockReset().mockResolvedValue(undefined);
+    serverMocks.saveWorkspaceDocument.mockReset().mockResolvedValue({ ok: true, revision: 1 });
+    serverMocks.loadWorkspaceDocument.mockReset().mockResolvedValue(null);
+    serverMocks.loadWorkspaceState.mockReset().mockResolvedValue({
+      profile: { name: "枝间用户", email: session.email, avatarUrl: "" },
+      nodes: [{ id: "file-1", title: "产品规划", type: "file", parentId: null, order: 0, favorite: false, openedAt: 1 }],
+      documents: { "file-1": treeWithRootText("产品规划") },
+      documentRevisions: { "file-1": 3 },
+    });
+  });
+
+  function renderShell() {
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+  }
+
+  function sidebar() {
+    const section = document.querySelector<HTMLElement>(".workspace-files");
+    if (!section) throw new Error("侧栏文件树还没渲染出来。");
+    return section;
+  }
+
+  async function openNodeMenu(title: string) {
+    fireEvent.click(await screen.findByRole("button", { name: `${title}的更多操作` }));
+  }
+
+  it("新建文档立刻建立服务器记录，首存用 revision 0", async () => {
+    renderShell();
+    await screen.findByTestId("document-editor");
+
+    fireEvent.click(await screen.findByRole("button", { name: "新增" }));
+    fireEvent.click(screen.getByRole("button", { name: "新增文档" }));
+
+    await waitFor(() => expect(serverMocks.saveWorkspaceDocument).toHaveBeenCalledTimes(1));
+    const [, fileId, , revision] = serverMocks.saveWorkspaceDocument.mock.calls[0]!;
+    expect(fileId).not.toBe("file-1");
+    expect(revision).toBe(0);
+  });
+
+  it("复制单篇文档：新 fileId、内容一致、立刻保存", async () => {
+    renderShell();
+    await openNodeMenu("产品规划");
+    fireEvent.click(screen.getByRole("button", { name: "创建副本" }));
+
+    await waitFor(() => expect(serverMocks.saveWorkspaceDocument).toHaveBeenCalledTimes(1));
+    const [, copyId, copyTree, revision] = serverMocks.saveWorkspaceDocument.mock.calls[0]!;
+    expect(copyId).not.toBe("file-1");
+    // 副本是自己的一行，首存从 revision 0 开始，不会去撞源文档的 revision 3。
+    expect(revision).toBe(0);
+    // 标题以文档根节点为准，所以副本的根节点也叫「… 副本」。
+    expect(copyTree.nodes[copyTree.rootId].content.text).toBe("产品规划 副本");
+    expect(within(sidebar()).getByText("产品规划 副本")).toBeInTheDocument();
+    expect(within(sidebar()).getByText("产品规划")).toBeInTheDocument();
+  });
+
+  it("复制文件夹：每一层的文档都各写一行，只有根节点加「副本」", async () => {
+    serverMocks.loadWorkspaceState.mockResolvedValue({
+      profile: { name: "枝间用户", email: session.email, avatarUrl: "" },
+      nodes: folderNodes,
+      documents: { "file-a": treeWithRootText("需求"), "file-b": treeWithRootText("会议记录") },
+    });
+
+    renderShell();
+    await openNodeMenu("项目 A");
+    fireEvent.click(screen.getByRole("button", { name: "创建副本" }));
+
+    await waitFor(() => expect(serverMocks.saveWorkspaceDocument).toHaveBeenCalledTimes(2));
+    const saved = serverMocks.saveWorkspaceDocument.mock.calls.map((call) => {
+      const tree = call[2] as ReturnType<typeof createInitialTree>;
+      return { fileId: call[1] as string, text: tree.nodes[tree.rootId].content.text };
+    });
+    expect(new Set(saved.map((entry) => entry.fileId)).size).toBe(2);
+    expect(saved.some((entry) => entry.fileId === "file-a" || entry.fileId === "file-b")).toBe(false);
+    expect(saved.map((entry) => entry.text).sort()).toEqual(["会议记录", "需求"]);
+    // 只有用户点的那个根节点带「副本」，子节点保持原名。
+    expect(within(sidebar()).getByText("项目 A 副本")).toBeInTheDocument();
+    expect(within(sidebar()).queryByText("需求 副本")).not.toBeInTheDocument();
+    expect(within(sidebar()).queryByText("子文件夹 副本")).not.toBeInTheDocument();
+  });
+});
+
+describe("Workspace Deep Link", () => {
+  const nodes = [
+    { id: "folder", title: "项目 A", type: "folder" as const, parentId: null, order: 0 },
+    { id: "sub", title: "子文件夹", type: "folder" as const, parentId: "folder", order: 0 },
+    { id: "file-2", title: "深层文档", type: "file" as const, parentId: "sub", order: 0, favorite: false, openedAt: 2 },
+    { id: "file-1", title: "产品规划", type: "file" as const, parentId: null, order: 1, favorite: false, openedAt: 1 },
+  ];
+
+  function documents() {
+    const first = createInitialTree();
+    first.nodes[first.rootId].content.text = "产品规划";
+    const second = createInitialTree();
+    second.nodes[second.rootId].content.text = "深层文档";
+    return { "file-1": first, "file-2": second };
+  }
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    window.history.replaceState(null, "", "/workspace.html");
+    serverMocks.saveWorkspaceState.mockReset().mockResolvedValue(undefined);
+    serverMocks.saveWorkspaceDocument.mockReset().mockResolvedValue({ ok: true, revision: 1 });
+    serverMocks.loadWorkspaceState.mockReset().mockResolvedValue({
+      profile: { name: "枝间用户", email: session.email, avatarUrl: "" },
+      nodes,
+      documents: documents(),
+    });
+  });
+
+  it("?file= 优先于上次打开的文档，并展开所有父文件夹", async () => {
+    window.localStorage.setItem("zhijian.workspace.last-open-file.v1:user-1", "file-1");
+    window.history.replaceState(null, "", "/workspace.html?file=file-2");
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+
+    expect(await screen.findByTestId("document-editor")).toHaveTextContent("深层文档");
+    // 祖先都展开了，侧栏才真的定位到这一篇。
+    const sidebar = document.querySelector<HTMLElement>(".workspace-files")!;
+    expect(within(sidebar).getByText("深层文档")).toBeInTheDocument();
+  });
+
+  it("链接里的文档已被删除时安全退回上次打开的文档", async () => {
+    window.localStorage.setItem("zhijian.workspace.last-open-file.v1:user-1", "file-1");
+    window.history.replaceState(null, "", "/workspace.html?file=file-gone");
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+
+    expect(await screen.findByTestId("document-editor")).toHaveTextContent("产品规划");
+  });
+
+  it("?folder= 选中并展开文件夹，文档仍是记住的那一篇", async () => {
+    window.localStorage.setItem("zhijian.workspace.last-open-file.v1:user-1", "file-1");
+    window.history.replaceState(null, "", "/workspace.html?folder=sub");
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+
+    expect(await screen.findByTestId("document-editor")).toHaveTextContent("产品规划");
+    const sidebar = document.querySelector<HTMLElement>(".workspace-files")!;
+    expect(within(sidebar).getByText("深层文档")).toBeInTheDocument();
+  });
+
+  it("地址栏跟着当前文档走，用 replaceState 不堆历史记录", async () => {
+    const beforeLength = window.history.length;
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+    await screen.findByTestId("document-editor");
+
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get("file")).toBeTruthy());
+    expect(window.history.length).toBe(beforeLength);
+  });
+});
+
+describe("保存冲突（409）", () => {
+  const AUTOSAVE_DEBOUNCE_MS = 400;
+
+  function treeWithRootText(text: string) {
+    const tree = createInitialTree();
+    tree.nodes[tree.rootId].content.text = text;
+    return tree;
+  }
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    window.history.replaceState(null, "", "/workspace.html");
+    serverMocks.saveWorkspaceState.mockReset().mockResolvedValue(undefined);
+    serverMocks.loadWorkspaceDocument.mockReset();
+    serverMocks.saveWorkspaceDocument.mockReset().mockRejectedValue(new WorkspaceApiError("文档已在其他窗口更新。", 409));
+    serverMocks.loadWorkspaceState.mockReset().mockResolvedValue({
+      profile: { name: "枝间用户", email: session.email, avatarUrl: "" },
+      nodes: [{ id: "file-1", title: "产品规划", type: "file", parentId: null, order: 0, favorite: false, openedAt: 1 }],
+      documents: { "file-1": treeWithRootText("产品规划") },
+      documentRevisions: { "file-1": 3 },
+    });
+  });
+
+  /** 改标题会写进文档根节点，也就是走一次真正的自动保存。 */
+  async function renameActiveDocument(from: string, to: string) {
+    fireEvent.click(await screen.findByRole("button", { name: `${from}的更多操作` }));
+    fireEvent.click(screen.getByRole("button", { name: "重命名" }));
+    const input = document.querySelector<HTMLInputElement>(".tree-rename-input");
+    if (!input) throw new Error("重命名输入框没有出现。");
+    fireEvent.change(input, { target: { value: to } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    // 自动保存有 400ms 防抖，等它真的发出去（或确认它没发）。
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, AUTOSAVE_DEBOUNCE_MS + 120));
+    });
+  }
+
+  it("进入冲突后暂停自动保存，换成服务器版本后恢复", async () => {
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+    await screen.findByTestId("document-editor");
+
+    await renameActiveDocument("产品规划", "改过的标题");
+
+    expect(await screen.findByText("存在保存冲突")).toBeInTheDocument();
+    expect(screen.getByText(/此文档已在其他窗口或设备更新/)).toBeInTheDocument();
+    const conflictedCalls = serverMocks.saveWorkspaceDocument.mock.calls.length;
+    expect(conflictedCalls).toBeGreaterThan(0);
+
+    // 冲突之后继续改内容，也不能再往服务器发注定失败的 PUT。
+    await renameActiveDocument("改过的标题", "又改了一次");
+    expect(serverMocks.saveWorkspaceDocument).toHaveBeenCalledTimes(conflictedCalls);
+
+    // 换成服务器版本：读回服务器的 tree 和 revision，冲突解除，自动保存恢复。
+    serverMocks.loadWorkspaceDocument.mockResolvedValue({ tree: treeWithRootText("服务器版本"), revision: 9 });
+    serverMocks.saveWorkspaceDocument.mockReset().mockResolvedValue({ ok: true, revision: 10 });
+    fireEvent.click(screen.getByRole("button", { name: "重新加载服务器版本" }));
+
+    await waitFor(() => expect(screen.getByTestId("document-editor")).toHaveTextContent("服务器版本"));
+    expect(serverMocks.loadWorkspaceDocument).toHaveBeenCalledWith(expect.anything(), "file-1", expect.anything());
+
+    await renameActiveDocument("服务器版本", "冲突之后的新标题");
+    await waitFor(() => expect(serverMocks.saveWorkspaceDocument).toHaveBeenCalled());
+    // 用服务器给的 revision 9 继续保存，而不是本地那个已经过期的 3。
+    expect(serverMocks.saveWorkspaceDocument.mock.calls.at(-1)?.[3]).toBe(9);
   });
 });

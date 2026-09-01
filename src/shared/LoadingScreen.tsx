@@ -57,7 +57,7 @@ export function LoadingScreen({ ready, children }: { ready: boolean; children: R
             <img className="zhijian-loading-logo-base" src="/zhijian-logo.png" alt="" />
             <img className="zhijian-loading-logo-fill" src="/zhijian-logo.png" alt="" />
           </div>
-          <span className="zhijian-loading-brand">枝间</span>
+          <span className="zhijian-loading-brand">让想法开出花</span>
         </div>
       ) : null}
     </div>
