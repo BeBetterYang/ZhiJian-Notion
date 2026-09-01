@@ -110,6 +110,14 @@ describe("mindMapPressTarget", () => {
     expect(mindMapPressTarget(document.querySelector("a"), { x: 0, y: 0 })?.interactive).toBe(true);
   });
 
+  it("leaves pointer gestures inside the node editor to native text selection", () => {
+    document.body.innerHTML = `
+      <div class="mindmap-node-shell" data-node-id="n3">
+        <div class="mindmap-node-editor"><p class="bn-inline-content">可选择文字</p></div>
+      </div>`;
+    expect(mindMapPressTarget(document.querySelector("p"), { x: 0, y: 0 })).toBeNull();
+  });
+
   it("reports nothing for a press outside every node", () => {
     document.body.innerHTML = `<div class="map-container"></div>`;
     expect(mindMapPressTarget(document.querySelector(".map-container"), { x: 0, y: 0 })).toBeNull();

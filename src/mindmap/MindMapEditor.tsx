@@ -792,6 +792,13 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
         toggleClozeReveal(cloze);
         return;
       }
+      // Editing owns native pointer gestures. Starting a node-drag session here
+      // makes the first text-selection move add `is-node-dragging`, whose hit-test
+      // guard disables the editor before the browser can extend its range.
+      if (target?.closest(".mindmap-node-editor")) {
+        pointerSession.current = null;
+        return;
+      }
       const shell = target?.closest<HTMLElement>(".mindmap-node-shell[data-node-id]");
       if (shell?.dataset.nodeId) {
         const selectedAtPointerDown = shell.closest("me-tpc")?.classList.contains("selected")
@@ -931,6 +938,9 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
     };
     const onDoubleClick = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
+      // Once the BlockNote editor is mounted, double click belongs to its native
+      // word selection. Preventing the default here collapses that range.
+      if (target?.closest(".mindmap-node-editor")) return;
       // A summary or a connector label is mind-elixir's to edit, and it belongs to no
       // node — so the fallback below must not borrow the last node press for it.
       if (isMindMapAnnotationTarget(target)) return;

@@ -295,10 +295,6 @@ function MindMapNodeEditor({
       if (event.button !== 0 || !(event.target as Element | null)?.closest(".ProseMirror")) return;
       correctCaretAfterClick(editor, { x: event.clientX, y: event.clientY });
     };
-    const onDoubleClick = (event: MouseEvent) => {
-      placeCursor(event as PointerEvent, true);
-      event.preventDefault();
-    };
     const stopMindMapPointerHandling = (event: Event) => event.stopPropagation();
     const onCompositionStart = () => {
       composing.current = true;
@@ -375,7 +371,7 @@ function MindMapNodeEditor({
     container.addEventListener("pointerdown", placeCursor);
     container.addEventListener("click", correctCursor);
     container.addEventListener("mousedown", stopMindMapPointerHandling);
-    container.addEventListener("dblclick", onDoubleClick);
+    container.addEventListener("dblclick", stopMindMapPointerHandling);
     container.addEventListener("keydown", onKeyDown, true);
     container.addEventListener("keydown", stopMindMapPointerHandling);
     container.addEventListener("compositionstart", onCompositionStart, true);
@@ -384,7 +380,7 @@ function MindMapNodeEditor({
       container.removeEventListener("pointerdown", placeCursor);
       container.removeEventListener("click", correctCursor);
       container.removeEventListener("mousedown", stopMindMapPointerHandling);
-      container.removeEventListener("dblclick", onDoubleClick);
+      container.removeEventListener("dblclick", stopMindMapPointerHandling);
       container.removeEventListener("keydown", onKeyDown, true);
       container.removeEventListener("keydown", stopMindMapPointerHandling);
       container.removeEventListener("compositionstart", onCompositionStart, true);

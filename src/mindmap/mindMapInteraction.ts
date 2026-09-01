@@ -279,6 +279,7 @@ export function mindMapPressTarget(
   point: { x: number; y: number },
 ): MindMapPressTarget | null {
   if (!(target instanceof Element)) return null;
+  if (target.closest(".mindmap-node-editor")) return null;
   const nodeId = target.closest<HTMLElement>(".mindmap-node-shell[data-node-id]")?.dataset.nodeId;
   if (!nodeId) return null;
   const cell = target.closest<HTMLElement>("td[data-table-row][data-table-column]");
