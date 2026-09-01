@@ -103,6 +103,7 @@ export default function App({
   );
   const tree = useTree(store);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [mindMapSelectedNodeIds, setMindMapSelectedNodeIds] = useState<string[]>([]);
   const [selectionActive, setSelectionActive] = useState(false);
   const [activeView, setActiveView] = useState<"outline" | "mindmap">(initialViewState?.activeView ?? "outline");
   // Set while the node being edited in the map is formatting one of its own quote or
@@ -174,6 +175,7 @@ export default function App({
     void preloadEditorView(view).catch(() => undefined);
     setActiveView(view);
     setSelectionActive(false);
+    setMindMapSelectedNodeIds([]);
     setMindMapTextSelection(null);
     persistViewStatePatch({ activeView: view });
   }, [persistViewStatePatch]);
@@ -607,6 +609,7 @@ export default function App({
               store={store}
               onSelectNode={handleOutlineSelect}
               mindMapNodeId={activeView === "mindmap" ? selectedNodeId : null}
+              mindMapSelectedNodeIds={mindMapSelectedNodeIds}
               mindMapTextSelection={mindMapTextSelection}
               mindMapToolbarTarget={mindMapToolbarTarget}
               showMindMapToolbar={
@@ -655,6 +658,7 @@ export default function App({
                     setSelectedNodeId(nodeId);
                     setMindMapTextSelection(null);
                   }}
+                  onSelectedNodeIdsChange={setMindMapSelectedNodeIds}
                   onSelectionActiveChange={setSelectionActive}
                   onTextSelectionChange={setMindMapTextSelection}
                   onNodeToolbarActiveChange={setMindMapNodeToolbarActive}

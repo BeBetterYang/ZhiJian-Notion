@@ -56,6 +56,7 @@ import { importMarkdownFiles, localizeRemoteImages } from "./markdownImageImport
 import { compressAvatarFile } from "./avatarImage";
 import { workspaceNodeMenuPosition } from "./workspaceNodeMenuPosition";
 import { AppErrorBoundary } from "../shared/AppErrorBoundary";
+import { LoadingScreen } from "../shared/LoadingScreen";
 import {
   childNodes,
   applyMindMapDefaults,
@@ -172,6 +173,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const workspaceStartedAt = useRef(performance.now());
   const documentMountedLogged = useRef(false);
   const [serverReady, setServerReady] = useState(false);
+  const [initialEditorReady, setInitialEditorReady] = useState(false);
   const [serverAvailable, setServerAvailable] = useState(false);
   const [serverStatus, setServerStatus] = useState("");
 
@@ -273,11 +275,16 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     let canceled = false;
     const loadingSession = sessionRef.current;
     const initialEditorView = loadInitialWorkspaceEditorView(loadingSession.userId);
+    let requiredEditorView = initialEditorView;
     const editorPreloadStartedAt = performance.now();
     logWorkspacePerf(`editor preload start (${initialEditorView})`, workspaceStartedAt.current);
-    void preloadEditorView(initialEditorView)
+    setInitialEditorReady(false);
+    const initialEditorPreload = preloadEditorView(initialEditorView)
       .then(() => logWorkspacePerf(`editor preload ready (${initialEditorView})`, editorPreloadStartedAt))
       .catch(() => logWorkspacePerf(`editor preload failed (${initialEditorView})`, editorPreloadStartedAt));
+    void initialEditorPreload.then(() => {
+      if (!canceled && requiredEditorView === initialEditorView) setInitialEditorReady(true);
+    });
     const workspaceApiStartedAt = performance.now();
     logWorkspacePerf("workspace api start", workspaceStartedAt.current);
     setServerReady(false);
@@ -304,6 +311,19 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         const rememberedFileId = loadLastOpenFileId(sessionRef.current.userId);
         const restoredFile = nextNodes.find((node) => node.id === rememberedFileId && node.type === "file");
         const nextActiveFileId = restoredFile?.id ?? firstFile?.id ?? "";
+        const activeEditorView = nextActiveFileId ? loadDocumentEditorView(nextActiveFileId) : initialEditorView;
+        requiredEditorView = activeEditorView;
+        if (activeEditorView !== initialEditorView) {
+          setInitialEditorReady(false);
+          const activeEditorPreloadStartedAt = performance.now();
+          logWorkspacePerf(`editor preload start (${activeEditorView})`, workspaceStartedAt.current);
+          void preloadEditorView(activeEditorView)
+            .then(() => logWorkspacePerf(`editor preload ready (${activeEditorView})`, activeEditorPreloadStartedAt))
+            .catch(() => logWorkspacePerf(`editor preload failed (${activeEditorView})`, activeEditorPreloadStartedAt))
+            .then(() => {
+              if (!canceled && requiredEditorView === activeEditorView) setInitialEditorReady(true);
+            });
+        }
         setActiveFileId(nextActiveFileId);
         setSelectedMenuKey(nextActiveFileId ? `tree:${nextActiveFileId}` : "");
         setExpandedFolders(new Set(nextNodes.filter((node) => node.type === "folder").map((node) => node.id)));
@@ -909,7 +929,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   });
 
   return (
-    <main className={`workspace-shell-ui ${sidebarCollapsed ? "is-collapsed" : ""} ${searchMode ? "is-search-mode" : ""}`} style={{ "--sidebar-width": `${sidebarDisplayWidth}px` } as CSSProperties}>
+    <LoadingScreen ready={serverReady && initialEditorReady}>
+      <main className={`workspace-shell-ui ${sidebarCollapsed ? "is-collapsed" : ""} ${searchMode ? "is-search-mode" : ""}`} style={{ "--sidebar-width": `${sidebarDisplayWidth}px` } as CSSProperties}>
       <button type="button" className="mobile-menu-button icon-button" onClick={() => setSidebarOpen(true)} aria-label="打开侧栏" title="打开侧栏"><FiMenu /></button>
       {sidebarCollapsed ? <button type="button" className="desktop-sidebar-open icon-button" onMouseEnter={showSidebarPeek} onMouseLeave={scheduleSidebarPeekClose} onClick={() => { setSidebarCollapsed(false); setSidebarPeeking(false); }} aria-label="展开侧栏" title="展开侧栏"><FiChevronsRight /></button> : null}
       {sidebarOpen ? <button className="sidebar-backdrop" aria-label="关闭侧栏" onClick={() => setSidebarOpen(false)} /> : null}
@@ -1032,7 +1053,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
           ) : (
             <section className="workspace-files" aria-labelledby="workspace-files-title">
               <div className="section-label" id="workspace-files-title">我的文档</div>
-              {serverReady ? renderTree(null) : <WorkspaceLoading label="正在加载工作区" compact />}
+              {serverReady ? renderTree(null) : null}
             </section>
           )}
         </div>
@@ -1086,9 +1107,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
           <div className="document-header-actions" ref={setHeaderToolbarTarget} />
         </header>
         <div className="document-stage">
-          {!serverReady ? (
-            <WorkspaceLoading label="正在加载服务器数据" />
-          ) : activeDocumentStore && activeFile ? (
+          {!serverReady ? null : activeDocumentStore && activeFile ? (
             <AppErrorBoundary scope="文档"><App
               key={activeFile.id}
               embedded
@@ -1240,7 +1259,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
           </section>
         </div>
       ) : null}
-    </main>
+      </main>
+    </LoadingScreen>
   );
 }
 
@@ -1259,6 +1279,10 @@ function documentViewStorageKey(fileId: string) {
 function loadInitialWorkspaceEditorView(userId: string): "outline" | "mindmap" {
   const fileId = loadLastOpenFileId(userId);
   if (!fileId) return "outline";
+  return loadDocumentEditorView(fileId);
+}
+
+function loadDocumentEditorView(fileId: string): "outline" | "mindmap" {
   try {
     const raw = window.localStorage.getItem(documentViewStorageKey(fileId));
     if (!raw) return "outline";
@@ -1500,15 +1524,6 @@ function RecentSearchPanel({ searches, onClear, onDelete, onSelect }: {
         </div>
       ) : <div className="empty-section">暂无最近搜索</div>}
     </section>
-  );
-}
-
-function WorkspaceLoading({ label, compact = false }: { label: string; compact?: boolean }) {
-  return (
-    <div className={`workspace-loading ${compact ? "is-compact" : ""}`} role="status" aria-live="polite">
-      <span className="workspace-loading-spinner" aria-hidden="true" />
-      <span>{label}</span>
-    </div>
   );
 }
 

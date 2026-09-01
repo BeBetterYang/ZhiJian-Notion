@@ -1853,6 +1853,16 @@ textarea {
   margin-bottom: calc(var(--node-gap-y) / 2 + var(--mindmap-row-pad-y));
 }
 
+/* In horizontal structures MindElixir adds `--main-gap-y` around every first-level
+   branch wrapper. That gap is inserted once more at a boundary between two parent
+   branches, making those two children 12px farther apart than ordinary siblings.
+   The row margins above already provide the complete vertical rhythm. */
+.mindmap-layout-mind-map .map-container me-nodes:not(.down) me-main > me-wrapper,
+.mindmap-layout-logic .map-container me-nodes:not(.down) me-main > me-wrapper {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
 /* MindElixir owns the actual node geometry for all five structures. These rules
    only change its flex axes: offsetTop/offsetLeft therefore remain the source of
    truth for connectors, dragging, editing frames and hit testing. */

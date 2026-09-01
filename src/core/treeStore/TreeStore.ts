@@ -30,6 +30,12 @@ export interface UpdateNodeInput {
   blocks?: ZhiJianNodeBlock[];
 }
 
+export interface UpdateNodeTypeInput {
+  id: string;
+  type: ZhiJianNodeType;
+  extraProps?: NonNullable<ZhiJianNode["props"]>;
+}
+
 export class TreeStore {
   private tree: ZhiJianTree;
   private listeners = new Set<TreeListener>();
@@ -117,22 +123,19 @@ export class TreeStore {
     }
     this.commit((draft) => {
       const node = this.requireDraftNode(draft, id);
-      const { checked, headingLevel, table, ...sharedProps } = node.props ?? {};
-      node.type = type;
-      if (type === "table") {
-        node.blocks = undefined;
-      }
-      node.props = {
-        ...sharedProps,
-        ...(type === "todo" ? { checked: checked ?? false } : undefined),
-        ...(type === "heading" ? { headingLevel: headingLevel ?? 1 } : undefined),
-        ...(type === "table" ? { table: table ?? createDefaultTable() } : undefined),
-        ...extraProps,
-      };
-      if (type === "table") {
-        node.content = plainTextContent("");
-      }
+      applyNodeType(node, type, extraProps);
       draft.nodes[id] = touchNode(node);
+    });
+  }
+
+  updateTypes(updates: UpdateNodeTypeInput[]) {
+    this.commit((draft) => {
+      updates.forEach(({ id, type, extraProps }) => {
+        if (id === draft.rootId) return;
+        const node = this.requireDraftNode(draft, id);
+        applyNodeType(node, type, extraProps);
+        draft.nodes[id] = touchNode(node);
+      });
     });
   }
 
@@ -583,6 +586,28 @@ export class TreeStore {
       current = this.getNode(current.parentId);
     }
     return false;
+  }
+}
+
+function applyNodeType(
+  node: ZhiJianNode,
+  type: ZhiJianNodeType,
+  extraProps?: NonNullable<ZhiJianNode["props"]>,
+) {
+  const { checked, headingLevel, table, ...sharedProps } = node.props ?? {};
+  node.type = type;
+  if (type === "table") {
+    node.blocks = undefined;
+  }
+  node.props = {
+    ...sharedProps,
+    ...(type === "todo" ? { checked: checked ?? false } : undefined),
+    ...(type === "heading" ? { headingLevel: headingLevel ?? 1 } : undefined),
+    ...(type === "table" ? { table: table ?? createDefaultTable() } : undefined),
+    ...extraProps,
+  };
+  if (type === "table") {
+    node.content = plainTextContent("");
   }
 }
 

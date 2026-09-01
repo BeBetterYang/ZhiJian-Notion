@@ -92,13 +92,15 @@ describe("WorkspaceShell session refresh", () => {
     serverMocks.deleteWorkspaceDocument.mockReset().mockResolvedValue(undefined);
   });
 
-  it("does not show a connection status while server data is loading", () => {
+  it("does not show loading status text while server data is loading", () => {
+    editorPreloadMocks.preloadEditorView.mockReturnValue(new Promise(() => undefined));
     serverMocks.loadWorkspaceState.mockReturnValue(new Promise(() => undefined));
 
     render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
 
     expect(screen.queryByText("正在连接服务器...")).not.toBeInTheDocument();
-    expect(screen.getByText("正在加载服务器数据")).toBeInTheDocument();
+    expect(screen.queryByText("正在加载服务器数据")).not.toBeInTheDocument();
+    expect(screen.queryByText("正在加载工作区")).not.toBeInTheDocument();
   });
 
   it("restores the last opened file for the signed-in user", async () => {
@@ -141,6 +143,7 @@ describe("WorkspaceShell session refresh", () => {
   it("falls back to the outline editor when the remembered view state is invalid", () => {
     window.localStorage.setItem("zhijian.workspace.last-open-file.v1:user-1", "file-2");
     window.localStorage.setItem("zhijian.workspace.document.file-2.view-state.v1", "not-json");
+    editorPreloadMocks.preloadEditorView.mockReturnValue(new Promise(() => undefined));
     serverMocks.loadWorkspaceState.mockReturnValue(new Promise(() => undefined));
 
     render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);

@@ -42,6 +42,7 @@ interface MindMapEditorProps {
   readOnly?: boolean;
   store: TreeStore;
   onSelectNode: (nodeId: string | null) => void;
+  onSelectedNodeIdsChange: (nodeIds: string[]) => void;
   onSelectionActiveChange: (active: boolean) => void;
   onTextSelectionChange: (selection: MindMapTextSelection | null) => void;
   /**
@@ -77,7 +78,7 @@ export interface MindMapTextSelection {
   to: number;
 }
 
-export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelectionActiveChange, onTextSelectionChange, onNodeToolbarActiveChange, onFocusNode, onExitFocus, selectedNodeId, toolbarTarget, focusRequest, focusNodeRequest = null, onFocusRequestHandled, searchQuery = "", visibleNodeIds = null, zoomedNodeId = null, initialViewport, onViewportChange, initialDirection = MindElixir.RIGHT, onDirectionChange, onExportImageReady, mindMapDefaults, onMindMapDefaultsChange }: MindMapEditorProps) {
+export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelectedNodeIdsChange, onSelectionActiveChange, onTextSelectionChange, onNodeToolbarActiveChange, onFocusNode, onExitFocus, selectedNodeId, toolbarTarget, focusRequest, focusNodeRequest = null, onFocusRequestHandled, searchQuery = "", visibleNodeIds = null, zoomedNodeId = null, initialViewport, onViewportChange, initialDirection = MindElixir.RIGHT, onDirectionChange, onExportImageReady, mindMapDefaults, onMindMapDefaultsChange }: MindMapEditorProps) {
   const tree = useTree(store);
   const activeTheme = resolveMindMapTheme(tree.mindMap?.theme, tree.mindMap?.canvas?.background);
   const roundedConnectors = tree.mindMap?.connector?.rounded ?? false;
@@ -99,6 +100,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
   const pendingStructure = useRef(false);
   const storeRef = useRef(store);
   const onSelectRef = useRef(onSelectNode);
+  const onSelectedNodeIdsRef = useRef(onSelectedNodeIdsChange);
   const onActiveRef = useRef(onSelectionActiveChange);
   const onTextSelectionRef = useRef(onTextSelectionChange);
   const onNodeToolbarRef = useRef(onNodeToolbarActiveChange);
@@ -121,6 +123,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
   const floatingFrameSize = useRef<MindMapMeasuredSize | null>(null);
   const treeRef = useRef(tree);
   treeRef.current = tree;
+  onSelectedNodeIdsRef.current = onSelectedNodeIdsChange;
   onFocusNodeRef.current = onFocusNode;
   onExitFocusRef.current = onExitFocus;
   onExportImageReadyRef.current = onExportImageReady;
@@ -138,6 +141,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
   const contentHosts = useRef(new Map<string, HTMLDivElement>());
   const [contentTargets, setContentTargets] = useState<Array<{ id: string; host: HTMLElement }>>([]);
   const [editingTarget, setEditingTarget] = useState<EditingTarget>(null);
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [styleSubmenu, setStyleSubmenu] = useState<"scale" | "layout" | "theme" | null>(null);
   const [styleMoreMenu, setStyleMoreMenu] = useState<"layout" | "theme" | null>(null);
   const styleMenuCloseTimer = useRef(0);
@@ -496,6 +500,8 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
       }
       if ("obj" in operation && operation.obj?.id) {
         const nodeId = operation.obj.id;
+        setSelectedNodeIds([nodeId]);
+        onSelectedNodeIdsRef.current([nodeId]);
         lastSelectedNodeId.current = nodeId;
         selectedNodeRef.current = nodeId;
         if (shouldExitEditing(editingTargetRef.current, nodeId)) applyEditingTarget(null);
@@ -506,20 +512,25 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
       structureSignature.current = createMindMapStructureSignature(storeRef.current.getSnapshot(), projectionOptionsRef.current.visibleNodeIds, projectionOptionsRef.current.rootNodeId);
       if (operation.name === "addChild" || operation.name === "insertSibling" || operation.name === "insertBefore") beginNodeEditRef.current(operation.obj.id);
     });
-    mind.bus.addListener("selectNodes", (nodes) => {
-      const nodeId = nodes[0]?.id;
-      if (!nodeId) return;
+    const syncSelectedNodes = () => {
+      const nodeIds = [...new Set(mind.currentNodes.map((topic) => topic.nodeObj.id))];
+      if (!nodeIds.length && editingTargetRef.current) return;
+      setSelectedNodeIds(nodeIds);
+      onSelectedNodeIdsRef.current(nodeIds);
+      const nodeId = nodeIds.at(-1) ?? null;
+      if (!nodeId) {
+        onActiveRef.current(false);
+        onTextSelectionRef.current(null);
+        return;
+      }
       lastSelectedNodeId.current = nodeId;
       selectedNodeRef.current = nodeId;
       if (shouldExitEditing(editingTargetRef.current, nodeId)) applyEditingTarget(null);
       onSelectRef.current(nodeId);
       onActiveRef.current(true);
-    });
-    mind.bus.addListener("unselectNodes", () => {
-      if (editingTargetRef.current) return;
-      onActiveRef.current(false);
-      onTextSelectionRef.current(null);
-    });
+    };
+    mind.bus.addListener("selectNodes", syncSelectedNodes);
+    mind.bus.addListener("unselectNodes", syncSelectedNodes);
     // Collapsing is the one node operation mind-elixir does not report as an
     // `operation`, so it needs its own listener — without it the store never
     // learns a node is collapsed, and the next structural rebuild expands it
@@ -573,6 +584,8 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
 
   const selectTreeNode = useCallback((nodeId: string) => {
     if (shouldExitEditing(editingTargetRef.current, nodeId)) applyEditingTarget(null);
+    setSelectedNodeIds([nodeId]);
+    onSelectedNodeIdsRef.current([nodeId]);
     lastSelectedNodeId.current = nodeId;
     selectedNodeRef.current = nodeId;
     onSelectRef.current(nodeId);
@@ -598,6 +611,8 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
     pointerSession.current = null;
     lastSelectedNodeId.current = null;
     selectedNodeRef.current = null;
+    setSelectedNodeIds([]);
+    onSelectedNodeIdsRef.current([]);
     mindRef.current?.clearSelection();
     onSelectRef.current(null);
     onActiveRef.current(false);
@@ -1077,7 +1092,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
     };
   }, [scheduleLinkDiv]);
 
-  const selectedTopic = !readOnly && selectedNodeId
+  const selectedTopic = !readOnly && selectedNodeIds.length === 1 && selectedNodeId
     ? contentTargets.find(({ id }) => id === selectedNodeId)?.host.closest<HTMLElement>("me-tpc") ?? null
     : null;
 
@@ -1326,7 +1341,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecti
       {contentTargets.map(({ id, host }) => {
         const node = tree.nodes[id];
         return node ? createPortal(
-          <MindMapNodeContent node={node} store={store} selected={selectedNodeId === id} editing={editingTarget?.nodeId === id} toolbarTarget={toolbarTarget} onSelect={selectTreeNode} onFocusNode={selectMindElixirNode} onFinishEdit={finishNodeEdit} onToolbarActiveChange={reportNodeToolbar} onTextSelectionChange={reportTextSelection} focusBlockId={editingTarget?.nodeId === id ? editingTarget.focusBlockId : undefined} focusPoint={editingTarget?.nodeId === id ? editingTarget.focusPoint : undefined} focusTableCell={editingTarget?.nodeId === id ? editingTarget.focusTableCell : undefined} onGeometryChange={scheduleGeometryMeasure} focusRequest={focusRequest} onFocusRequestHandled={onFocusRequestHandled} />,
+          <MindMapNodeContent node={node} store={store} selected={selectedNodeIds.includes(id)} editing={editingTarget?.nodeId === id} toolbarTarget={toolbarTarget} onSelect={selectTreeNode} onFocusNode={selectMindElixirNode} onFinishEdit={finishNodeEdit} onToolbarActiveChange={reportNodeToolbar} onTextSelectionChange={reportTextSelection} focusBlockId={editingTarget?.nodeId === id ? editingTarget.focusBlockId : undefined} focusPoint={editingTarget?.nodeId === id ? editingTarget.focusPoint : undefined} focusTableCell={editingTarget?.nodeId === id ? editingTarget.focusTableCell : undefined} onGeometryChange={scheduleGeometryMeasure} focusRequest={focusRequest} onFocusRequestHandled={onFocusRequestHandled} />,
           host,
           id,
         ) : null;

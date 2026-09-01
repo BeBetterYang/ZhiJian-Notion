@@ -66,6 +66,7 @@ interface OutlineEditorProps {
   store: TreeStore;
   onSelectNode: (nodeId: string) => void;
   mindMapNodeId: string | null;
+  mindMapSelectedNodeIds: string[];
   mindMapTextSelection: MindMapTextSelection | null;
   mindMapToolbarTarget: HTMLElement | null;
   showMindMapToolbar: boolean;
@@ -93,6 +94,7 @@ export function OutlineEditor({
   store,
   onSelectNode,
   mindMapNodeId,
+  mindMapSelectedNodeIds,
   mindMapTextSelection,
   mindMapToolbarTarget,
   showMindMapToolbar,
@@ -285,7 +287,13 @@ export function OutlineEditor({
       <MindMapLinkToolbar />
       {showMindMapToolbar && mindMapToolbarTarget
         ? createPortal(
-            <ZhiJianFormattingToolbar showClozeControl onInsertQuote={onMindMapInsertQuote} />,
+            <ZhiJianFormattingToolbar
+              showClozeControl
+              onInsertQuote={onMindMapInsertQuote}
+              mindMapBatchSelection={mindMapSelectedNodeIds.length > 1
+                ? { store, nodeIds: mindMapSelectedNodeIds }
+                : undefined}
+            />,
             mindMapToolbarTarget,
           )
         : null}

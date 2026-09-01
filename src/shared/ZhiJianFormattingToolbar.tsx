@@ -14,10 +14,24 @@ import {
   useComponentsContext,
   useEditorState,
 } from "@blocknote/react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { RiCheckboxLine, RiDoubleQuotesL, RiEyeLine, RiEyeOffLine, RiImage2Line, RiTable2 } from "react-icons/ri";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { RiBold, RiCheckboxLine, RiDoubleQuotesL, RiEyeLine, RiEyeOffLine, RiImage2Line, RiItalic, RiStrikethrough, RiTable2, RiUnderline } from "react-icons/ri";
+import { everySpanHasMark } from "../core/tree";
+import type { TreeStore } from "../core/treeStore";
+import {
+  applyMindMapBatchColor,
+  editableMindMapBatchNodeIds,
+  toggleMindMapBatchTextStyle,
+  toggleMindMapBatchTodo,
+  type MindMapBatchTextStyle,
+} from "../mindmap/mindMapBatchFormatting";
 import { saveImageAsset } from "./imageAssetStore";
 import { insertImageBlocks, insertNodeAttachmentBlocks } from "./attachmentInsertion";
+
+interface MindMapBatchSelection {
+  store: TreeStore;
+  nodeIds: string[];
+}
 
 interface ZhiJianFormattingToolbarProps {
   showStructuralControls?: boolean;
@@ -25,6 +39,7 @@ interface ZhiJianFormattingToolbarProps {
   /** 挖空 is a map-only study aid, so the outline's own toolbar leaves it out. */
   showClozeControl?: boolean;
   onInsertQuote?: (nodeId: string, focusBlockId: string) => void;
+  mindMapBatchSelection?: MindMapBatchSelection;
 }
 
 const hiddenFormattingToolbarItems = new Set([
@@ -39,7 +54,26 @@ export function ZhiJianFormattingToolbar({
   showStructuralControls = true,
   showClozeControl = false,
   onInsertQuote,
+  mindMapBatchSelection,
 }: ZhiJianFormattingToolbarProps = {}) {
+  if (mindMapBatchSelection) {
+    return <MindMapBatchFormattingToolbar selection={mindMapBatchSelection} />;
+  }
+  return (
+    <EditorFormattingToolbar
+      showStructuralControls={showStructuralControls}
+      showClozeControl={showClozeControl}
+      onInsertQuote={onInsertQuote}
+    />
+  );
+}
+
+function EditorFormattingToolbar({
+  showStructuralControls,
+  showClozeControl,
+  onInsertQuote,
+}: Required<Pick<ZhiJianFormattingToolbarProps, "showStructuralControls" | "showClozeControl">>
+  & Pick<ZhiJianFormattingToolbarProps, "onInsertQuote">) {
   const editor = useBlockNoteEditor();
   // What the toolbar offers depends on the block the caret is in, so it has to
   // follow the caret. BlockNote's own controller re-renders this on every selection
@@ -109,6 +143,115 @@ export function ZhiJianFormattingToolbar({
       <ViewImageButton />
       {defaultItems}
     </FormattingToolbar>
+  );
+}
+
+const batchColors = [
+  ["default", "默认"],
+  ["gray", "灰色"],
+  ["brown", "棕色"],
+  ["red", "红色"],
+  ["orange", "橙色"],
+  ["yellow", "黄色"],
+  ["green", "绿色"],
+  ["blue", "蓝色"],
+  ["purple", "紫色"],
+  ["pink", "粉色"],
+] as const;
+
+const batchTextStyles: Array<{
+  style: MindMapBatchTextStyle;
+  label: string;
+  icon: ReactNode;
+}> = [
+  { style: "bold", label: "加粗", icon: <RiBold /> },
+  { style: "italic", label: "斜体", icon: <RiItalic /> },
+  { style: "underline", label: "下划线", icon: <RiUnderline /> },
+  { style: "strike", label: "删除线", icon: <RiStrikethrough /> },
+];
+
+function MindMapBatchFormattingToolbar({ selection }: { selection: MindMapBatchSelection }) {
+  const Components = useComponentsContext()!;
+  const tree = selection.store.getSnapshot();
+  const nodeIds = editableMindMapBatchNodeIds(tree, selection.nodeIds);
+  const textColor = batchColors.find(([color]) =>
+    nodeIds.every((id) => everySpanHasMark(tree.nodes[id]!.content, "textColor", color === "default" ? undefined : color)),
+  )?.[0] ?? "default";
+  const backgroundColor = batchColors.find(([color]) =>
+    nodeIds.every((id) => everySpanHasMark(tree.nodes[id]!.content, "backgroundColor", color === "default" ? undefined : color)),
+  )?.[0] ?? "default";
+
+  if (!nodeIds.length) return null;
+
+  return (
+    <FormattingToolbar>
+      <Components.FormattingToolbar.Button
+        label="检查清单"
+        mainTooltip="检查清单"
+        icon={<RiCheckboxLine />}
+        isSelected={nodeIds.every((id) => tree.nodes[id]!.type === "todo")}
+        onClick={() => toggleMindMapBatchTodo(selection.store, nodeIds)}
+      />
+      {batchTextStyles.map(({ style, label, icon }) => (
+        <Components.FormattingToolbar.Button
+          key={style}
+          label={label}
+          mainTooltip={label}
+          icon={icon}
+          isSelected={nodeIds.every((id) => everySpanHasMark(tree.nodes[id]!.content, style, true))}
+          onClick={() => toggleMindMapBatchTextStyle(selection.store, nodeIds, style)}
+        />
+      ))}
+      <Components.Generic.Menu.Root>
+        <Components.Generic.Menu.Trigger>
+          <Components.FormattingToolbar.Button
+            className="bn-button"
+            label="颜色"
+            mainTooltip="颜色"
+            icon={<BatchColorIcon textColor={textColor} backgroundColor={backgroundColor} />}
+          />
+        </Components.Generic.Menu.Trigger>
+        <Components.Generic.Menu.Dropdown className="bn-menu-dropdown bn-color-picker-dropdown">
+          <Components.Generic.Menu.Label>字体颜色</Components.Generic.Menu.Label>
+          {batchColors.map(([color, label]) => (
+            <Components.Generic.Menu.Item
+              key={`text-${color}`}
+              checked={textColor === color}
+              data-test={`text-color-${color}`}
+              icon={<BatchColorIcon textColor={color} />}
+              onClick={() => applyMindMapBatchColor(selection.store, nodeIds, "textColor", color === "default" ? null : color)}
+            >
+              {label}
+            </Components.Generic.Menu.Item>
+          ))}
+          <Components.Generic.Menu.Label>背景颜色</Components.Generic.Menu.Label>
+          {batchColors.map(([color, label]) => (
+            <Components.Generic.Menu.Item
+              key={`background-${color}`}
+              checked={backgroundColor === color}
+              data-test={`background-color-${color}`}
+              icon={<BatchColorIcon backgroundColor={color} />}
+              onClick={() => applyMindMapBatchColor(selection.store, nodeIds, "backgroundColor", color === "default" ? null : color)}
+            >
+              {label}
+            </Components.Generic.Menu.Item>
+          ))}
+        </Components.Generic.Menu.Dropdown>
+      </Components.Generic.Menu.Root>
+    </FormattingToolbar>
+  );
+}
+
+function BatchColorIcon({ textColor = "default", backgroundColor = "default" }: { textColor?: string; backgroundColor?: string }) {
+  return (
+    <span
+      className="bn-color-icon"
+      data-background-color={backgroundColor}
+      data-text-color={textColor}
+      style={{ pointerEvents: "none", fontSize: "15px", height: "20px", lineHeight: "20px", textAlign: "center", width: "20px" }}
+    >
+      A
+    </span>
   );
 }
 

@@ -1,0 +1,96 @@
+.workspace-loading-gate {
+  min-width: 320px;
+  min-height: 100vh;
+  background: #fff;
+}
+
+.workspace-loading-content {
+  min-height: 100vh;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms ease;
+}
+
+.workspace-loading-content.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.zhijian-loading-screen {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  background: #fff;
+  opacity: 1;
+  transition: opacity 200ms ease;
+}
+
+.zhijian-loading-screen.is-exiting {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.zhijian-loading-logo {
+  position: relative;
+  width: 96px;
+  height: 96px;
+}
+
+.zhijian-loading-logo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.zhijian-loading-logo-base {
+  opacity: 0.12;
+}
+
+.zhijian-loading-logo-fill {
+  animation: zhijian-logo-fill 1.4s ease-in-out infinite;
+  clip-path: inset(100% 0 0 0);
+}
+
+.zhijian-loading-brand {
+  color: #37352f;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+}
+
+@keyframes zhijian-logo-fill {
+  0% {
+    clip-path: inset(100% 0 0 0);
+    opacity: 0;
+  }
+  6% { opacity: 1; }
+  82% {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+  }
+  94% { opacity: 1; }
+  100% {
+    clip-path: inset(0 0 0 0);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-loading-content,
+  .zhijian-loading-screen {
+    transition: none;
+  }
+
+  .zhijian-loading-logo-fill {
+    animation: none;
+    clip-path: inset(0);
+  }
+}

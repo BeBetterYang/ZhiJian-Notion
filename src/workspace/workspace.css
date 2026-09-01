@@ -263,19 +263,12 @@ button { color: inherit; }
 .document-focus-part button:disabled { color: #37352f; font-weight: 600; cursor: default; }
 .document-focus-current { max-width: 220px; color: #565550; font-weight: 400; }
 .document-stage { min-height: 0; display: flex; flex: 1; overflow: hidden; }
-.workspace-loading { width: 100%; min-height: 260px; display: flex; align-items: center; justify-content: center; gap: 10px; color: #787774; font-size: 14px; }
-.workspace-loading.is-compact { min-height: 80px; justify-content: flex-start; padding: 12px 8px; font-size: 13px; }
-.workspace-loading-spinner { width: 16px; height: 16px; flex: none; border: 2px solid rgba(55, 53, 47, 0.14); border-top-color: #5f5e5a; border-radius: 50%; animation: workspace-loading-spin 780ms linear infinite; }
 .document-empty-state { width: 100%; display: grid; place-items: center; color: #9b9a97; font-size: 14px; }
 .document-placeholder { width: min(760px, 100%); color: #37352f; }
 .document-placeholder > svg { width: 44px; height: 44px; color: #c9c8c5; stroke-width: 1.25; }
 .document-placeholder h1 { margin: 18px 0 0; font-size: 34px; line-height: 1.2; font-weight: 700; letter-spacing: 0; }
 .desktop-sidebar-open { position: fixed; top: 9px; left: 8px; z-index: 8; color: #777670; }
 .mobile-menu-button, .mobile-close, .sidebar-backdrop { display: none; }
-
-@keyframes workspace-loading-spin {
-  to { transform: rotate(360deg); }
-}
 
 .settings-layer { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 50px; background: rgba(15, 15, 15, 0.52); }
 .settings-dialog { position: relative; width: min(1150px, calc(100vw - 100px)); height: min(720px, calc(100vh - 100px)); display: flex; overflow: hidden; border: 1px solid rgba(55, 53, 47, 0.1); border-radius: 8px; background: #fff; box-shadow: 0 24px 80px rgba(15, 15, 15, 0.28); }
