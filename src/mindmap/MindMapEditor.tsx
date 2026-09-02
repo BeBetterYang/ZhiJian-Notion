@@ -26,6 +26,7 @@ import {
 import { mindMapFloatingFrameSize } from "./mindMapFloatingFrame";
 import { MINDMAP_DRAGGING_CLASS, canFocusMindMapNode, displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, isMindMapAnnotationTarget, mindMapDisplayDragTopic, mindMapMeasuredSizeChanged, mindMapPressTarget, mindMapScaleFromTransform, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, unscaledMindMapSize, updateMindMapPointerSession, type EditingTarget, type MindMapMeasuredSize, type MindMapPointerSession, type MindMapPressTarget } from "./mindMapInteraction";
 import { createMindElixirTheme, MIND_MAP_BACKGROUND_PRESETS, MIND_MAP_THEME_GROUPS, MIND_MAP_THEME_PRESETS, resolveMindMapTheme, type MindMapTheme } from "./mindMapTheme";
+import { insertMindMapTable } from "./mindMapTableInsertion";
 import {
   CLOZE_CLASS,
   CLOZE_REVEALED_CLASS,
@@ -58,6 +59,11 @@ interface MindMapEditorProps {
   toolbarTarget: HTMLElement | null;
   focusRequest: { nodeId: string; focusBlockId: string; requestId: number } | null;
   focusNodeRequest?: { nodeId: string; requestId: number } | null;
+  /**
+   * 「插入表格」：导图里表格是一整个节点，所以落点得在这边算——工具栏挂的是那个隐藏的大纲
+   * 编辑器，它只知道块，不知道当前编辑到哪儿、结构变更要不要推迟。
+   */
+  insertTableRequest?: { nodeId: string; requestId: number } | null;
   onFocusRequestHandled: (requestId: number) => void;
   searchQuery?: string;
   visibleNodeIds?: Set<string> | null;
@@ -78,7 +84,7 @@ export interface MindMapTextSelection {
   to: number;
 }
 
-export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelectedNodeIdsChange, onSelectionActiveChange, onTextSelectionChange, onNodeToolbarActiveChange, onFocusNode, onExitFocus, selectedNodeId, toolbarTarget, focusRequest, focusNodeRequest = null, onFocusRequestHandled, searchQuery = "", visibleNodeIds = null, zoomedNodeId = null, initialViewport, onViewportChange, initialDirection = MindElixir.RIGHT, onDirectionChange, onExportImageReady, mindMapDefaults, onMindMapDefaultsChange }: MindMapEditorProps) {
+export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelectedNodeIdsChange, onSelectionActiveChange, onTextSelectionChange, onNodeToolbarActiveChange, onFocusNode, onExitFocus, selectedNodeId, toolbarTarget, focusRequest, focusNodeRequest = null, insertTableRequest = null, onFocusRequestHandled, searchQuery = "", visibleNodeIds = null, zoomedNodeId = null, initialViewport, onViewportChange, initialDirection = MindElixir.RIGHT, onDirectionChange, onExportImageReady, mindMapDefaults, onMindMapDefaultsChange }: MindMapEditorProps) {
   const tree = useTree(store);
   const activeTheme = resolveMindMapTheme(tree.mindMap?.theme, tree.mindMap?.canvas?.background);
   const roundedConnectors = tree.mindMap?.connector?.rounded ?? false;
@@ -98,6 +104,10 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
   // the node has been typed into since, and Enter may have inserted a node through
   // mind-elixir in the meantime. Only the fact that a rebuild is owed survives.
   const pendingStructure = useRef(false);
+  // 「插入表格」跨了两次渲染：这一次写 store，下一次等 mind-elixir 把节点画出来了再选中它。
+  // requestId 记下来是因为这条 effect 也会因为别的 prop 变化重跑，不然一个请求会插好几张表。
+  const pendingTableNodeId = useRef<string | null>(null);
+  const handledTableRequestId = useRef<number | null>(null);
   const storeRef = useRef(store);
   const onSelectRef = useRef(onSelectNode);
   const onSelectedNodeIdsRef = useRef(onSelectedNodeIdsChange);
@@ -734,6 +744,22 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
     return () => window.cancelAnimationFrame(frame);
   }, [focusNodeRequest, selectTreeNode, tree.nodes]);
 
+  /**
+   * 「插入表格」：先收掉正在进行的编辑，再动 store。
+   *
+   * 两种落点都是结构变更，而编辑期间的结构变更会被推迟到编辑结束（见 `mindMapUpdateMode`），
+   * 表格就得等用户点一下空白处才画出来。手动收掉编辑之后，下面那条结构同步看到的
+   * `editingTargetRef` 已经是空的，表格随这一次提交立刻上画布。
+   */
+  useEffect(() => {
+    if (!insertTableRequest) return;
+    if (handledTableRequestId.current === insertTableRequest.requestId) return;
+    handledTableRequestId.current = insertTableRequest.requestId;
+    if (readOnly || !storeRef.current.getNode(insertTableRequest.nodeId)) return;
+    applyEditingTarget(null);
+    pendingTableNodeId.current = insertMindMapTable(storeRef.current, insertTableRequest.nodeId);
+  }, [applyEditingTarget, insertTableRequest, readOnly]);
+
   useEffect(() => {
     const nextSignature = createMindMapStructureSignature(tree, visibleNodeIds, zoomedNodeId);
     const nextData = treeToMindElixir(tree, { searchQuery, visibleNodeIds, rootNodeId: zoomedNodeId });
@@ -803,6 +829,19 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
       }
     }
   }, [activeLayoutDirection, activeLayoutKey, editingTarget, refreshStructure, scheduleLinkDiv, searchQuery, setEditingFloat, visibleNodeIds, zoomedNodeId]);
+
+  /**
+   * 表格画出来之后再选中它。
+   *
+   * 声明位置有讲究：要排在上面那两条（结构同步、编辑浮层复位）之后，effect 按声明顺序跑，
+   * 到这儿 mind-elixir 才刚把新节点挂上去，`findEle` 才找得到。
+   */
+  useEffect(() => {
+    const nodeId = pendingTableNodeId.current;
+    if (!nodeId || !tree.nodes[nodeId]) return;
+    pendingTableNodeId.current = null;
+    selectMindElixirNode(nodeId);
+  }, [selectMindElixirNode, tree]);
 
   useEffect(() => {
     const container = containerRef.current;

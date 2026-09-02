@@ -24,6 +24,15 @@ function hidden(button: Element) {
   return hideSelectors.some((selector) => button.matches(selector));
 }
 
+/** `selector`（在逗号列表里出现即可）那条规则的声明块。 */
+function ruleBody(selector: string) {
+  const rule = [...flattened.matchAll(/([^{}]+)\{([^{}]*)\}/g)].find(([, selectorText]) =>
+    selectorText.split(",").some((entry) => entry.trim() === selector),
+  );
+  expect(rule, `找不到 \`${selector}\` 这条规则`).toBeDefined();
+  return rule![2];
+}
+
 /** `.mindmap-canvas > .map-container`（MindElixir 自己建的那层）里的一棵最小节点树。 */
 function renderCanvas() {
   document.body.innerHTML = `
@@ -88,5 +97,35 @@ describe("新增下级按钮与节点拖拽", () => {
     expect(hidden(ghostButton)).toBe(true);
     canvas.classList.add(MINDMAP_DRAGGING_CLASS);
     expect(hidden(ghostButton)).toBe(true);
+  });
+});
+
+describe("节点右边两颗按钮的尺寸和层级", () => {
+  it("折叠手柄和「新增下级」共用同一个直径", () => {
+    // 一处改尺寸、另一处没跟上，两颗按钮就不一样大了；手柄的位置还是拿半径算出来的，
+    // 写死的数字会跟着错位。
+    const button = ruleBody(".map-container me-tpc > .mindmap-add-child-button");
+    expect(button).toContain("width: var(--mindmap-handle-size)");
+    expect(button).toContain("height: var(--mindmap-handle-size)");
+    const handle = ruleBody(".map-container me-nodes me-parent > me-epd");
+    expect(handle).toContain("min-width: var(--mindmap-handle-size)");
+    expect(handle).toContain("height: var(--mindmap-handle-size)");
+    expect(handle).toContain("top: calc(50% - var(--mindmap-handle-size) / 2)");
+    expect(flattened).toContain("--mindmap-handle-size: 24px");
+  });
+
+  it("表格的浮层手柄压在「新增下级」上面", () => {
+    // 基准值必须写在 `.bn-root` 上：BlockNote 自己有 `.bn-root { --bn-ui-base-z-index: 0 }`,
+    // 挂在外层容器上会被它盖掉，加列按钮就又躲到「新增下级」底下去了。
+    const base = /--bn-ui-base-z-index:\s*(\d+)/.exec(
+      ruleBody(".mindmap-node-editor .bn-root"),
+    );
+    const addChild = /z-index:\s*(\d+)/.exec(
+      ruleBody(".map-container me-tpc > .mindmap-add-child-button"),
+    );
+    expect(base?.[1]).toBeDefined();
+    expect(addChild?.[1]).toBeDefined();
+    // BlockNote 给每个浮层加的 10（行/列/单元格手柄、加行、加列都是这一个数）。
+    expect(Number(base![1]) + 10).toBeGreaterThan(Number(addChild![1]));
   });
 });

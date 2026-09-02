@@ -71,6 +71,7 @@ interface OutlineEditorProps {
   mindMapToolbarTarget: HTMLElement | null;
   showMindMapToolbar: boolean;
   onMindMapInsertQuote: (nodeId: string, focusBlockId: string) => void;
+  onMindMapInsertTable: (nodeId: string) => void;
   searchQuery?: string;
   visibleNodeIds?: Set<string> | null;
   activeSearchNodeId?: string | null;
@@ -99,6 +100,7 @@ export function OutlineEditor({
   mindMapToolbarTarget,
   showMindMapToolbar,
   onMindMapInsertQuote,
+  onMindMapInsertTable,
   searchQuery = "",
   visibleNodeIds = null,
   activeSearchNodeId = null,
@@ -299,6 +301,7 @@ export function OutlineEditor({
             <ZhiJianFormattingToolbar
               showClozeControl
               onInsertQuote={onMindMapInsertQuote}
+              onInsertTable={onMindMapInsertTable}
               mindMapBatchSelection={mindMapSelectedNodeIds.length > 1
                 ? { store, nodeIds: mindMapSelectedNodeIds }
                 : undefined}

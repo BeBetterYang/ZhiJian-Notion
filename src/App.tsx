@@ -164,6 +164,12 @@ export default function App({
     nodeId: string;
     requestId: number;
   } | null>(null);
+  // 「插入表格」的落点要由导图算（空节点就地变表格，否则另开一个），可工具栏挂在那个隐藏的
+  // 大纲编辑器上，只能从这里递一个请求过去；requestId 让连着插几张表也各自算一次。
+  const [mindMapInsertTableRequest, setMindMapInsertTableRequest] = useState<{
+    nodeId: string;
+    requestId: number;
+  } | null>(null);
   const selectedNode = selectedNodeId ? store.getNode(selectedNodeId) : null;
   const visibleSearchNodeIds = useMemo(() => searchVisibleNodeIds(tree, searchQuery), [searchQuery, tree]);
   const matchedNodeIds = useMemo(() => matchingNodeIds(tree, searchQuery), [searchQuery, tree]);
@@ -697,6 +703,12 @@ export default function App({
                   requestId: (current?.requestId ?? 0) + 1,
                 }));
               }}
+              onMindMapInsertTable={(nodeId) => {
+                setMindMapInsertTableRequest((current) => ({
+                  nodeId,
+                  requestId: (current?.requestId ?? 0) + 1,
+                }));
+              }}
             />
           </Suspense>
         </section>
@@ -729,6 +741,7 @@ export default function App({
                   toolbarTarget={mindMapToolbarTarget}
                   focusRequest={mindMapFocusRequest}
                   focusNodeRequest={mindMapFocusNodeRequest}
+                  insertTableRequest={mindMapInsertTableRequest}
                   searchQuery={searchQuery}
                   visibleNodeIds={visibleSearchNodeIds}
                   zoomedNodeId={zoomedNodeId}

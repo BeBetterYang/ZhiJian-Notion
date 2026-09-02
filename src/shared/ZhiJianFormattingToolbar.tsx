@@ -39,6 +39,11 @@ interface ZhiJianFormattingToolbarProps {
   /** 挖空 is a map-only study aid, so the outline's own toolbar leaves it out. */
   showClozeControl?: boolean;
   onInsertQuote?: (nodeId: string, focusBlockId: string) => void;
+  /**
+   * 导图里表格是一整个节点，落点由导图决定（空节点就地变表格，否则另开一个），所以那边
+   * 接过这个回调、不走 BlockNote 自己的插块。大纲里没有这回事。
+   */
+  onInsertTable?: (nodeId: string) => void;
   mindMapBatchSelection?: MindMapBatchSelection;
 }
 
@@ -54,6 +59,7 @@ export function ZhiJianFormattingToolbar({
   showStructuralControls = true,
   showClozeControl = false,
   onInsertQuote,
+  onInsertTable,
   mindMapBatchSelection,
 }: ZhiJianFormattingToolbarProps = {}) {
   if (mindMapBatchSelection) {
@@ -64,6 +70,7 @@ export function ZhiJianFormattingToolbar({
       showStructuralControls={showStructuralControls}
       showClozeControl={showClozeControl}
       onInsertQuote={onInsertQuote}
+      onInsertTable={onInsertTable}
     />
   );
 }
@@ -72,8 +79,9 @@ function EditorFormattingToolbar({
   showStructuralControls,
   showClozeControl,
   onInsertQuote,
+  onInsertTable,
 }: Required<Pick<ZhiJianFormattingToolbarProps, "showStructuralControls" | "showClozeControl">>
-  & Pick<ZhiJianFormattingToolbarProps, "onInsertQuote">) {
+  & Pick<ZhiJianFormattingToolbarProps, "onInsertQuote" | "onInsertTable">) {
   const editor = useBlockNoteEditor();
   // What the toolbar offers depends on the block the caret is in, so it has to
   // follow the caret. BlockNote's own controller re-renders this on every selection
@@ -135,7 +143,7 @@ function EditorFormattingToolbar({
           onInsertQuote={onInsertQuote}
         />
       ) : null}
-      {showStructuralControls && !isImageBlock ? <InsertTableButton /> : null}
+      {showStructuralControls && !isImageBlock ? <InsertTableButton onInsertTable={onInsertTable} /> : null}
       {showStructuralControls ? (
         <InsertImageButton />
       ) : null}
@@ -368,7 +376,7 @@ function InsertQuoteButton({
   );
 }
 
-function InsertTableButton() {
+function InsertTableButton({ onInsertTable }: { onInsertTable?: (nodeId: string) => void }) {
   const editor = useBlockNoteEditor();
   const Components = useComponentsContext()!;
 
@@ -379,6 +387,13 @@ function InsertTableButton() {
       icon={<RiTable2 />}
       onClick={() => {
         const block = editor.getTextCursorPosition().block;
+        // 导图接手时不能走下面这条：一块表格在大纲里就是一个新节点，而导图要按当前节点空不空
+        // 决定是就地变表格还是另开一个，这里的编辑器还是那个隐藏的大纲编辑器（见
+        // `MindMapNodeGroupBlock` 的 `ownsToolbar`）。
+        if (onInsertTable) {
+          onInsertTable(block.id);
+          return;
+        }
         editor.insertBlocks(
           [
             {

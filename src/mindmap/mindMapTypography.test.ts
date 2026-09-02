@@ -69,6 +69,19 @@ describe("mind map display/editor typography", () => {
     expect(rule!.body).toContain("font-family: var(--zhijian-font-family) !important");
   });
 
+  it("leaves oblique synthesis on, on both layers", () => {
+    // 字体栈里没有真正的 italic 字形，所以 `font-synthesis: none` 会让斜体标记完全画不出来：
+    // `<em>` 在、计算值是 italic、屏幕上却是正体。两层都要放开，否则编辑前后会不一样。
+    for (const selector of [
+      ".mindmap-node-rich-text",
+      ".mindmap-node-editor .bn-inline-content",
+    ]) {
+      const declarations = declarationsFor(selector);
+      expect(declarations, selector).toContain("font-synthesis: style");
+      expect(declarations, selector).not.toContain("font-synthesis: none");
+    }
+  });
+
   it("hands the themed node ink to BlockNote as its own token", () => {
     // Not as a `color` declaration: BlockNote paints from this variable on its own
     // elements, and a declaration strong enough to beat it would also beat the

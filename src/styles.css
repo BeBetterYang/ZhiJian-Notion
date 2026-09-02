@@ -1594,6 +1594,10 @@ textarea {
      stopped reading as a shape. Both layers read it from here, because a table
      node's box is measured from whichever of them is showing. */
   --mindmap-table-cell-max-width: 13em;
+  /* 节点右边那两颗小圆按钮的直径：折叠手柄 `me-epd` 和「新增下级」。18px 太小了不好点，
+     两颗都从这里读，连它们的圆角和各布局下的偏移也一起推导出来——手柄是靠半径顶出去的，
+     写死的 9px / -21px 一改尺寸就会错位。 */
+  --mindmap-handle-size: 24px;
 }
 
 .mindmap-canvas .map-container .context-menu {
@@ -1901,8 +1905,8 @@ textarea {
 
 .mindmap-layout-org-chart.mindmap-layout-direction-up .map-container me-nodes.down me-parent > me-epd,
 .mindmap-layout-org-chart.mindmap-layout-direction-up .map-container me-nodes.down me-parent > me-epd.minus {
-  top: -9px;
-  left: calc(50% - 9px);
+  top: calc(var(--mindmap-handle-size) / -2);
+  left: calc(50% - var(--mindmap-handle-size) / 2);
 }
 
 /* 树形图也是往下长的，但每一层的孩子都排成一列、整列往一侧缩进，父节点自己贴在
@@ -1971,17 +1975,17 @@ textarea {
 
 /* 折叠手柄挪到节点靠根那一侧的连线上、垂直居中——像文件树的展开箭头。留在
    mind-elixir 给纵向布局定的"正下方"会压到下一行的文字，因为树形图的行距很紧。
-   -21px = 24px 缩进的一半（竖线的位置）再加手柄半径 9px。 */
+   12px = 24px 缩进的一半（竖线的位置），再加手柄半径。 */
 .mindmap-layout-tree .map-container me-nodes.down me-parent > me-epd,
 .mindmap-layout-tree .map-container me-nodes.down me-parent > me-epd.minus {
-  top: calc(50% - 9px);
-  left: -21px;
+  top: calc(50% - var(--mindmap-handle-size) / 2);
+  left: calc(-12px - var(--mindmap-handle-size) / 2);
   right: auto;
 }
 
 .mindmap-layout-tree.mindmap-layout-direction-left .map-container me-nodes.down me-parent > me-epd,
 .mindmap-layout-tree.mindmap-layout-direction-left .map-container me-nodes.down me-parent > me-epd.minus {
-  right: -21px;
+  right: calc(-12px - var(--mindmap-handle-size) / 2);
   left: auto;
 }
 
@@ -2034,20 +2038,20 @@ textarea {
 .map-container me-nodes me-parent > me-epd.minus {
   display: flex;
   box-sizing: border-box;
-  min-width: 18px;
+  min-width: var(--mindmap-handle-size);
   width: auto;
-  height: 18px;
-  top: calc(50% - 9px);
+  height: var(--mindmap-handle-size);
+  top: calc(50% - var(--mindmap-handle-size) / 2);
   right: auto;
   left: calc(100% - var(--epd-inset) + 6px);
   align-items: center;
   justify-content: center;
   padding: 0 5px;
-  border-radius: 9px;
+  border-radius: calc(var(--mindmap-handle-size) / 2);
   background-color: var(--mindmap-branch-color, #b6bcc4);
   background-image: none !important;
   color: #ffffff;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1;
 }
@@ -2057,7 +2061,7 @@ textarea {
 .map-container me-nodes me-parent > me-epd.minus::after {
   content: "‹";
   margin-top: -1px;
-  font-size: 14px;
+  font-size: 17px;
 }
 
 .map-container me-nodes .lhs me-parent > me-epd.minus::after {
@@ -2077,8 +2081,8 @@ textarea {
   left: calc(100% + 6px);
   z-index: 12;
   display: grid;
-  width: 18px;
-  height: 18px;
+  width: var(--mindmap-handle-size);
+  height: var(--mindmap-handle-size);
   place-items: center;
   padding: 0;
   border: 0;
@@ -2095,8 +2099,8 @@ textarea {
 }
 
 .map-container me-tpc > .mindmap-add-child-button svg {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   stroke-width: 2;
 }
 
@@ -2209,7 +2213,12 @@ textarea {
   font-weight: var(--mindmap-font-weight, 400);
   line-height: var(--mindmap-line-height, 1.5) !important;
   letter-spacing: 0;
-  font-synthesis: none;
+  /* 斜体只能靠合成：`--zhijian-font-family` 一路回退到 -apple-system / PingFang SC，
+     整条栈都没有真正的 italic 字形，`font-synthesis: none` 一关，`font-style: italic`
+     就一点倾斜都画不出来——标记加上了、`<em>` 在、计算值也是 italic，屏幕上却和正体一模一样。
+     `style` 只放开倾斜这一项，假粗体依旧关着；合成的倾斜是纯切变，不动字符宽度，所以两层的
+     字形度量还是对齐的（`workspace.css` 的 `.workspace-shell-ui` 同一个原因用了同一个值）。 */
+  font-synthesis: style;
   font-variant-ligatures: normal;
   font-kerning: auto;
   text-rendering: auto;
@@ -3126,7 +3135,8 @@ textarea {
   font-weight: var(--mindmap-font-weight, 400);
   line-height: var(--mindmap-line-height, 1.5) !important;
   letter-spacing: 0;
-  font-synthesis: none;
+  /* 同上：合成关掉就没有斜体了，见 `.mindmap-node-rich-text` 那条规则里的说明。 */
+  font-synthesis: style;
   font-variant-ligatures: normal;
   font-kerning: auto;
   text-rendering: auto;
@@ -3144,6 +3154,18 @@ textarea {
 .mindmap-node-renderer em,
 .mindmap-node-editor em {
   color: inherit;
+}
+
+/* 表格自己的行列手柄要浮在节点右边那颗「新增下级」上面。BlockNote 把每个浮层的
+   z-index 写成 `calc(var(--bn-ui-base-z-index, 0) + 10)`（行/列/单元格手柄，加行、
+   加列按钮，五个都走同一个浮层组件），基准值就是留给宿主抬高整层用的：+10 = 20，正好
+   越过「新增下级」的 12，同时几个浮层之间的先后顺序一点没动。加列按钮贴在表格右边缘，
+   和那颗按钮位置几乎重合，不抬起来就点不到。
+
+   必须落在 `.bn-root` 上：BlockNote 自己写了 `.bn-root { --bn-ui-base-z-index: 0 }`，
+   声明在外层容器上会被它盖掉——浮层是 `.bn-root` 的后代，读到的是那个 0。 */
+.mindmap-node-editor .bn-root {
+  --bn-ui-base-z-index: 10;
 }
 
 .mindmap-node-editor .bn-editor {
