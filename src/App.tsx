@@ -1,16 +1,22 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { FaStar } from "react-icons/fa";
 import {
   FiChevronDown,
   FiChevronRight,
+  FiCommand,
   FiDownload,
   FiFileText,
   FiGitBranch,
   FiImage,
   FiList,
   FiMoreHorizontal,
+  FiRotateCcw,
+  FiRotateCw,
   FiSearch,
   FiShare2,
+  FiStar,
+  FiTrash2,
   FiUpload,
 } from "react-icons/fi";
 import { markdownFileName, markdownImportTitle, markdownToTree, treeToMarkdown } from "./core/markdown/markdownDocument";
@@ -27,7 +33,9 @@ import type { CapturedImage } from "./shared/exportFiles";
 import { matchingNodeIds, replaceSearchMatch, searchVisibleNodeIds } from "./shared/treeSearch";
 import {
   isAppShortcut,
+  nativeShortcutHint,
   resolveShortcut,
+  shortcutHint,
   zoomInTargetId,
   zoomOutTargetId,
 } from "./shared/shortcuts";
@@ -52,6 +60,13 @@ interface AppProps {
     requestId: number;
   } | null;
   onShare?: () => void;
+  /**
+   * 星标和删除的对象是「当前这篇文档」，而不是文档里的某个主题，只有工作区知道它在文件树里
+   * 的位置。所以这三个由工作区给：没给（分享页、独立预览）时菜单里就不出现这两项。
+   */
+  favorite?: boolean;
+  onToggleFavorite?: () => void;
+  onDeleteDocument?: () => void;
   /**
    * 由工作区提供：一次选中多个文件时，它们各自成为一篇新文档，而不是挤进当前这一篇。
    * 没有这个回调（分享页、独立预览）时导入只接受单个文件。
@@ -86,6 +101,9 @@ export default function App({
   onShare,
   onImportDocuments,
   onLocalizeImportedTree,
+  favorite = false,
+  onToggleFavorite,
+  onDeleteDocument,
   mindMapDefaults,
   onMindMapDefaultsChange,
   readOnly = false,
@@ -288,6 +306,13 @@ export default function App({
     persistViewStatePatch({ outlineScrollTop: scrollTop });
   }, [persistViewStatePatch]);
 
+  /** 菜单项点完就收起菜单，和「导入」「导出」一样：留着一张开着的菜单挡住正文没有意义。 */
+  const runFromMenu = (action: () => void) => {
+    setToolbarMoreOpen(false);
+    setExportMenuOpen(false);
+    action();
+  };
+
   const toggleCollapse = (level: number | "all") => {
     const targets = Object.values(tree.nodes).filter((node) => {
       if (node.id === tree.rootId || node.children.length === 0) return false;
@@ -466,19 +491,19 @@ export default function App({
             <div className="toolbar-menu-title">展开/折叠主题</div>
             <button type="button" role="menuitem" onClick={() => toggleCollapse("all")}>
               <span>全部主题</span>
-              <kbd>Ctrl+Alt+Shift+.</kbd>
+              <kbd>{shortcutHint("toggle-collapse-all")}</kbd>
             </button>
             <button type="button" role="menuitem" onClick={() => toggleCollapse(1)}>
               <span>1 级主题</span>
-              <kbd>Ctrl+Alt+1</kbd>
+              <kbd>{shortcutHint("toggle-collapse-level-1")}</kbd>
             </button>
             <button type="button" role="menuitem" onClick={() => toggleCollapse(2)}>
               <span>2 级主题</span>
-              <kbd>Ctrl+Alt+2</kbd>
+              <kbd>{shortcutHint("toggle-collapse-level-2")}</kbd>
             </button>
             <button type="button" role="menuitem" onClick={() => toggleCollapse(3)}>
               <span>3 级主题</span>
-              <kbd>Ctrl+Alt+3</kbd>
+              <kbd>{shortcutHint("toggle-collapse-level-3")}</kbd>
             </button>
           </div>
         ) : null}
@@ -510,6 +535,19 @@ export default function App({
         </button>
         {toolbarMoreOpen ? (
           <div className="toolbar-more-menu" role="menu">
+            {!readOnly ? <>
+              <button type="button" role="menuitem" disabled={!store.canUndo()} onClick={() => runFromMenu(() => store.undo())}>
+                <FiRotateCcw />
+                <span>撤销</span>
+                <kbd>{nativeShortcutHint("撤销")}</kbd>
+              </button>
+              <button type="button" role="menuitem" disabled={!store.canRedo()} onClick={() => runFromMenu(() => store.redo())}>
+                <FiRotateCw />
+                <span>重做</span>
+                <kbd>{nativeShortcutHint("重做")}</kbd>
+              </button>
+              <div className="menu-divider" />
+            </> : null}
             {!readOnly ? <button type="button" role="menuitem" onClick={() => {
               setToolbarMoreOpen(false);
               setExportMenuOpen(false);
@@ -568,6 +606,25 @@ export default function App({
                 </div>
               ) : null}
             </div>
+            {onToggleFavorite || onDeleteDocument ? <div className="menu-divider" /> : null}
+            {onToggleFavorite ? (
+              <button type="button" role="menuitem" onClick={() => runFromMenu(onToggleFavorite)}>
+                {favorite ? <FaStar className="favorite-filled" /> : <FiStar />}
+                <span>{favorite ? "取消星标" : "添加星标"}</span>
+              </button>
+            ) : null}
+            {onDeleteDocument ? (
+              <button type="button" role="menuitem" className="danger" onClick={() => runFromMenu(onDeleteDocument)}>
+                <FiTrash2 />
+                <span>删除</span>
+              </button>
+            ) : null}
+            <div className="menu-divider" />
+            <button type="button" role="menuitem" onClick={() => runFromMenu(() => setShortcutHelpOpen(true))}>
+              <FiCommand />
+              <span>快捷键列表</span>
+              <kbd>{shortcutHint("shortcut-help")}</kbd>
+            </button>
           </div>
         ) : null}
       </div>

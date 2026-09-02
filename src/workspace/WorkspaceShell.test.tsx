@@ -19,7 +19,13 @@ const serverMocks = vi.hoisted(() => ({
 const editorPreloadMocks = vi.hoisted(() => ({ preloadEditorView: vi.fn() }));
 
 vi.mock("../App", () => ({
-  default: ({ store, onShare }: { store: TreeStore; onShare?: () => void }) => {
+  default: ({ store, onShare, favorite, onToggleFavorite, onDeleteDocument }: {
+    store: TreeStore;
+    onShare?: () => void;
+    favorite?: boolean;
+    onToggleFavorite?: () => void;
+    onDeleteDocument?: () => void;
+  }) => {
     const tree = store.getSnapshot();
     return (
       <div
@@ -29,6 +35,11 @@ vi.mock("../App", () => ({
       >
         {tree.nodes[tree.rootId]?.content.text}
         {onShare ? <button type="button" onClick={onShare}>分享</button> : null}
+        {/* 标题栏「更多」菜单里的星标和删除。菜单长什么样在 App.test.tsx 里测，这儿只看接到工作区没有。 */}
+        {onToggleFavorite ? (
+          <button type="button" onClick={onToggleFavorite}>{favorite ? "标题栏取消星标" : "标题栏添加星标"}</button>
+        ) : null}
+        {onDeleteDocument ? <button type="button" onClick={onDeleteDocument}>标题栏删除</button> : null}
       </div>
     );
   },
@@ -569,6 +580,9 @@ describe("文档服务器记录的生命周期", () => {
 });
 
 describe("Workspace Deep Link", () => {
+  /** 展开记录和「上次打开的文档」一样按用户分开存，key 上带着 userId。 */
+  const expandedKey = (userId = "user-1") => `zhijian.workspace.expanded-folders.v1:${userId}`;
+  const storedExpanded = (userId?: string): string[] => JSON.parse(window.localStorage.getItem(expandedKey(userId)) ?? "[]");
   const nodes = [
     { id: "folder", title: "项目 A", type: "folder" as const, parentId: null, order: 0 },
     { id: "sub", title: "子文件夹", type: "folder" as const, parentId: "folder", order: 0 },
@@ -608,6 +622,85 @@ describe("Workspace Deep Link", () => {
     expect(within(sidebar).getByText("深层文档")).toBeInTheDocument();
   });
 
+  it("没有展开记录时文件夹默认收起", async () => {
+    window.localStorage.setItem("zhijian.workspace.last-open-file.v1:user-1", "file-1");
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+
+    await screen.findByTestId("document-editor");
+    const sidebar = document.querySelector<HTMLElement>(".workspace-files")!;
+    // 加载遮罩撤掉之前整块内容都是 aria-hidden 的，按 role 查要等它可访问。
+    expect(await within(sidebar).findByRole("button", { name: "展开项目 A" })).toBeInTheDocument();
+    expect(within(sidebar).queryByText("子文件夹")).not.toBeInTheDocument();
+  });
+
+  it("记住用户展开和收起的文件夹", async () => {
+    window.localStorage.setItem("zhijian.workspace.last-open-file.v1:user-1", "file-1");
+    window.localStorage.setItem(expandedKey(), JSON.stringify(["folder", "sub"]));
+
+    const first = render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+    await screen.findByTestId("document-editor");
+    let sidebar = document.querySelector<HTMLElement>(".workspace-files")!;
+    expect(within(sidebar).getByText("深层文档")).toBeInTheDocument();
+
+    fireEvent.click(await within(sidebar).findByRole("button", { name: "收起子文件夹" }));
+    expect(storedExpanded()).toEqual(["folder"]);
+
+    first.unmount();
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+    await screen.findByTestId("document-editor");
+    sidebar = document.querySelector<HTMLElement>(".workspace-files")!;
+    expect(within(sidebar).getByText("子文件夹")).toBeInTheDocument();
+    expect(within(sidebar).queryByText("深层文档")).not.toBeInTheDocument();
+  });
+
+  /**
+   * 展开文件夹不只有「点一下文件夹」这一条路：在文件夹里新建文档、导入、把节点拖进去、点搜索
+   * 结果里的文件夹，都会把它展开。之前只有手点那一处存盘，所以这些展开刷新之后全没了。
+   */
+  it("在文件夹里新建文档而展开的，刷新后也还是展开的", async () => {
+    window.localStorage.setItem("zhijian.workspace.last-open-file.v1:user-1", "file-1");
+
+    const first = render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+    await screen.findByTestId("document-editor");
+    let sidebar = document.querySelector<HTMLElement>(".workspace-files")!;
+
+    fireEvent.click(await within(sidebar).findByRole("button", { name: "在项目 A中新建文档" }));
+    expect(storedExpanded()).toEqual(["folder"]);
+
+    // 重进时仍然让「上次打开」指向根目录那篇：否则打开深层文档会顺带展开祖先，看不出记忆有没有用上。
+    first.unmount();
+    window.localStorage.setItem("zhijian.workspace.last-open-file.v1:user-1", "file-1");
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+    await screen.findByTestId("document-editor");
+    sidebar = document.querySelector<HTMLElement>(".workspace-files")!;
+    expect(within(sidebar).getByText("子文件夹")).toBeInTheDocument();
+  });
+
+  it("换一个账号登录，看到的是这个账号自己的展开状态", async () => {
+    window.localStorage.setItem(expandedKey(), JSON.stringify(["folder"]));
+    window.localStorage.setItem("zhijian.workspace.last-open-file.v1:user-2", "file-1");
+
+    render(<WorkspaceShell session={{ ...session, userId: "user-2" }} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+    await screen.findByTestId("document-editor");
+    const sidebar = document.querySelector<HTMLElement>(".workspace-files")!;
+
+    // user-1 展开过的文件夹，换到 user-2 是收起的；user-2 自己点开也不会盖掉 user-1 的记录。
+    fireEvent.click(await within(sidebar).findByRole("button", { name: "展开项目 A" }));
+    expect(storedExpanded("user-2")).toEqual(["folder"]);
+    expect(storedExpanded()).toEqual(["folder"]);
+  });
+
+  it("最终恢复的当前文档会自动展开所有祖先文件夹", async () => {
+    window.localStorage.setItem("zhijian.workspace.last-open-file.v1:user-1", "file-2");
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+
+    expect(await screen.findByTestId("document-editor")).toHaveTextContent("深层文档");
+    const sidebar = document.querySelector<HTMLElement>(".workspace-files")!;
+    expect(within(sidebar).getByText("深层文档")).toBeInTheDocument();
+  });
+
   it("链接里的文档已被删除时安全退回上次打开的文档", async () => {
     window.localStorage.setItem("zhijian.workspace.last-open-file.v1:user-1", "file-1");
     window.history.replaceState(null, "", "/workspace.html?file=file-gone");
@@ -617,7 +710,7 @@ describe("Workspace Deep Link", () => {
     expect(await screen.findByTestId("document-editor")).toHaveTextContent("产品规划");
   });
 
-  it("?folder= 选中并展开文件夹，文档仍是记住的那一篇", async () => {
+  it("?folder= 选中文件夹并展开祖先路径，文档仍是记住的那一篇", async () => {
     window.localStorage.setItem("zhijian.workspace.last-open-file.v1:user-1", "file-1");
     window.history.replaceState(null, "", "/workspace.html?folder=sub");
 
@@ -625,7 +718,8 @@ describe("Workspace Deep Link", () => {
 
     expect(await screen.findByTestId("document-editor")).toHaveTextContent("产品规划");
     const sidebar = document.querySelector<HTMLElement>(".workspace-files")!;
-    expect(within(sidebar).getByText("深层文档")).toBeInTheDocument();
+    expect(within(sidebar).getByText("子文件夹")).toBeInTheDocument();
+    expect(within(sidebar).queryByText("深层文档")).not.toBeInTheDocument();
   });
 
   it("地址栏跟着当前文档走，用 replaceState 不堆历史记录", async () => {
@@ -651,6 +745,7 @@ describe("Workspace Deep Link", () => {
     await waitFor(() => expect(new URLSearchParams(window.location.search).get("folder")).toBe("sub"));
 
     const sidebar = document.querySelector<HTMLElement>(".workspace-files")!;
+    fireEvent.click(within(sidebar).getByRole("button", { name: "展开子文件夹" }));
     fireEvent.click(await within(sidebar).findByRole("button", { name: "深层文档" }));
 
     await waitFor(() => expect(new URLSearchParams(window.location.search).get("file")).toBe("file-2"));
@@ -692,7 +787,8 @@ describe("Workspace Deep Link", () => {
     expect(await screen.findByTestId("document-editor")).toHaveTextContent("产品规划");
     // 文档链接是坏的，这时才轮到 folder 决定侧栏选中哪一个；坏掉的 file 参数一并清掉。
     const sidebar = document.querySelector<HTMLElement>(".workspace-files")!;
-    expect(within(sidebar).getByText("深层文档")).toBeInTheDocument();
+    expect(within(sidebar).getByText("子文件夹")).toBeInTheDocument();
+    expect(within(sidebar).queryByText("深层文档")).not.toBeInTheDocument();
     await waitFor(() => expect(new URLSearchParams(window.location.search).has("file")).toBe(false));
     expect(new URLSearchParams(window.location.search).get("folder")).toBe("sub");
   });
@@ -907,5 +1003,78 @@ describe("侧栏收起状态记忆", () => {
     expect(shell()).not.toHaveClass("is-collapsed");
     expect(document.querySelector(".workspace-sidebar")).not.toHaveClass("is-open");
     expect(screen.queryByRole("button", { name: "展开侧栏" })).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * 标题栏「更多」菜单里的星标和删除，对象是「当前这篇文档」，只有工作区知道它在文件树里的位置。
+ * 所以这两项由工作区给回调，这里验的就是那两根线：星标要真的进星标文件，删除要走和侧栏同一个确认。
+ */
+describe("标题栏菜单接到工作区", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    window.history.replaceState(null, "", "/workspace.html");
+    serverMocks.saveWorkspaceState.mockReset().mockResolvedValue(undefined);
+    serverMocks.saveWorkspaceDocument.mockReset().mockResolvedValue({ ok: true, revision: 1 });
+    serverMocks.deleteWorkspaceDocument.mockReset().mockResolvedValue(undefined);
+    serverMocks.loadWorkspaceState.mockReset().mockResolvedValue({
+      profile: { name: "枝间用户", email: session.email, avatarUrl: "" },
+      nodes: [{ id: "file-1", title: "产品规划", type: "file", parentId: null, order: 0, favorite: false, openedAt: 1 }],
+      documents: { "file-1": createInitialTree() },
+    });
+  });
+
+  async function renderShell() {
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+    await screen.findByTestId("document-editor");
+  }
+
+  function sidebar() {
+    const section = document.querySelector<HTMLElement>(".workspace-files");
+    if (!section) throw new Error("侧栏文件树还没渲染出来。");
+    return section;
+  }
+
+  it("星标标题栏这篇文档，它就进侧栏的星标文件", async () => {
+    await renderShell();
+
+    // 加载遮罩撤掉之前整块内容都是 aria-hidden 的，按 role 查要等它可访问。
+    fireEvent.click(await screen.findByRole("button", { name: "标题栏添加星标" }));
+
+    // 星标状态回流到标题栏，菜单里的文案才翻得过来。
+    expect(await screen.findByRole("button", { name: "标题栏取消星标" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /星标文件/ }));
+    const favorites = document.querySelectorAll<HTMLElement>(".quick-file-section")[1]!;
+    expect(within(favorites).getByText("产品规划")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "标题栏取消星标" }));
+    expect(await screen.findByRole("button", { name: "标题栏添加星标" })).toBeInTheDocument();
+    expect(within(favorites).queryByText("产品规划")).not.toBeInTheDocument();
+  });
+
+  it("删除先问一句，确认了才进回收站", async () => {
+    await renderShell();
+
+    fireEvent.click(await screen.findByRole("button", { name: "标题栏删除" }));
+
+    // 和侧栏「删除」同一个确认框，不是直接删掉。
+    expect(await screen.findByRole("heading", { name: "移到回收站？" })).toBeInTheDocument();
+    expect(within(sidebar()).getByText("产品规划")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "移到回收站" }));
+
+    await waitFor(() => expect(within(sidebar()).queryByText("产品规划")).not.toBeInTheDocument());
+    // 进的是回收站，不是彻底删除：服务器那行还留着，恢复才找得回来。
+    expect(serverMocks.deleteWorkspaceDocument).not.toHaveBeenCalled();
+  });
+
+  it("取消就什么都不动", async () => {
+    await renderShell();
+
+    fireEvent.click(await screen.findByRole("button", { name: "标题栏删除" }));
+    fireEvent.click(await screen.findByRole("button", { name: "取消" }));
+
+    expect(screen.queryByRole("heading", { name: "移到回收站？" })).not.toBeInTheDocument();
+    expect(within(sidebar()).getByText("产品规划")).toBeInTheDocument();
   });
 });

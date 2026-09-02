@@ -503,6 +503,21 @@ export class TreeStore {
     }
   }
 
+  /**
+   * 有没有可撤销/可重做的一步。
+   *
+   * 给菜单用的：撤销从前只有 Ctrl Z 一个入口，按下去没东西可撤就是没反应，用户也不会觉得哪里不对；
+   * 菜单项摆在眼前，能点却什么都不发生就像坏了，所以要能置灰。每次 undo/redo/提交都会 emit，
+   * 订阅了 store 的界面会重新渲染，渲染时读到的就是当下的值。
+   */
+  canUndo() {
+    return this.undoStack.length > 0;
+  }
+
+  canRedo() {
+    return this.redoStack.length > 0;
+  }
+
   undo() {
     const previous = this.undoStack.pop();
     if (!previous) {

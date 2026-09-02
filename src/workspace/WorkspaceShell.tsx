@@ -113,6 +113,7 @@ type WorkspaceSearchResult =
 
 const RECENT_SEARCHES_KEY = "zhijian.workspace.recent-searches.v1";
 const LAST_OPEN_FILE_KEY = "zhijian.workspace.last-open-file.v1";
+const EXPANDED_FOLDERS_KEY = "zhijian.workspace.expanded-folders.v1";
 const SIDEBAR_COLLAPSED_KEY = "zhijian.workspace.sidebar-collapsed.v1";
 /** 和 workspace.css 里那条 `@media (max-width: 720px)` 必须一致：断点两边是两套侧栏。 */
 const MOBILE_VIEWPORT_QUERY = "(max-width: 720px)";
@@ -147,7 +148,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const [activeFileId, setActiveFileId] = useState("");
   const [selectedMenuKey, setSelectedMenuKey] = useState("");
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
-  const [expandedFolders, setExpandedFolders] = useState(() => new Set<string>());
+  const [expandedFolders, setExpandedFolders] = useState(() => loadExpandedFolders(session.userId));
   const [search, setSearch] = useState("");
   const [searchFilterOpen, setSearchFilterOpen] = useState(false);
   const [searchFolderQuery, setSearchFolderQuery] = useState("");
@@ -433,12 +434,15 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         setActiveFileId(nextActiveFileId);
         setSelectedMenuKey(linkedFolder ? `tree:${linkedFolder.id}` : nextActiveFileId ? `tree:${nextActiveFileId}` : "");
         if (linkedFolder) setSelectedFolderId(linkedFolder.id);
-        // 目标节点的所有祖先都要展开，侧栏才能真的定位到它。
-        const nextExpanded = new Set(nextNodes.filter((node) => node.type === "folder").map((node) => node.id));
-        for (const target of [linkedFile, linkedFolder]) {
+        // 从用户记忆开始，只额外展开定位目标和最终打开文档的祖先路径。已经不存在的文件夹丢掉。
+        // 这里算出来的不回写：加载失败或者工作区是空的时候不该把用户的记忆冲掉，而祖先路径每次
+        // 启动都会照着当前打开的文档重新算一遍，存了也是多余的。
+        const folderIds = new Set(nextNodes.filter((node) => node.type === "folder").map((node) => node.id));
+        const nextExpanded = new Set([...loadExpandedFolders(sessionRef.current.userId)].filter((folderId) => folderIds.has(folderId)));
+        const activeFile = nextNodes.find((node) => node.id === nextActiveFileId && node.type === "file");
+        for (const target of [linkedFile, linkedFolder, activeFile]) {
           if (!target) continue;
           for (const folder of folderPath(nextNodes, target.id)) nextExpanded.add(folder.id);
-          if (target.type === "folder") nextExpanded.add(target.id);
         }
         setExpandedFolders(nextExpanded);
         setServerAvailable(true);
@@ -732,13 +736,35 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       .sort((a, b) => folderPath(nodes, a.id).length - folderPath(nodes, b.id).length || a.order - b.order);
   }, [nodes, searchFolderQuery]);
 
+  /**
+   * 展开状态每变一次就落一次盘，改这个 state 只走这一个口子。
+   *
+   * 之前只有「点文件夹」那一处存盘，可新建、导入、拖进文件夹、点搜索结果一样会展开文件夹：
+   * 这些展开刷新之后全没了，看着就是「记忆没生效」；而且下一次手点会把它们连带写进去，
+   * 存成什么样取决于后面有没有再点一下。落盘写在这里而不是 setExpandedFolders 的 updater 里，
+   * 是因为 StrictMode 下 updater 会跑两次，副作用不该放进去。
+   */
+  const applyExpandedFolders = (folderIds: Set<string>) => {
+    setExpandedFolders(folderIds);
+    saveExpandedFolders(session.userId, folderIds);
+  };
+
   const selectFile = (file: WorkspaceFile, source = "tree") => {
+    const nextExpanded = new Set(expandedFolders);
+    for (const folder of folderPath(nodes, file.id)) nextExpanded.add(folder.id);
+    applyExpandedFolders(nextExpanded);
     setActiveFileId(file.id);
     setSelectedMenuKey(`${source}:${file.id}`);
     setSelectedFolderId(null);
     setNodes((current) => markFileOpened(current, file.id));
     setSidebarOpen(false);
     setMenuNodeId(null);
+  };
+
+  const toggleFolderExpanded = (folderId: string) => {
+    const next = new Set(expandedFolders);
+    if (next.has(folderId)) next.delete(folderId); else next.add(folderId);
+    applyExpandedFolders(next);
   };
 
   const selectSearchMatch = (file: WorkspaceFile, nodeId: string) => {
@@ -771,7 +797,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     const created = result.node;
     if (!created) return;
     setNodes(result.nodes);
-    if (created.parentId) setExpandedFolders((expanded) => new Set(expanded).add(created.parentId!));
+    if (created.parentId) applyExpandedFolders(new Set(expandedFolders).add(created.parentId));
     if (created.type === "file") {
       createAndPersistDocument(created.id, createWorkspaceDocument(created.title, workspacePreferences.mindMapDefaults));
       setActiveFileId(created.id);
@@ -819,7 +845,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       if (serverAvailable) void persistDocument(fileId, tree);
     });
     setNodes(nextNodes);
-    if (targetParent) setExpandedFolders((expanded) => new Set(expanded).add(targetParent));
+    if (targetParent) applyExpandedFolders(new Set(expandedFolders).add(targetParent));
     setActiveFileId(created[0].fileId);
     setSelectedMenuKey(`tree:${created[0].fileId}`);
     setSelectedFolderId(null);
@@ -996,7 +1022,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     event.preventDefault();
     if (draggedNodeId && target) {
       setNodes((current) => placeWorkspaceNode(current, draggedNodeId, target.nodeId, target.mode));
-      if (target.mode === "inside") setExpandedFolders((expanded) => new Set(expanded).add(target.nodeId));
+      if (target.mode === "inside") applyExpandedFolders(new Set(expandedFolders).add(target.nodeId));
     }
     setDraggedNodeId(null);
     setDropTarget(null);
@@ -1036,11 +1062,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
           onDrop={(event) => finishDrop(event, { nodeId: node.id, mode: nodeDrop ?? "after" })}
         >
           {node.type === "folder" ? (
-            <button className="tree-leading icon-button" type="button" onClick={() => { setSelectedFolderId(node.id); setSelectedMenuKey(`tree:${node.id}`); setExpandedFolders((current) => {
-              const next = new Set(current);
-              if (next.has(node.id)) next.delete(node.id); else next.add(node.id);
-              return next;
-            }); }} aria-label={expanded ? `收起${nodeLabel}` : `展开${nodeLabel}`}>
+            <button className="tree-leading icon-button" type="button" onClick={() => { setSelectedFolderId(node.id); setSelectedMenuKey(`tree:${node.id}`); toggleFolderExpanded(node.id); }} aria-label={expanded ? `收起${nodeLabel}` : `展开${nodeLabel}`}>
               {expanded ? <LuFolderOpen className="leading-default-icon" /> : <FiFolder className="leading-default-icon" />}
               {expanded ? <FiChevronDown className="leading-state-icon" /> : <FiChevronRight className="leading-state-icon" />}
             </button>
@@ -1066,11 +1088,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               autoFocus
             />
           ) : (
-            <button className="tree-node-title" type="button" onClick={() => node.type === "file" ? selectFile(node) : (setSelectedFolderId(node.id), setSelectedMenuKey(`tree:${node.id}`), setExpandedFolders((current) => {
-              const next = new Set(current);
-              if (next.has(node.id)) next.delete(node.id); else next.add(node.id);
-              return next;
-            }))}>{nodeLabel}</button>
+            <button className="tree-node-title" type="button" onClick={() => node.type === "file" ? selectFile(node) : (setSelectedFolderId(node.id), setSelectedMenuKey(`tree:${node.id}`), toggleFolderExpanded(node.id))}>{nodeLabel}</button>
           )}
           <span className="tree-row-actions">
             {node.type === "folder" ? <button className="tree-action icon-button" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file", node.id)} aria-label={`在${nodeLabel}中新建文档`} title="新增文档"><FiPlus /></button> : null}
@@ -1196,7 +1214,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                 rememberSearch(search, setRecentSearches);
                 setSelectedFolderId(folder.id);
                 setSelectedMenuKey(`search:${folder.id}`);
-                setExpandedFolders((current) => new Set(current).add(folder.id));
+                applyExpandedFolders(new Set(expandedFolders).add(folder.id));
               }}
               onSelectFile={(file) => {
                 rememberSearch(search, setRecentSearches);
@@ -1300,6 +1318,10 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               onFocusBreadcrumbChange={setFocusBreadcrumbState}
               viewStateStorageKey={documentViewStorageKey(activeFile.id)}
               onShare={() => void openShare()}
+              favorite={activeFile.favorite}
+              onToggleFavorite={() => toggleFavorite(activeFile.id)}
+              // 走和侧栏「删除」同一条路：先弹「移到回收站？」，确认了才动，也才进得了回收站。
+              onDeleteDocument={() => requestDeleteNode(activeFile)}
               onImportDocuments={(files) => void importDocuments(files)}
               onLocalizeImportedTree={localizeImportedTree}
               mindMapDefaults={workspacePreferences.mindMapDefaults}
@@ -1948,6 +1970,28 @@ function loadLastOpenFileId(userId: string) {
 function saveLastOpenFileId(userId: string, fileId: string) {
   try {
     window.localStorage.setItem(lastOpenFileStorageKey(userId), fileId);
+  } catch {
+    // Browser storage can be unavailable in private or restricted contexts.
+  }
+}
+
+/** 展开的是哪些文件夹，文件夹 id 是跟着账号的，所以和「上次打开的文档」一样按用户分开存。 */
+function expandedFoldersStorageKey(userId: string) {
+  return `${EXPANDED_FOLDERS_KEY}:${userId}`;
+}
+
+function loadExpandedFolders(userId: string) {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(expandedFoldersStorageKey(userId)) ?? "[]");
+    return new Set(Array.isArray(value) ? value.filter((folderId): folderId is string => typeof folderId === "string") : []);
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function saveExpandedFolders(userId: string, folderIds: Set<string>) {
+  try {
+    window.localStorage.setItem(expandedFoldersStorageKey(userId), JSON.stringify([...folderIds]));
   } catch {
     // Browser storage can be unavailable in private or restricted contexts.
   }

@@ -7,6 +7,7 @@ export {
 } from "./blockShortcutCommands";
 export { handleShortcutKeyDown } from "./shortcutDispatch";
 export type { ShortcutHostContext } from "./shortcutDispatch";
+export { nativeShortcutHint, shortcutHint } from "./shortcutHints";
 export {
   NATIVE_SHORTCUTS,
   SHORTCUTS,

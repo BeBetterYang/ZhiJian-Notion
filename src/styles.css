@@ -188,8 +188,27 @@ textarea {
   text-align: left;
 }
 
-.toolbar .toolbar-more-menu button:hover {
+.toolbar .toolbar-more-menu button:hover:not(:disabled) {
   background: rgba(55, 53, 47, 0.07);
+}
+
+/* 删除是唯一一个点下去会丢东西的菜单项，和侧栏节点菜单里的「删除」一样标成红色。 */
+.toolbar .toolbar-more-menu button.danger {
+  color: #eb5757;
+}
+
+.toolbar-more-menu .favorite-filled {
+  color: #d89b26;
+}
+
+/*
+ * 分隔线的样子和 workspace.css 里的 .menu-divider 一致，但这是编辑器自己菜单里的元素，
+ * 样式就写在编辑器自己这张表里，免得哪天换个不加载 workspace.css 的页面渲染 App 就没了线。
+ */
+.toolbar-more-menu .menu-divider {
+  height: 1px;
+  margin: 5px 2px;
+  background: rgba(55, 53, 47, 0.1);
 }
 
 .toolbar-more-menu svg {
@@ -226,7 +245,8 @@ textarea {
   justify-content: space-between;
 }
 
-.collapse-menu kbd {
+/* 菜单项右侧那一小行快捷键。收起/展开菜单和「更多」菜单共用同一份样式。 */
+.toolbar-more-menu kbd {
   margin-left: auto;
   color: #b0afab;
   font-family: inherit;
