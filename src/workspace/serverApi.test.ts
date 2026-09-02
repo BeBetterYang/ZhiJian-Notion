@@ -15,7 +15,8 @@ const expiringSession: WorkspaceSession = {
 describe("workspace server API session refresh", () => {
   afterEach(() => {
     vi.restoreAllMocks();
-    sessionStorage.clear();
+    // 刷新成功会顺手把新 session 写进 localStorage，清掉才不会串到下一条用例。
+    localStorage.clear();
   });
 
   it("refreshes an expiring session before saving workspace state", async () => {

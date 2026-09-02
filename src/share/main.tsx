@@ -76,8 +76,8 @@ function SharedDocumentApp() {
   }, [sharedDocument]);
 
   const saveToWorkspace = async () => {
-    // The session lives in sessionStorage, so a link opened in a fresh tab has none even
-    // when the visitor is signed in elsewhere; the token is parked and imported after login.
+    // A visitor who has never signed in on this browser has no session; the token is parked
+    // and imported after login. Same path when the stored session turns out to be expired.
     const session = loadWorkspaceSession();
     if (!session) {
       window.localStorage.setItem(PENDING_SHARE_KEY, token);

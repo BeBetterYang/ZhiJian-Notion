@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { login, refreshWorkspaceSession, register, shouldRefreshWorkspaceSession } from "./auth";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { clearWorkspaceSession, loadWorkspaceSession, login, refreshWorkspaceSession, register, saveWorkspaceSession, shouldRefreshWorkspaceSession } from "./auth";
 
 describe("workspace login", () => {
   afterEach(() => {
@@ -98,5 +98,65 @@ describe("workspace login", () => {
       refreshToken: "old-refresh",
       expiresAt: 1200,
     }, 1000)).toBe(false);
+  });
+});
+
+/**
+ * 登录态存哪里，决定的是「拷贝文档链接、在新标签页打开」还要不要再登一次。
+ *
+ * sessionStorage 一个标签页一份，新标签页读不到；localStorage 同源共用一份，所以下面这几条都盯着
+ * localStorage。新标签页那一条没法真开一个标签页，但同源新标签页读到的就是同一个 localStorage，
+ * 只要 session 不在 sessionStorage 里、且能从 localStorage 读回来，就等于新标签页也能读到。
+ */
+describe("workspace session storage", () => {
+  const session = {
+    email: "user@example.com",
+    name: "枝间用户",
+    userId: "user-1",
+    accessToken: "token",
+    refreshToken: "refresh-token",
+    expiresAt: 2000,
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  it("saves the session to localStorage so other tabs on the same origin can read it", () => {
+    saveWorkspaceSession(session);
+
+    expect(JSON.parse(localStorage.getItem("zhijian.workspace.session") ?? "null")).toEqual(session);
+    expect(sessionStorage.getItem("zhijian.workspace.session")).toBeNull();
+  });
+
+  it("loads the saved session back with refreshToken and expiresAt intact", () => {
+    saveWorkspaceSession(session);
+
+    expect(loadWorkspaceSession()).toEqual(session);
+  });
+
+  it("clears the session on logout", () => {
+    saveWorkspaceSession(session);
+
+    clearWorkspaceSession();
+
+    expect(loadWorkspaceSession()).toBeNull();
+    expect(localStorage.getItem("zhijian.workspace.session")).toBeNull();
+  });
+
+  it("treats a missing or damaged stored value as signed out", () => {
+    expect(loadWorkspaceSession()).toBeNull();
+
+    localStorage.setItem("zhijian.workspace.session", "{ not json");
+    expect(loadWorkspaceSession()).toBeNull();
+
+    // 缺 accessToken 的残留数据不能当成已登录，否则后面每个请求都会带着空 token 打 401。
+    localStorage.setItem("zhijian.workspace.session", JSON.stringify({ email: "user@example.com", name: "枝间用户" }));
+    expect(loadWorkspaceSession()).toBeNull();
   });
 });

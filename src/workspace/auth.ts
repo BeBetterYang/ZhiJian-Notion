@@ -62,9 +62,16 @@ async function requestAuth(path: string, payload: Record<string, string>): Promi
   }
 }
 
+/**
+ * 登录态放在 localStorage，不是 sessionStorage。
+ *
+ * sessionStorage 是「一个标签页一份」：拷贝文档链接、在新标签页打开，那边读不到这份登录态，会被
+ * 当成未登录顶回登录页。换成 localStorage 之后同源的标签页共用一份，链接直接就能打开对应文档。
+ * 代价是关掉浏览器再回来也还是登录状态，只有显式退出登录（clearWorkspaceSession）才会清掉。
+ */
 export function loadWorkspaceSession(): WorkspaceSession | null {
   try {
-    const value = sessionStorage.getItem(SESSION_KEY);
+    const value = localStorage.getItem(SESSION_KEY);
     if (!value) return null;
     const session = JSON.parse(value) as WorkspaceSession;
     return session.email && session.name && session.accessToken ? session : null;
@@ -74,11 +81,11 @@ export function loadWorkspaceSession(): WorkspaceSession | null {
 }
 
 export function saveWorkspaceSession(session: WorkspaceSession) {
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
 
 export function clearWorkspaceSession() {
-  sessionStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(SESSION_KEY);
 }
 
 function displayNameFromEmail(email: string) {

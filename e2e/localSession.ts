@@ -21,10 +21,12 @@ const LOCAL_TEST_DATA_FILE = path.resolve(
  * `.zhijian-server-data` 里它自己那份文件下。
  *
  * 故意不给 refreshToken：这样客户端不会去调开发服务器没实现的 /api/auth/refresh。
+ *
+ * 存 localStorage 而不是 sessionStorage：必须和 auth.ts 里 loadWorkspaceSession() 读的那个位置一致。
  */
 export async function signInAsLocalTestUser(page: Page) {
   await page.addInitScript(([token]) => {
-    window.sessionStorage.setItem("zhijian.workspace.session", JSON.stringify({
+    window.localStorage.setItem("zhijian.workspace.session", JSON.stringify({
       email: "e2e@local.test",
       name: "E2E 用户",
       userId: "00000000-0000-4000-8000-0000000e2e00",

@@ -192,6 +192,29 @@ test.describe("文档内容在刷新后仍然存在", () => {
     await expect(editor(page)).toContainText("第一篇的内容");
   });
 
+  /**
+   * 用户报的问题：拷贝文档链接、在新标签页打开，之前会被顶回登录页。
+   *
+   * 登录态只写给第一个标签页（`signInAsLocalTestUser` 挂的是 page 级 initScript），新标签页拿不到
+   * 这段脚本，只能从同源共享的 localStorage 里读。所以这一条能过就说明登录态真的存在 localStorage
+   * 里——换回 sessionStorage 的话新标签页读不到，会重新要求登录。
+   */
+  test("拷贝的文档链接在新标签页打开不用重新登录", async ({ page, context }) => {
+    await openWorkspace(page);
+    await createDocument(page, "E2E 跨标签页");
+    await typeIntoDocument(page, "另一个标签页也该看到这行");
+    const fileUrl = page.url();
+    // 导航树是另一条 500ms 防抖的保存，等它落地，新标签页才找得到这个节点。
+    await page.waitForTimeout(900);
+
+    const newTab = await context.newPage();
+    await newTab.goto(fileUrl);
+
+    await expect(editor(newTab)).toContainText("另一个标签页也该看到这行");
+    await expect(newTab.getByRole("heading", { name: "登录枝间" })).toHaveCount(0);
+    await newTab.close();
+  });
+
   test("删除进回收站再恢复，内容仍在", async ({ page }) => {
     await openWorkspace(page);
     await createDocument(page, "E2E 待删除");
