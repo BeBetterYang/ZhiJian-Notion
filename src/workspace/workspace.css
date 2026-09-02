@@ -121,8 +121,6 @@ button { color: inherit; }
 .account-menu > button, .create-menu > button, .node-menu > button { width: 100%; min-height: 30px; display: flex; align-items: center; gap: 9px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; font-size: 14px; text-align: left; cursor: pointer; }
 .account-menu > button { margin-top: 5px; }
 .account-menu > button:hover, .create-menu > button:hover, .node-menu > button:hover { background: rgba(55, 53, 47, 0.07); }
-.server-status { margin: 0 14px 8px; padding: 7px 9px; border-radius: 5px; background: rgba(241, 190, 76, 0.16); color: #8f6b1d; font-size: 12px; line-height: 1.45; }
-
 .sidebar-actions { display: flex; flex-direction: column; gap: 4px; padding: 4px 8px 11px; }
 .sidebar-search-wrap { position: relative; }
 .sidebar-search { height: 34px; display: flex; align-items: center; gap: 8px; margin-bottom: 4px; padding: 0 8px; border: 1px solid rgba(55, 53, 47, 0.13); border-radius: 6px; background: rgba(255, 255, 255, 0.72); color: #787774; }
@@ -253,9 +251,11 @@ button { color: inherit; }
 .document-save-status button { border: none; background: none; padding: 0; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
 .document-conflict-notice { position: absolute; top: calc(100% + 8px); right: 0; z-index: 40; width: 264px; padding: 12px; border: 1px solid rgba(55, 53, 47, 0.12); border-radius: 8px; background: #fff; box-shadow: 0 8px 24px rgba(15, 15, 15, 0.12); color: #37352f; text-align: left; white-space: normal; }
 .document-conflict-notice p { margin: 0 0 10px; font-size: 13px; line-height: 1.5; }
+.document-conflict-notice .document-conflict-error { color: #c0392b; }
 .document-conflict-actions { display: flex; align-items: center; gap: 12px; }
 .document-conflict-actions button { text-decoration: none; color: #2f6fd0; }
 .document-conflict-actions button.ghost { color: #8b8a85; }
+.document-conflict-actions button:disabled { color: #a09e99; cursor: default; }
 .breadcrumb-part { min-width: 0; max-width: 150px; flex: 0 999 auto; display: inline-flex; align-items: center; gap: 4px; }
 .breadcrumb-part span,
 .breadcrumb-part button,
@@ -371,8 +371,6 @@ button { color: inherit; }
 .share-link-row button { height: 34px; flex: none; padding: 0 11px; border: 0; border-radius: 5px; background: #2383e2; color: #fff; font-size: 13px; cursor: pointer; }
 .share-qr { display: flex; align-items: center; flex-direction: column; gap: 8px; padding-top: 18px; color: #8b8a85; font-size: 12px; }
 .share-qr img { width: 196px; height: 196px; }
-.workspace-import-error { position: fixed; right: 16px; bottom: 16px; z-index: 200; max-width: 360px; }
-
 @media (max-width: 720px) {
   .login-screen { padding: 20px 22px; }
   .login-panel.is-register { padding: 30px 24px 26px; border-radius: 12px; }

@@ -165,6 +165,40 @@ test.describe("文档内容在刷新后仍然存在", () => {
     await expect(editor(page)).toContainText("删除前写的内容");
   });
 
+  test("复制文档链接用顶部 Toast 提示且侧栏不跳动", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await openWorkspace(page);
+    await createDocument(page, "E2E 复制链接");
+    const searchBox = page.locator(".sidebar-search");
+    const before = await searchBox.boundingBox();
+
+    await openNodeMenu(page, "E2E 复制链接");
+    await page.getByRole("button", { name: "拷贝链接" }).click();
+
+    await expect(page.getByText("链接已复制", { exact: true })).toBeVisible();
+    await expect(page.locator(".server-status")).toHaveCount(0);
+    const after = await searchBox.boundingBox();
+    expect(after?.y).toBe(before?.y);
+  });
+
+  test("复制分享链接用顶部 Toast 提示且按钮文案保持不变", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await openWorkspace(page);
+    await createDocument(page, "E2E 分享链接");
+
+    await page.getByRole("button", { name: "分享", exact: true }).click();
+    const shareDialog = page.getByRole("dialog", { name: "分享文档" });
+    const shareToggle = shareDialog.getByRole("checkbox");
+    await shareToggle.click();
+    await expect(shareToggle).toBeChecked();
+    const copyButton = shareDialog.getByRole("button", { name: "复制链接" });
+    await expect(copyButton).toBeVisible();
+    await copyButton.click();
+
+    await expect(page.getByText("分享链接已复制", { exact: true })).toBeVisible();
+    await expect(copyButton).toHaveText("复制链接");
+  });
+
   /**
    * 大纲和思维导图是同一棵树的两个视图，切换视图不该丢字，也不该只在一边生效。
    * 这里只验证「同一段文字在两个视图里都看得到」，不去碰导图的布局细节。

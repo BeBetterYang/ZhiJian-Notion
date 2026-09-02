@@ -2,19 +2,24 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createInitialTree } from "../core/tree";
 import { TreeStore } from "../core/treeStore";
+import { clearToasts, getToastSnapshot } from "../shared/toast/toast";
+import { ToastProvider } from "../shared/toast/ToastProvider";
 import type { WorkspaceSession } from "./auth";
 
 const serverMocks = vi.hoisted(() => ({
   deleteWorkspaceDocument: vi.fn(),
+  loadDocumentShare: vi.fn(),
   loadWorkspaceDocument: vi.fn(),
   loadWorkspaceState: vi.fn(),
   saveWorkspaceDocument: vi.fn(),
   saveWorkspaceState: vi.fn(),
+  updateDocumentShare: vi.fn(),
+  updateWorkspaceAccount: vi.fn(),
 }));
 const editorPreloadMocks = vi.hoisted(() => ({ preloadEditorView: vi.fn() }));
 
 vi.mock("../App", () => ({
-  default: ({ store }: { store: TreeStore }) => {
+  default: ({ store, onShare }: { store: TreeStore; onShare?: () => void }) => {
     const tree = store.getSnapshot();
     return (
       <div
@@ -23,6 +28,7 @@ vi.mock("../App", () => ({
         data-layout={tree.mindMap?.layout?.type ?? ""}
       >
         {tree.nodes[tree.rootId]?.content.text}
+        {onShare ? <button type="button" onClick={onShare}>分享</button> : null}
       </div>
     );
   },
@@ -52,7 +58,11 @@ const session: WorkspaceSession = {
 };
 
 beforeEach(() => {
+  clearToasts();
   editorPreloadMocks.preloadEditorView.mockReset().mockResolvedValue({});
+  serverMocks.loadDocumentShare.mockReset().mockResolvedValue({ enabled: false });
+  serverMocks.updateDocumentShare.mockReset().mockResolvedValue({ enabled: false });
+  serverMocks.updateWorkspaceAccount.mockReset().mockResolvedValue({ user: { email: session.email, user_metadata: { name: session.name } } });
 });
 
 describe("侧边栏更多菜单定位", () => {
@@ -241,7 +251,7 @@ describe("回收站彻底删除", () => {
   });
 
   async function openTrash() {
-    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+    render(<ToastProvider><WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} /></ToastProvider>);
     fireEvent.click(await screen.findByRole("button", { name: /枝间用户/ }));
     fireEvent.click(screen.getByRole("button", { name: /回收站/ }));
     return screen.getByRole("button", { name: "清空回收站" });
@@ -252,7 +262,7 @@ describe("回收站彻底删除", () => {
 
     fireEvent.click(await openTrash());
 
-    expect(await screen.findByText("服务器删除文档失败：网络不可用")).toBeInTheDocument();
+    expect(await screen.findByText("删除失败：网络不可用")).toBeInTheDocument();
     expect(screen.getByText("旧文档")).toBeInTheDocument();
   });
 
@@ -331,6 +341,108 @@ describe("批量导入文档", () => {
     await importFiles([markdownFile("会议记录.md", "只有正文\n"), markdownFile("乙.md", "# 文档乙\n")]);
 
     await waitFor(() => expect(within(fileTree()).getByText("会议记录")).toBeInTheDocument());
+  });
+});
+
+describe("工作区 Toast 反馈", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    window.history.replaceState(null, "", "/workspace.html");
+    serverMocks.loadWorkspaceState.mockReset().mockResolvedValue({
+      profile: { name: "枝间用户", email: session.email, avatarUrl: "" },
+      nodes: [{ id: "file-1", title: "产品规划", type: "file", parentId: null, order: 0, favorite: false, openedAt: 1 }],
+      documents: { "file-1": createInitialTree() },
+      documentRevisions: { "file-1": 1 },
+    });
+    serverMocks.saveWorkspaceDocument.mockReset().mockResolvedValue({ revision: 2 });
+    serverMocks.saveWorkspaceState.mockReset().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+  });
+
+  function renderWithToasts() {
+    return render(<ToastProvider><WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} /></ToastProvider>);
+  }
+
+  async function openNodeMenu() {
+    fireEvent.click(await screen.findByRole("button", { name: "产品规划的更多操作" }));
+  }
+
+  async function openSettings() {
+    fireEvent.click(await screen.findByRole("button", { name: /枝间用户/ }));
+    fireEvent.click(screen.getByRole("button", { name: "设置" }));
+  }
+
+  it("复制节点链接成功和失败都使用 Toast，侧栏不再插入状态行", async () => {
+    renderWithToasts();
+    await openNodeMenu();
+    fireEvent.click(screen.getByRole("button", { name: "拷贝链接" }));
+    expect(await screen.findByText("链接已复制")).toBeInTheDocument();
+    expect(document.querySelector(".server-status")).toBeNull();
+
+    act(() => { clearToasts(); });
+    vi.mocked(navigator.clipboard.writeText).mockRejectedValueOnce(new Error("clipboard denied"));
+    await openNodeMenu();
+    fireEvent.click(screen.getByRole("button", { name: "拷贝链接" }));
+    expect(await screen.findByText("复制失败，请手动复制链接。")).toBeInTheDocument();
+  });
+
+  it("分享链接复制使用 Toast，按钮文案始终保持为复制链接", async () => {
+    serverMocks.loadDocumentShare.mockResolvedValue({ enabled: true, token: "share-token" });
+    renderWithToasts();
+    fireEvent.click(await screen.findByRole("button", { name: "分享" }));
+    const copyButton = await screen.findByRole("button", { name: "复制链接" });
+
+    fireEvent.click(copyButton);
+    expect(await screen.findByText("分享链接已复制")).toBeInTheDocument();
+    expect(copyButton).toHaveTextContent("复制链接");
+
+    act(() => { clearToasts(); });
+    vi.mocked(navigator.clipboard.writeText).mockRejectedValueOnce(new Error("clipboard denied"));
+    fireEvent.click(copyButton);
+    expect(await screen.findByText("复制失败，请手动复制链接。")).toBeInTheDocument();
+    expect(copyButton).toHaveTextContent("复制链接");
+  });
+
+  it("账号设置成功和失败使用 Toast", async () => {
+    renderWithToasts();
+    await openSettings();
+    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+    expect(await screen.findByText("账号设置已保存")).toBeInTheDocument();
+
+    act(() => { clearToasts(); });
+    await openSettings();
+    fireEvent.click(screen.getByRole("button", { name: "修改邮箱" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "新邮箱地址" }), { target: { value: "next@example.com" } });
+    serverMocks.updateWorkspaceAccount.mockRejectedValueOnce(new Error("认证服务不可用"));
+    fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
+    expect(await screen.findByText("账号修改失败：认证服务不可用")).toBeInTheDocument();
+  });
+
+  it("工作区保存失败显示 Toast 且不改变侧栏布局", async () => {
+    serverMocks.saveWorkspaceState.mockRejectedValue(new Error("网络不可用"));
+    renderWithToasts();
+
+    expect(await screen.findByText("工作区保存失败：网络不可用", {}, { timeout: 2500 })).toBeInTheDocument();
+    expect(document.querySelector(".server-status")).toBeNull();
+  });
+
+  it("文档保存失败只显示原有保存状态，不重复弹 Toast", async () => {
+    serverMocks.saveWorkspaceDocument.mockRejectedValue(new Error("写入失败"));
+    renderWithToasts();
+    await screen.findByTestId("document-editor");
+
+    await openNodeMenu();
+    fireEvent.click(screen.getByRole("button", { name: "重命名" }));
+    const input = document.querySelector<HTMLInputElement>(".tree-rename-input");
+    if (!input) throw new Error("重命名输入框没有出现。");
+    fireEvent.change(input, { target: { value: "触发文档保存" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(await screen.findByText("保存失败", {}, { timeout: 2000 })).toBeInTheDocument();
+    expect(getToastSnapshot().some((item) => item.message.includes("文档保存"))).toBe(false);
   });
 });
 
@@ -500,6 +612,65 @@ describe("Workspace Deep Link", () => {
     await waitFor(() => expect(new URLSearchParams(window.location.search).get("file")).toBeTruthy());
     expect(window.history.length).toBe(beforeLength);
   });
+
+  /**
+   * file 和 folder 一起留在地址栏里，同一个链接会给出两套状态：刷新后正文打开的是那篇文档、
+   * 侧栏选中的却是文件夹。所以这两个参数必须互斥，以最后一次选中的那个为准。
+   */
+  it("切换文档时地址栏只留 file，清掉原来的 folder", async () => {
+    window.localStorage.setItem("zhijian.workspace.last-open-file.v1:user-1", "file-1");
+    window.history.replaceState(null, "", "/workspace.html?folder=sub");
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+    expect(await screen.findByTestId("document-editor")).toHaveTextContent("产品规划");
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get("folder")).toBe("sub"));
+
+    const sidebar = document.querySelector<HTMLElement>(".workspace-files")!;
+    fireEvent.click(await within(sidebar).findByRole("button", { name: "深层文档" }));
+
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get("file")).toBe("file-2"));
+    expect(new URLSearchParams(window.location.search).has("folder")).toBe(false);
+  });
+
+  it("选中文件夹时地址栏只留 folder，清掉原来的 file", async () => {
+    window.history.replaceState(null, "", "/workspace.html?file=file-2");
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+    expect(await screen.findByTestId("document-editor")).toHaveTextContent("深层文档");
+
+    const sidebar = document.querySelector<HTMLElement>(".workspace-files")!;
+    // 加载遮罩没撤掉之前整块内容都是 aria-hidden 的，按 role 查要等它可访问。
+    fireEvent.click(await within(sidebar).findByRole("button", { name: "项目 A" }));
+
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get("folder")).toBe("folder"));
+    expect(new URLSearchParams(window.location.search).has("file")).toBe(false);
+    // 选文件夹只挪侧栏，正文还是原来那一篇。
+    expect(screen.getByTestId("document-editor")).toHaveTextContent("深层文档");
+  });
+
+  it("历史链接两个参数都在时以 file 为准，并把地址栏收敛成只有 file", async () => {
+    window.history.replaceState(null, "", "/workspace.html?file=file-2&folder=folder");
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+
+    expect(await screen.findByTestId("document-editor")).toHaveTextContent("深层文档");
+    await waitFor(() => expect(new URLSearchParams(window.location.search).has("folder")).toBe(false));
+    expect(new URLSearchParams(window.location.search).get("file")).toBe("file-2");
+  });
+
+  it("链接里的文档不存在但文件夹有效时退回记住的文档，不白屏", async () => {
+    window.localStorage.setItem("zhijian.workspace.last-open-file.v1:user-1", "file-1");
+    window.history.replaceState(null, "", "/workspace.html?file=file-gone&folder=sub");
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+
+    expect(await screen.findByTestId("document-editor")).toHaveTextContent("产品规划");
+    // 文档链接是坏的，这时才轮到 folder 决定侧栏选中哪一个；坏掉的 file 参数一并清掉。
+    const sidebar = document.querySelector<HTMLElement>(".workspace-files")!;
+    expect(within(sidebar).getByText("深层文档")).toBeInTheDocument();
+    await waitFor(() => expect(new URLSearchParams(window.location.search).has("file")).toBe(false));
+    expect(new URLSearchParams(window.location.search).get("folder")).toBe("sub");
+  });
 });
 
 describe("保存冲突（409）", () => {
@@ -565,6 +736,60 @@ describe("保存冲突（409）", () => {
     await renameActiveDocument("服务器版本", "冲突之后的新标题");
     await waitFor(() => expect(serverMocks.saveWorkspaceDocument).toHaveBeenCalled());
     // 用服务器给的 revision 9 继续保存，而不是本地那个已经过期的 3。
+    expect(serverMocks.saveWorkspaceDocument.mock.calls.at(-1)?.[3]).toBe(9);
+  });
+
+  /**
+   * 「重新加载服务器版本」自己也会失败（断网、服务器 500）。这时候一旦把状态降级成 error，界面
+   * 给出的就是「保存失败 [重试]」，而重试走的 persistDocument() 会因为这篇还在 conflictedDocuments
+   * 里直接返回——按钮按下去什么都不会发生。所以读失败要留在冲突态，让用户能再读一次。
+   */
+  it("重新加载服务器版本失败后仍留在冲突态，可以再读一次", async () => {
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+    await screen.findByTestId("document-editor");
+
+    await renameActiveDocument("产品规划", "本地改的标题");
+    expect(await screen.findByText("存在保存冲突")).toBeInTheDocument();
+    const conflictedCalls = serverMocks.saveWorkspaceDocument.mock.calls.length;
+    expect(conflictedCalls).toBeGreaterThan(0);
+
+    // 第一次读服务器版本卡在路上：按钮换成「正在重新加载…」并且点不动，避免连点发起第二次读取。
+    let rejectReload: ((error: Error) => void) | undefined;
+    serverMocks.loadWorkspaceDocument.mockImplementationOnce(
+      () => new Promise((_resolve, reject) => { rejectReload = reject; }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "重新加载服务器版本" }));
+    expect(screen.getByRole("button", { name: "正在重新加载…" })).toBeDisabled();
+
+    await act(async () => {
+      rejectReload?.(new WorkspaceApiError("网络不可用。", 0));
+      await Promise.resolve();
+    });
+
+    // 读失败：仍然是冲突，只是多了一行失败原因；不是「保存失败 [重试]」。
+    expect(await screen.findByText("重新加载失败：网络不可用。")).toBeInTheDocument();
+    expect(screen.getByText("存在保存冲突")).toBeInTheDocument();
+    expect(screen.queryByText("保存失败")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新加载服务器版本" })).toBeEnabled();
+    // 也没有拿服务器内容悄悄盖掉本地这一版。
+    expect(screen.getByTestId("document-editor")).toHaveTextContent("本地改的标题");
+
+    // 冲突还挂着，自动保存也就还停着：继续编辑只留在内存里，不发新的 PUT。
+    await renameActiveDocument("本地改的标题", "又改了一次");
+    expect(serverMocks.saveWorkspaceDocument).toHaveBeenCalledTimes(conflictedCalls);
+
+    // 再读一次，这次成功：换成服务器版本，revision 跟着更新，冲突解除。
+    serverMocks.loadWorkspaceDocument.mockResolvedValue({ tree: treeWithRootText("服务器版本"), revision: 9 });
+    serverMocks.saveWorkspaceDocument.mockReset().mockResolvedValue({ ok: true, revision: 10 });
+    fireEvent.click(screen.getByRole("button", { name: "重新加载服务器版本" }));
+
+    await waitFor(() => expect(screen.getByTestId("document-editor")).toHaveTextContent("服务器版本"));
+    expect(screen.queryByText("存在保存冲突")).not.toBeInTheDocument();
+    expect(serverMocks.loadWorkspaceDocument).toHaveBeenCalledTimes(2);
+
+    // 自动保存恢复，并且用服务器给回来的 revision 9 继续保存。
+    await renameActiveDocument("服务器版本", "恢复之后的标题");
+    await waitFor(() => expect(serverMocks.saveWorkspaceDocument).toHaveBeenCalled());
     expect(serverMocks.saveWorkspaceDocument.mock.calls.at(-1)?.[3]).toBe(9);
   });
 });

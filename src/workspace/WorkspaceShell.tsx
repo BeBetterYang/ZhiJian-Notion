@@ -60,6 +60,7 @@ import { compressAvatarFile } from "./avatarImage";
 import { workspaceNodeMenuPosition } from "./workspaceNodeMenuPosition";
 import { AppErrorBoundary } from "../shared/AppErrorBoundary";
 import { LoadingScreen } from "../shared/LoadingScreen";
+import { toast } from "../shared/toast/toast";
 import logoUrl from "./assets/zhijian-logo.png";
 import {
   childNodes,
@@ -100,7 +101,9 @@ type DocumentSaveState =
   | { status: "saved" }
   | { status: "saving" }
   | { status: "error"; message: string }
-  | { status: "conflict"; message: string };
+  // 冲突态一直挂着，直到真的换成了服务器版本。reloadError 只是这一次「重新加载」没成功，
+  // 不能因此降级成 error：那样界面会给出一个按下去什么都不会发生的「重试」。
+  | { status: "conflict"; message: string; reloading?: boolean; reloadError?: string };
 type SettingsView = "account" | "preferences";
 type SettingsEdit = "email" | "password" | null;
 type WorkspaceSearchMatch = { nodeId: string; text: string; path: string };
@@ -128,7 +131,6 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const [shareLoading, setShareLoading] = useState(false);
   const [shareError, setShareError] = useState("");
   const [shareQrCode, setShareQrCode] = useState("");
-  const [shareCopied, setShareCopied] = useState(false);
   const [settingsView, setSettingsView] = useState<SettingsView>("account");
   const [settingsEdit, setSettingsEdit] = useState<SettingsEdit>(null);
   const [assetCleanup, setAssetCleanup] = useState<{ busy: boolean; message: string; failed: boolean }>({ busy: false, message: "", failed: false });
@@ -189,7 +191,6 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const [serverReady, setServerReady] = useState(false);
   const [initialEditorReady, setInitialEditorReady] = useState(false);
   const [serverAvailable, setServerAvailable] = useState(false);
-  const [serverStatus, setServerStatus] = useState("");
   const [documentSaveStates, setDocumentSaveStates] = useState<Record<string, DocumentSaveState>>({});
   const [conflictNoticeHidden, setConflictNoticeHidden] = useState(() => new Set<string>());
   /** 换成服务器版本时换掉的是 Map 里的 TreeStore 实例，靠这个计数让 App 重新挂载。 */
@@ -209,6 +210,17 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
 
   const updateDocumentSaveState = useCallback((fileId: string, state: DocumentSaveState) => {
     setDocumentSaveStates((current) => ({ ...current, [fileId]: state }));
+  }, []);
+
+  /** 冲突态上打补丁：留着原来的冲突文案，只更新「正在重新加载」和上一次重新加载的错误。 */
+  const patchConflictState = useCallback((fileId: string, patch: { reloading: boolean; reloadError?: string }) => {
+    setDocumentSaveStates((current) => {
+      const state = current[fileId];
+      const conflict: DocumentSaveState = state?.status === "conflict"
+        ? state
+        : { status: "conflict", message: "服务器上有更新的版本。" };
+      return { ...current, [fileId]: { ...conflict, ...patch } };
+    });
   }, []);
 
   /**
@@ -241,7 +253,6 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         return;
       }
       updateDocumentSaveState(fileId, { status: "error", message: errorMessage(error) });
-      setServerStatus(`文档保存到服务器失败：${errorMessage(error)}`);
     }).finally(() => {
       if (documentSaveQueues.current.get(fileId) === queued) documentSaveQueues.current.delete(fileId);
     });
@@ -262,7 +273,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       pendingWorkspaceState.current = null;
       await saveWorkspaceState(sessionRef.current, pending, { onSessionRefresh: handleSessionRefresh });
     }).catch((error) => {
-      setServerStatus(`工作区保存到服务器失败：${errorMessage(error)}`);
+      toast.error(`工作区保存失败：${errorMessage(error)}`);
     });
     workspaceSaveQueue.current = queued;
     return queued;
@@ -277,10 +288,14 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
    * 冲突之后换成服务器版本：读回服务器的 tree 和 revision，替换掉这篇文档的 TreeStore，
    * 然后解除冲突、恢复自动保存。第一版不做自动合并，也绝不拿本地内容去覆盖服务器——那等于
    * 绕过乐观并发保护。
+   *
+   * 读失败就留在冲突态。这里如果改成 error，界面会给出一个「重试」，而重试走的
+   * persistDocument() 开头就会因为 conflictedDocuments 里还留着这个 fileId 直接返回，
+   * 按下去什么都不会发生；同时本地内容也仍然不该被自动写上去。
    */
   const reloadServerDocument = useCallback(async (fileId: string) => {
     cancelPendingAutosave.current();
-    updateDocumentSaveState(fileId, { status: "saving" });
+    patchConflictState(fileId, { reloading: true, reloadError: undefined });
     try {
       const result = await loadWorkspaceDocument(sessionRef.current, fileId, { onSessionRefresh: handleSessionRefresh });
       if (!result) throw new WorkspaceApiError("服务器上找不到这篇文档。", 404);
@@ -289,11 +304,10 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       conflictedDocuments.current.delete(fileId);
       setDocumentStoreEpoch((epoch) => epoch + 1);
       updateDocumentSaveState(fileId, { status: "saved" });
-      setServerStatus("");
     } catch (error) {
-      updateDocumentSaveState(fileId, { status: "error", message: errorMessage(error) });
+      patchConflictState(fileId, { reloading: false, reloadError: errorMessage(error) });
     }
-  }, [handleSessionRefresh, updateDocumentSaveState]);
+  }, [handleSessionRefresh, patchConflictState, updateDocumentSaveState]);
 
   const importMarkdownImage = useCallback(async (url: string, name?: string) => {
     const asset = await importWorkspaceImageUrl(sessionRef.current, url, name, { onSessionRefresh: handleSessionRefresh });
@@ -303,7 +317,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
 
   const localizeImportedTree = useCallback(async (tree: ZhiJianTree) => {
     const result = await localizeRemoteImages(tree, importMarkdownImage);
-    setServerStatus(result.failedCount ? `文档已导入，${result.failedCount} 张外部图片未能保存到枝间。` : "");
+    if (result.failedCount) toast.warning(`文档已导入，${result.failedCount} 张外部图片未能保存到枝间。`);
     return result.tree;
   }, [importMarkdownImage]);
 
@@ -356,7 +370,6 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     logWorkspacePerf("workspace api start", workspaceStartedAt.current);
     setServerReady(false);
     setServerAvailable(false);
-    setServerStatus("");
     void loadWorkspaceState(loadingSession, { onSessionRefresh: handleSessionRefresh })
       .then((state) => {
         if (canceled) return;
@@ -380,7 +393,11 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         // 不报错也不白屏——分享出去的链接指向被删掉的文档是很正常的事。
         const deepLink = readWorkspaceDeepLink();
         const linkedFile = nextNodes.find((node) => node.id === deepLink.fileId && node.type === "file");
-        const linkedFolder = nextNodes.find((node) => node.id === deepLink.folderId && node.type === "folder");
+        // 历史链接里可能两个参数都在。文档能打开就以文档为准，`?folder=` 只在没有有效文档
+        // 链接时才决定侧栏选中哪一个；加载完成后地址栏那条 effect 会把多余的参数清掉。
+        const linkedFolder = linkedFile
+          ? undefined
+          : nextNodes.find((node) => node.id === deepLink.folderId && node.type === "folder");
         const firstFile = nextNodes.find(isWorkspaceFile);
         const rememberedFileId = loadLastOpenFileId(sessionRef.current.userId);
         const restoredFile = nextNodes.find((node) => node.id === rememberedFileId && node.type === "file");
@@ -409,7 +426,6 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
           if (target.type === "folder") nextExpanded.add(target.id);
         }
         setExpandedFolders(nextExpanded);
-        setServerStatus("");
         setServerAvailable(true);
         setServerReady(true);
       })
@@ -426,7 +442,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         setSelectedMenuKey("");
         documentStores.current = new Map();
         setServerAvailable(false);
-        setServerStatus(`服务器数据读取失败：${errorMessage(error)}`);
+        toast.error(`工作区加载失败：${errorMessage(error)}`, { persistent: true });
         setServerReady(true);
       });
     return () => {
@@ -471,16 +487,23 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   }, [activeDocumentStore, activeFile, persistDocument, serverAvailable, serverReady]);
 
   /**
-   * 地址栏跟着当前文档走，这样刷新、收藏、复制地址栏都能回到同一篇。用 replaceState 而不是
+   * 地址栏跟着当前选中项走，这样刷新、收藏、复制地址栏都能回到同一处。用 replaceState 而不是
    * pushState：每点一次文档就多一条历史记录，返回键会变得没法用。
+   *
+   * `file` 和 `folder` 互斥：两个一起留在地址栏里，刷新后正文打开的是文档、侧栏选中的却是
+   * 文件夹，同一个链接会给出两套状态。选中文件夹时写 `folder`，否则写当前文档。
    */
   useEffect(() => {
-    if (!serverReady || !activeFileId || typeof window === "undefined") return;
+    if (!serverReady || typeof window === "undefined") return;
     const url = new URL(window.location.href);
-    if (url.searchParams.get("file") === activeFileId) return;
-    url.searchParams.set("file", activeFileId);
+    const [key, value] = selectedFolderId ? ["folder", selectedFolderId] : ["file", activeFileId];
+    const stale = key === "folder" ? "file" : "folder";
+    if (!value) return;
+    if (url.searchParams.get(key) === value && !url.searchParams.has(stale)) return;
+    url.searchParams.set(key, value);
+    url.searchParams.delete(stale);
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-  }, [activeFileId, serverReady]);
+  }, [activeFileId, selectedFolderId, serverReady]);
 
   useEffect(() => {
     if (!serverReady || !serverAvailable) return;
@@ -596,7 +619,6 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     setShareOpen(true);
     setShareLoading(true);
     setShareError("");
-    setShareCopied(false);
     try {
       setShareState(await loadDocumentShare(sessionRef.current, activeFile.id, { onSessionRefresh: handleSessionRefresh }));
     } catch (error) {
@@ -624,7 +646,6 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     if (!activeFile) return;
     setShareLoading(true);
     setShareError("");
-    setShareCopied(false);
     try {
       setShareState(await updateDocumentShare(sessionRef.current, activeFile.id, enabled, { onSessionRefresh: handleSessionRefresh }));
     } catch (error) {
@@ -634,21 +655,13 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     }
   };
 
-  useEffect(() => {
-    if (!shareCopied) return;
-    const timer = window.setTimeout(() => setShareCopied(false), 1800);
-    return () => window.clearTimeout(timer);
-  }, [shareCopied]);
-
   const copyShareUrl = async () => {
     if (!shareUrl) return;
     try {
       await navigator.clipboard.writeText(shareUrl);
-      setShareCopied(true);
-      setShareError("");
+      toast.success("分享链接已复制");
     } catch {
-      setShareCopied(false);
-      setShareError("复制失败，请手动复制链接。");
+      toast.error("复制失败，请手动复制链接。");
     }
   };
 
@@ -656,7 +669,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     if (!file) return;
     void compressAvatarFile(file)
       .then((avatarUrl) => setProfileDraft((current) => ({ ...current, avatarUrl })))
-      .catch((error) => setServerStatus(errorMessage(error)));
+      .catch((error) => toast.error(`头像处理失败：${errorMessage(error)}`));
   };
 
   const saveAccountSettings = async () => {
@@ -683,9 +696,9 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       setNewPassword("");
       setSettingsEdit(null);
       setSettingsOpen(false);
-      setServerStatus("");
+      toast.success("账号设置已保存");
     } catch (error) {
-      setServerStatus(`账号修改失败：${errorMessage(error)}`);
+      toast.error(`账号修改失败：${errorMessage(error)}`);
     }
   };
 
@@ -770,7 +783,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       failedFiles.length ? `${failedFiles.length} 个文件导入失败：${failedFiles.join("、")}` : "",
       failedImageCount ? `文档已导入，${failedImageCount} 张外部图片未能保存到枝间。` : "",
     ].filter(Boolean);
-    setServerStatus(notices.join("；"));
+    if (notices.length) toast.warning(notices.join("；"));
     if (!parsed.length) return;
 
     const targetParent = activeFile?.parentId ?? null;
@@ -873,7 +886,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       try {
         await Promise.all(files.map((file) => deleteWorkspaceDocument(sessionRef.current, file.id, { onSessionRefresh: handleSessionRefresh })));
       } catch (error) {
-        setServerStatus(`服务器删除文档失败：${errorMessage(error)}`);
+        toast.error(`删除失败：${errorMessage(error)}`);
         return;
       }
     }
@@ -881,7 +894,6 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       documentStores.current.delete(file.id);
       documentRevisions.current.delete(file.id);
     });
-    setServerStatus("");
     setTrash((current) => current.filter((entry) => !entryIds.has(entry.id)));
     setSelectedTrashIds(new Set());
   };
@@ -925,10 +937,9 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     // 剪贴板会因为权限或非安全上下文直接 reject，静默失败的话用户会以为链接已经拷走了。
     try {
       await navigator.clipboard.writeText(nodeUrl(node));
-      setServerStatus("复制成功");
-      window.setTimeout(() => setServerStatus((current) => current === "复制成功" ? "" : current), 1800);
+      toast.success("链接已复制");
     } catch {
-      setServerStatus("复制失败，请手动复制链接。");
+      toast.error("复制失败，请手动复制链接。");
     }
   };
 
@@ -1088,8 +1099,6 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
           <button type="button" className="sidebar-collapse icon-button" onClick={() => setSidebarCollapsed(true)} aria-label="收起侧栏" title="收起侧栏"><FiChevronsLeft /></button>
           <button type="button" className="mobile-close icon-button" onClick={() => setSidebarOpen(false)} aria-label="关闭侧栏" title="关闭侧栏"><FiX /></button>
         </header>
-        {serverStatus ? <div className="server-status">{serverStatus}</div> : null}
-
         <nav className="sidebar-actions" aria-label="工作区操作">
           <div className="sidebar-search-wrap">
             <label className="sidebar-search">
@@ -1352,7 +1361,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
             </label>
             {shareError ? <p className="share-error" role="alert">{shareError}</p> : null}
             {shareUrl ? <>
-              <div className="share-link-row"><input value={shareUrl} readOnly aria-label="文档分享链接" /><button type="button" aria-live="polite" onClick={() => void copyShareUrl()}>{shareCopied ? "复制成功" : "复制链接"}</button></div>
+              <div className="share-link-row"><input value={shareUrl} readOnly aria-label="文档分享链接" /><button type="button" onClick={() => void copyShareUrl()}>复制链接</button></div>
               <div className="share-qr">{shareQrCode ? <img src={shareQrCode} alt="文档分享二维码" /> : null}<span>扫描二维码查看文档</span></div>
             </> : null}
           </section>
@@ -1865,8 +1874,11 @@ function DocumentSaveStatus({ state, noticeHidden, onRetry, onReload, onHideNoti
       {noticeHidden ? null : (
         <div className="document-conflict-notice" role="alert">
           <p>此文档已在其他窗口或设备更新，当前内容尚未覆盖服务器版本。</p>
+          {state.reloadError ? <p className="document-conflict-error">重新加载失败：{state.reloadError}</p> : null}
           <div className="document-conflict-actions">
-            <button type="button" onClick={onReload}>重新加载服务器版本</button>
+            <button type="button" onClick={onReload} disabled={state.reloading}>
+              {state.reloading ? "正在重新加载…" : "重新加载服务器版本"}
+            </button>
             <button type="button" className="ghost" onClick={onHideNotice}>稍后处理</button>
           </div>
         </div>
