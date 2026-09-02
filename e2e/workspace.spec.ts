@@ -1,10 +1,45 @@
 import { expect, test, type Page } from "@playwright/test";
-import { resetLocalTestWorkspace, signInAsLocalTestUser } from "./localSession";
+import { keepSidebarExpanded, resetLocalTestWorkspace, signInAsLocalTestUser } from "./localSession";
 
 test("workspace login entry renders", async ({ page }) => {
   await page.goto("/workspace.html");
   await expect(page.getByRole("heading", { name: "登录枝间" })).toBeVisible();
   await expect(page.getByRole("button", { name: "继续" })).toBeVisible();
+});
+
+/**
+ * 侧栏的默认状态和浏览器记忆。放在真浏览器里验：收起靠的是 `is-collapsed` 那几条 CSS，jsdom 不套
+ * 样式表，只有这里能看出「收起之后侧栏真的不在画面上」。
+ */
+test("桌面端侧栏默认收起，展开和收起都被浏览器记住", async ({ page }) => {
+  await resetLocalTestWorkspace();
+  await signInAsLocalTestUser(page);
+
+  const shell = page.locator(".workspace-shell-ui");
+  const sidebar = page.locator(".workspace-sidebar");
+  async function openWorkspace() {
+    await page.goto("/workspace.html");
+    // 加载遮罩盖着的时候正文整块是 aria-hidden 的，点不到，等它撤掉。
+    await expect(page.locator(".zhijian-loading-screen")).toHaveCount(0);
+  }
+
+  await openWorkspace();
+  await expect(shell).toHaveClass(/is-collapsed/);
+  // 收起不是把侧栏从 DOM 里删掉，是整块移出画面，所以按位置验才算数。
+  await expect(sidebar).not.toBeInViewport();
+
+  await page.getByRole("button", { name: "展开侧栏" }).click();
+  await expect(shell).not.toHaveClass(/is-collapsed/);
+  await expect(sidebar).toBeInViewport();
+
+  await openWorkspace();
+  await expect(shell).not.toHaveClass(/is-collapsed/);
+
+  await page.getByRole("button", { name: "收起侧栏" }).click();
+  await expect(shell).toHaveClass(/is-collapsed/);
+
+  await openWorkspace();
+  await expect(shell).toHaveClass(/is-collapsed/);
 });
 
 /**
@@ -17,6 +52,7 @@ test.describe("文档内容在刷新后仍然存在", () => {
   test.beforeEach(async ({ page }) => {
     await resetLocalTestWorkspace();
     await signInAsLocalTestUser(page);
+    await keepSidebarExpanded(page);
   });
 
   function sidebar(page: Page) {
@@ -25,6 +61,15 @@ test.describe("文档内容在刷新后仍然存在", () => {
 
   function editor(page: Page) {
     return page.locator('[contenteditable="true"]').first();
+  }
+
+  function waitForDocumentSave(page: Page) {
+    return page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return response.request().method() === "PUT"
+        && url.pathname.startsWith("/api/workspace/documents/")
+        && response.ok();
+    });
   }
 
   async function openWorkspace(page: Page) {
@@ -45,18 +90,19 @@ test.describe("文档内容在刷新后仍然存在", () => {
 
   /** 在文档正文里补一行内容，并等到确认已经写回服务器。 */
   async function typeIntoDocument(page: Page, text: string) {
+    const saved = waitForDocumentSave(page);
     await editor(page).click();
     await page.keyboard.press("End");
     await page.keyboard.press("Enter");
     await page.keyboard.type(text);
-    await expect(page.getByText("已保存")).toBeVisible();
+    await saved;
   }
 
   /**
    * 刷新页面，但先等导航树那一次保存落地。
    *
-   * 文档内容和导航树是两条独立的保存：内容 400ms 防抖，导航树（节点、标题、回收站）500ms。
-   * 「已保存」只代表内容那一条，紧接着刷新会赶在导航树保存之前，看到的就是一个空工作区。
+   * 文档内容和导航树是两条独立的保存：内容 2000ms 防抖，导航树（节点、标题、回收站）500ms。
+   * `typeIntoDocument` 只确认内容保存完成，紧接着刷新仍可能赶在导航树保存之前，看到空工作区。
    */
   async function reloadWorkspace(page: Page) {
     await page.waitForTimeout(900);
@@ -87,9 +133,10 @@ test.describe("文档内容在刷新后仍然存在", () => {
     await typeIntoDocument(page, "源文档的内容");
 
     await openNodeMenu(page, "E2E 源文档");
+    const copied = waitForDocumentSave(page);
     await page.getByRole("button", { name: "创建副本" }).click();
     await expect(sidebar(page).getByText("E2E 源文档 副本", { exact: true })).toBeVisible();
-    await expect(page.getByText("已保存")).toBeVisible();
+    await copied;
 
     // 关键：副本创建之后一个字都不改，直接刷新。内容还在，说明服务器上真的建了一行。
     await reloadWorkspace(page);
@@ -113,9 +160,10 @@ test.describe("文档内容在刷新后仍然存在", () => {
     await typeIntoDocument(page, "子文档的内容");
 
     await openNodeMenu(page, "E2E 项目");
+    const copied = waitForDocumentSave(page);
     await page.getByRole("button", { name: "创建副本" }).click();
     await expect(sidebar(page).getByText("E2E 项目 副本", { exact: true })).toBeVisible();
-    await expect(page.getByText("已保存")).toBeVisible();
+    await copied;
 
     await reloadWorkspace(page);
     // 副本文件夹里的子文档保持原名，只有根节点带「副本」，所以按副本那一支子树来定位。

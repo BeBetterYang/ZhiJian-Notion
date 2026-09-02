@@ -37,3 +37,16 @@ export async function signInAsLocalTestUser(page: Page) {
 export async function resetLocalTestWorkspace() {
   await rm(LOCAL_TEST_DATA_FILE, { force: true });
 }
+
+/**
+ * 让侧栏保持展开。
+ *
+ * 桌面端第一次打开侧栏是收起的（`is-collapsed` 会把它移出画面、pointer-events 设成 none），
+ * 点不到里面的文档。下面那些用例点的都是侧栏，所以先写上「展开」这条偏好，等于模拟一个已经把侧栏
+ * 拉开过的用户。key 必须和 WorkspaceShell.tsx 里的 SIDEBAR_COLLAPSED_KEY 一致。
+ */
+export async function keepSidebarExpanded(page: Page) {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("zhijian.workspace.sidebar-collapsed.v1", "false");
+  });
+}

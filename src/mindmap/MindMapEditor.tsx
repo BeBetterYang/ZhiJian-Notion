@@ -24,7 +24,7 @@ import {
   sameMindMapDecorations,
 } from "./mindMapDecorations";
 import { mindMapFloatingFrameSize } from "./mindMapFloatingFrame";
-import { MINDMAP_DRAGGING_CLASS, displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, isMindMapAnnotationTarget, mindMapDisplayDragTopic, mindMapMeasuredSizeChanged, mindMapPressTarget, mindMapScaleFromTransform, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, unscaledMindMapSize, updateMindMapPointerSession, type EditingTarget, type MindMapMeasuredSize, type MindMapPointerSession, type MindMapPressTarget } from "./mindMapInteraction";
+import { MINDMAP_DRAGGING_CLASS, canFocusMindMapNode, displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, isMindMapAnnotationTarget, mindMapDisplayDragTopic, mindMapMeasuredSizeChanged, mindMapPressTarget, mindMapScaleFromTransform, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, unscaledMindMapSize, updateMindMapPointerSession, type EditingTarget, type MindMapMeasuredSize, type MindMapPointerSession, type MindMapPressTarget } from "./mindMapInteraction";
 import { createMindElixirTheme, MIND_MAP_BACKGROUND_PRESETS, MIND_MAP_THEME_GROUPS, MIND_MAP_THEME_PRESETS, resolveMindMapTheme, type MindMapTheme } from "./mindMapTheme";
 import {
   CLOZE_CLASS,
@@ -419,11 +419,16 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
         focus: false,
         extend: [
           {
-            name: "专注",
+            name: "专注此节点",
             onclick: (event) => {
               dismissContextMenu(event);
               const nodeId = mindRef.current?.currentNode?.nodeObj.id ?? selectedNodeRef.current;
-              if (nodeId && nodeId !== treeRef.current.rootId) onFocusNodeRef.current?.(nodeId);
+              if (!nodeId || !canFocusMindMapNode(
+                nodeId,
+                projectionOptionsRef.current.rootNodeId,
+                treeRef.current.rootId,
+              )) return;
+              onFocusNodeRef.current?.(nodeId);
             },
           },
           {
@@ -453,6 +458,18 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
       ),
     });
     mind.init({ ...treeToMindElixir(initialTree.current, projectionOptionsRef.current), direction: directionRef.current });
+    mind.bus.addListener("showContextMenu", () => {
+      const item = containerRef.current?.querySelector<HTMLElement>(
+        '.context-menu .menu-list li[id="专注此节点"]',
+      );
+      if (!item) return;
+      const nodeId = mind.currentNode?.nodeObj.id ?? selectedNodeRef.current;
+      item.hidden = !canFocusMindMapNode(
+        nodeId,
+        projectionOptionsRef.current.rootNodeId,
+        treeRef.current.rootId,
+      );
+    });
     correctMindMapSummaryOffsets(mind, initialTree.current);
     if (initialViewportRef.current && !projectionOptionsRef.current.rootNodeId) {
       restoreMindMapViewport(mind, initialViewportRef.current);

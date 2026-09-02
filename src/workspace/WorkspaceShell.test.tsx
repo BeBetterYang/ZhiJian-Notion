@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createInitialTree } from "../core/tree";
 import { TreeStore } from "../core/treeStore";
 import { clearToasts, getToastSnapshot } from "../shared/toast/toast";
@@ -429,6 +429,29 @@ describe("工作区 Toast 反馈", () => {
     expect(document.querySelector(".server-status")).toBeNull();
   });
 
+  it("文档停止编辑约 2 秒后保存，正常保存状态不显示", async () => {
+    renderWithToasts();
+    await screen.findByTestId("document-editor");
+
+    await openNodeMenu();
+    fireEvent.click(screen.getByRole("button", { name: "重命名" }));
+    const input = document.querySelector<HTMLInputElement>(".tree-rename-input");
+    if (!input) throw new Error("重命名输入框没有出现。");
+    fireEvent.change(input, { target: { value: "等待自动保存" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    });
+    expect(serverMocks.saveWorkspaceDocument).not.toHaveBeenCalled();
+    expect(screen.queryByText("保存中…")).not.toBeInTheDocument();
+    expect(screen.queryByText("已保存")).not.toBeInTheDocument();
+
+    await waitFor(() => expect(serverMocks.saveWorkspaceDocument).toHaveBeenCalledTimes(1), { timeout: 1800 });
+    expect(screen.queryByText("保存中…")).not.toBeInTheDocument();
+    expect(screen.queryByText("已保存")).not.toBeInTheDocument();
+  });
+
   it("文档保存失败只显示原有保存状态，不重复弹 Toast", async () => {
     serverMocks.saveWorkspaceDocument.mockRejectedValue(new Error("写入失败"));
     renderWithToasts();
@@ -441,7 +464,9 @@ describe("工作区 Toast 反馈", () => {
     fireEvent.change(input, { target: { value: "触发文档保存" } });
     fireEvent.keyDown(input, { key: "Enter" });
 
-    expect(await screen.findByText("保存失败", {}, { timeout: 2000 })).toBeInTheDocument();
+    expect(screen.queryByText("保存中…")).not.toBeInTheDocument();
+    expect(screen.queryByText("已保存")).not.toBeInTheDocument();
+    expect(await screen.findByText("保存失败", {}, { timeout: 3500 })).toBeInTheDocument();
     expect(getToastSnapshot().some((item) => item.message.includes("文档保存"))).toBe(false);
   });
 });
@@ -674,7 +699,7 @@ describe("Workspace Deep Link", () => {
 });
 
 describe("保存冲突（409）", () => {
-  const AUTOSAVE_DEBOUNCE_MS = 400;
+  const AUTOSAVE_DEBOUNCE_MS = 2000;
 
   function treeWithRootText(text: string) {
     const tree = createInitialTree();
@@ -704,7 +729,7 @@ describe("保存冲突（409）", () => {
     if (!input) throw new Error("重命名输入框没有出现。");
     fireEvent.change(input, { target: { value: to } });
     fireEvent.keyDown(input, { key: "Enter" });
-    // 自动保存有 400ms 防抖，等它真的发出去（或确认它没发）。
+    // 自动保存有 2000ms 防抖，等它真的发出去（或确认它没发）。
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, AUTOSAVE_DEBOUNCE_MS + 120));
     });
@@ -737,7 +762,7 @@ describe("保存冲突（409）", () => {
     await waitFor(() => expect(serverMocks.saveWorkspaceDocument).toHaveBeenCalled());
     // 用服务器给的 revision 9 继续保存，而不是本地那个已经过期的 3。
     expect(serverMocks.saveWorkspaceDocument.mock.calls.at(-1)?.[3]).toBe(9);
-  });
+  }, 12000);
 
   /**
    * 「重新加载服务器版本」自己也会失败（断网、服务器 500）。这时候一旦把状态降级成 error，界面
@@ -791,5 +816,96 @@ describe("保存冲突（409）", () => {
     await renameActiveDocument("服务器版本", "恢复之后的标题");
     await waitFor(() => expect(serverMocks.saveWorkspaceDocument).toHaveBeenCalled());
     expect(serverMocks.saveWorkspaceDocument.mock.calls.at(-1)?.[3]).toBe(9);
+  }, 12000);
+});
+
+describe("侧栏收起状态记忆", () => {
+  const SIDEBAR_COLLAPSED_KEY = "zhijian.workspace.sidebar-collapsed.v1";
+
+  /**
+   * 断点是 CSS 说了算的（`@media (max-width: 720px)`），jsdom 既不套样式表也没有 matchMedia，
+   * 所以直接把这个接口顶掉，用它来声明「这次跑的是桌面端还是移动端」。
+   */
+  function stubViewport(mobile: boolean) {
+    const query = { matches: mobile, addEventListener: () => undefined, removeEventListener: () => undefined };
+    vi.stubGlobal("matchMedia", () => query as unknown as MediaQueryList);
+  }
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    window.history.replaceState(null, "", "/workspace.html");
+    stubViewport(false);
+    serverMocks.saveWorkspaceState.mockReset().mockResolvedValue(undefined);
+    serverMocks.saveWorkspaceDocument.mockReset().mockResolvedValue({ ok: true, revision: 1 });
+    serverMocks.loadWorkspaceState.mockReset().mockResolvedValue({
+      profile: { name: "枝间用户", email: session.email, avatarUrl: "" },
+      nodes: [{ id: "file-1", title: "产品规划", type: "file", parentId: null, order: 0, favorite: false, openedAt: 1 }],
+      documents: { "file-1": createInitialTree() },
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function shell() {
+    return document.querySelector<HTMLElement>(".workspace-shell-ui")!;
+  }
+
+  async function renderShell() {
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+    // 加载遮罩撤掉之前整块内容都是 aria-hidden 的，按 role 查要等它可访问。
+    await screen.findByTestId("document-editor");
+  }
+
+  it("桌面端没有记录时默认收起", async () => {
+    await renderShell();
+
+    expect(shell()).toHaveClass("is-collapsed");
+    expect(await screen.findByRole("button", { name: "展开侧栏" })).toBeInTheDocument();
+    // 只是默认值，还不是用户的选择：没人按过按钮就不该往浏览器里写东西。
+    expect(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY)).toBeNull();
+  });
+
+  it("记录为展开时保持展开", async () => {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "false");
+
+    await renderShell();
+
+    expect(shell()).not.toHaveClass("is-collapsed");
+    expect(await screen.findByRole("button", { name: "收起侧栏" })).toBeInTheDocument();
+  });
+
+  it("记录为收起时保持收起", async () => {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "true");
+
+    await renderShell();
+
+    expect(shell()).toHaveClass("is-collapsed");
+  });
+
+  it("用户收起再展开，两次都记进 localStorage", async () => {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "false");
+    await renderShell();
+
+    fireEvent.click(await screen.findByRole("button", { name: "收起侧栏" }));
+    expect(shell()).toHaveClass("is-collapsed");
+    expect(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY)).toBe("true");
+
+    fireEvent.click(await screen.findByRole("button", { name: "展开侧栏" }));
+    expect(shell()).not.toHaveClass("is-collapsed");
+    expect(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY)).toBe("false");
+  });
+
+  /** 移动端侧栏是抽屉，进了 `is-collapsed` 会连着被按成透明且点不动的，所以那边不读这条偏好。 */
+  it("移动端不读桌面偏好，侧栏保持关着的抽屉", async () => {
+    stubViewport(true);
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "true");
+
+    await renderShell();
+
+    expect(shell()).not.toHaveClass("is-collapsed");
+    expect(document.querySelector(".workspace-sidebar")).not.toHaveClass("is-open");
+    expect(screen.queryByRole("button", { name: "展开侧栏" })).not.toBeInTheDocument();
   });
 });

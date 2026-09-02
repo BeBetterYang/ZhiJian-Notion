@@ -50,7 +50,7 @@ import {
 import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 import { handleOutlineNodeKeyDown } from "./outlineNodeKeymap";
 import { collapsedOutlineCss } from "./outlineCollapse";
-import { zoomedOutlineCss } from "./outlineZoom";
+import { isProtectedOutlineRoot, zoomedOutlineCss } from "./outlineZoom";
 import { outlineRowMenuPosition } from "./outlineRowMenuPosition";
 import { LinkDialog } from "../shared/LinkDialog";
 import {
@@ -127,7 +127,10 @@ export function OutlineEditor({
   const activeSearchCss = useMemo(() => outlineActiveSearchCss(activeSearchNodeId), [activeSearchNodeId]);
   const zoomCss = useMemo(() => zoomedOutlineCss(tree, zoomedNodeId), [tree, zoomedNodeId]);
   const rowMenuHighlightCss = useMemo(() => outlineRowMenuHighlightCss(rowMenu?.nodeId ?? null), [rowMenu?.nodeId]);
-  const outlineContextValue = useMemo(() => ({ store, rowMenu, setRowMenu, onFocusNode }), [onFocusNode, rowMenu, store]);
+  const outlineContextValue = useMemo(
+    () => ({ store, rowMenu, setRowMenu, onFocusNode, zoomedNodeId }),
+    [onFocusNode, rowMenu, store, zoomedNodeId],
+  );
   const editor = useCreateBlockNote(
     {
       initialContent: treeToBlockNote(tree),
@@ -142,6 +145,12 @@ export function OutlineEditor({
     },
     [],
   );
+
+  useEffect(() => {
+    if (rowMenu && isProtectedOutlineRoot(rowMenu.nodeId, tree.rootId, zoomedNodeId)) {
+      setRowMenu(null);
+    }
+  }, [rowMenu, tree.rootId, zoomedNodeId]);
 
   useEffect(() => {
     return editor.onSelectionChange(() => {
@@ -407,7 +416,7 @@ export function OutlineEditor({
       <style>{zoomCss}</style>
       <style>{rowMenuHighlightCss}</style>
       <OutlineStoreContext.Provider value={outlineContextValue}>{editorView}</OutlineStoreContext.Provider>
-      {readOnly ? <ReadOnlyCollapseLayer store={store} panelRef={panelRef} /> : null}
+      {readOnly ? <ReadOnlyCollapseLayer store={store} panelRef={panelRef} protectedNodeId={zoomedNodeId} /> : null}
       {/* 添加图片 (Alt Enter) has nothing to insert until a file has been chosen, and
           the picker can only be opened from a real click on an input. */}
       <input
@@ -520,6 +529,7 @@ interface OutlineStoreContextValue {
   rowMenu: OutlineRowMenuState | null;
   setRowMenu: (menu: OutlineRowMenuState | null) => void;
   onFocusNode?: (nodeId: string) => void;
+  zoomedNodeId: string | null;
 }
 
 const OutlineStoreContext = createContext<OutlineStoreContextValue | null>(null);
@@ -533,7 +543,11 @@ function RootProtectedSideMenu() {
 
   // The root is a fixed document title. Child blocks keep the row menu and the
   // standard BlockNote drag handle.
-  if (state?.id && state.id === editor.document[0]?.id) {
+  if (state?.id && isProtectedOutlineRoot(
+    state.id,
+    editor.document[0]?.id ?? null,
+    context?.zoomedNodeId ?? null,
+  )) {
     return null;
   }
   if (!state?.id) {
@@ -715,7 +729,7 @@ function OutlineRowMenuPortal() {
     withTargetBlock(() => editor.insertInlineContent(`${emoji} `));
   };
 
-  if (!menu) return null;
+  if (!menu || isProtectedOutlineRoot(nodeId, rootId, context?.zoomedNodeId ?? null)) return null;
 
   return createPortal(
     <div
@@ -961,7 +975,15 @@ function CollapseButton({ store, nodeId }: { store: TreeStore; nodeId: string })
  * scroll rather than measured against the scrolling panel.
  */
 function ReadOnlyCollapseLayer(
-  { store, panelRef }: { store: TreeStore; panelRef: { current: HTMLElement | null } },
+  {
+    store,
+    panelRef,
+    protectedNodeId,
+  }: {
+    store: TreeStore;
+    panelRef: { current: HTMLElement | null };
+    protectedNodeId: string | null;
+  },
 ) {
   const tree = useTree(store);
   const [row, setRow] = useState<{ nodeId: string; top: number; left: number } | null>(null);
@@ -975,7 +997,7 @@ function ReadOnlyCollapseLayer(
       const outer = target?.closest<HTMLElement>(".bn-block-outer[data-id]");
       const content = outer?.querySelector<HTMLElement>(":scope > .bn-block > .bn-block-content");
       const nodeId = outer?.getAttribute("data-id");
-      if (!content || !nodeId) {
+      if (!content || !nodeId || nodeId === protectedNodeId) {
         clear();
         return;
       }
@@ -1001,11 +1023,11 @@ function ReadOnlyCollapseLayer(
       panel.removeEventListener("scroll", clear);
       window.removeEventListener("resize", clear);
     };
-  }, [panelRef]);
+  }, [panelRef, protectedNodeId]);
 
   if (!row) return null;
   const node = tree.nodes[row.nodeId];
-  if (!node || node.id === tree.rootId || node.children.length === 0) return null;
+  if (!node || isProtectedOutlineRoot(node.id, tree.rootId, protectedNodeId) || node.children.length === 0) return null;
   const collapsed = node.props?.collapsed === true;
 
   return (

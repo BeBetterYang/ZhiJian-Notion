@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ZhiJianNode, ZhiJianTree } from "../core/tree";
-import { zoomPath, zoomedOutlineCss } from "./outlineZoom";
+import { isProtectedOutlineRoot, zoomPath, zoomedOutlineCss } from "./outlineZoom";
 
 function node(id: string, parentId: string | null, children: string[]): ZhiJianNode {
   return { id, parentId, children, content: { text: id }, type: "text" };
@@ -28,6 +28,15 @@ function sampleTree(): ZhiJianTree {
     ),
   };
 }
+
+describe("isProtectedOutlineRoot", () => {
+  it("protects both the document root and the current focus root", () => {
+    expect(isProtectedOutlineRoot("root", "root", "a1")).toBe(true);
+    expect(isProtectedOutlineRoot("a1", "root", "a1")).toBe(true);
+    expect(isProtectedOutlineRoot("a1x", "root", "a1")).toBe(false);
+    expect(isProtectedOutlineRoot("a", "root", null)).toBe(false);
+  });
+});
 
 describe("zoomPath", () => {
   it("reads from the root down to the zoomed node", () => {

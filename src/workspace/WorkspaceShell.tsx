@@ -113,6 +113,9 @@ type WorkspaceSearchResult =
 
 const RECENT_SEARCHES_KEY = "zhijian.workspace.recent-searches.v1";
 const LAST_OPEN_FILE_KEY = "zhijian.workspace.last-open-file.v1";
+const SIDEBAR_COLLAPSED_KEY = "zhijian.workspace.sidebar-collapsed.v1";
+/** 和 workspace.css 里那条 `@media (max-width: 720px)` 必须一致：断点两边是两套侧栏。 */
+const MOBILE_VIEWPORT_QUERY = "(max-width: 720px)";
 
 interface UserProfile {
   name: string;
@@ -160,7 +163,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   } | null>(null);
   const [expandedQuickSections, setExpandedQuickSections] = useState(() => new Set<QuickSection>());
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => loadSidebarCollapsed());
   const [sidebarPeeking, setSidebarPeeking] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(252);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -227,7 +230,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
    * 每篇文档一条保存队列，任何新内容都必须从这里过：并发的 PUT 会带着同一个 revision 出发，
    * 后到的那个必然拿到 409。首存用 revision 0，成功后队列里记下服务器返回的 1。
    *
-   * 撞上 409 之后直接返回：内存里的 tree 一个字都不动，但不再每 400ms 重发一个注定失败的
+   * 撞上 409 之后直接返回：内存里的 tree 一个字都不动，但不再每 2000ms 重发一个注定失败的
    * 请求，改由用户在提示里决定是否换成服务器版本。
    */
   const persistDocument = useCallback((fileId: string, tree: ZhiJianTree) => {
@@ -335,6 +338,18 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   useEffect(() => {
     document.title = `${activeFile?.title || "无标题"}-枝间`;
   }, [activeFile?.title]);
+
+  /**
+   * 窗口跨过移动端断点时重算一次收起状态：桌面的收起状态留到移动端会把抽屉一起按成透明、点不动，
+   * 宽度掉下去就得放掉；拖回桌面宽度时再按浏览器记忆恢复。只在跨断点时触发，普通缩放不动它。
+   */
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia(MOBILE_VIEWPORT_QUERY);
+    const syncViewport = () => setSidebarCollapsed(loadSidebarCollapsed());
+    query.addEventListener("change", syncViewport);
+    return () => query.removeEventListener("change", syncViewport);
+  }, []);
 
   const enterSearchMode = useCallback(() => {
     setSearchMode(true);
@@ -461,8 +476,9 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     saveLastOpenFileId(session.userId, activeFileId);
   }, [activeFileId, serverReady, session.userId]);
 
+  const activeDocumentFileId = activeFile?.id ?? null;
   useEffect(() => {
-    if (!serverReady || !serverAvailable || !activeFile || !activeDocumentStore) return;
+    if (!serverReady || !serverAvailable || !activeDocumentFileId || !activeDocumentStore) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const clearPending = () => {
       if (timer) clearTimeout(timer);
@@ -473,18 +489,18 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
-        void persistDocument(activeFile.id, tree);
-      }, 400);
+        void persistDocument(activeDocumentFileId, tree);
+      }, 2000);
     });
     return () => {
       if (timer) {
         clearPending();
-        void persistDocument(activeFile.id, activeDocumentStore.getSnapshot());
+        void persistDocument(activeDocumentFileId, activeDocumentStore.getSnapshot());
       }
       if (cancelPendingAutosave.current === clearPending) cancelPendingAutosave.current = () => undefined;
       unsubscribe();
     };
-  }, [activeDocumentStore, activeFile, persistDocument, serverAvailable, serverReady]);
+  }, [activeDocumentFileId, activeDocumentStore, persistDocument, serverAvailable, serverReady]);
 
   /**
    * 地址栏跟着当前选中项走，这样刷新、收藏、复制地址栏都能回到同一处。用 replaceState 而不是
@@ -966,6 +982,16 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     peekCloseTimer.current = window.setTimeout(() => setSidebarPeeking(false), 140);
   };
 
+  /**
+   * 用户自己按的收起/展开才写进浏览器记忆。搜索模式顺带展开的那次（enterSearchMode）不写：那是
+   * 为了让搜索框够宽，不是用户对侧栏的选择，退出搜索后下次打开还该是他自己定的那个样子。
+   */
+  const applySidebarCollapsed = (collapsed: boolean) => {
+    setSidebarCollapsed(collapsed);
+    setSidebarPeeking(false);
+    saveSidebarCollapsed(collapsed);
+  };
+
   const finishDrop = (event: DragEvent, target: DropTarget) => {
     event.preventDefault();
     if (draggedNodeId && target) {
@@ -1076,7 +1102,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     <LoadingScreen ready={serverReady && initialEditorReady}>
       <main className={`workspace-shell-ui ${sidebarCollapsed ? "is-collapsed" : ""} ${searchMode ? "is-search-mode" : ""}`} style={{ "--sidebar-width": `${sidebarDisplayWidth}px` } as CSSProperties}>
       <button type="button" className="mobile-menu-button icon-button" onClick={() => setSidebarOpen(true)} aria-label="打开侧栏" title="打开侧栏"><FiMenu /></button>
-      {sidebarCollapsed ? <button type="button" className="desktop-sidebar-open icon-button" onMouseEnter={showSidebarPeek} onMouseLeave={scheduleSidebarPeekClose} onClick={() => { setSidebarCollapsed(false); setSidebarPeeking(false); }} aria-label="展开侧栏" title="展开侧栏"><FiChevronsRight /></button> : null}
+      {sidebarCollapsed ? <button type="button" className="desktop-sidebar-open icon-button" onMouseEnter={showSidebarPeek} onMouseLeave={scheduleSidebarPeekClose} onClick={() => applySidebarCollapsed(false)} aria-label="展开侧栏" title="展开侧栏"><FiChevronsRight /></button> : null}
       {sidebarOpen ? <button className="sidebar-backdrop" aria-label="关闭侧栏" onClick={() => setSidebarOpen(false)} /> : null}
       <aside className={`workspace-sidebar ${sidebarOpen ? "is-open" : ""} ${sidebarPeeking ? "is-peeking" : ""}`} onMouseEnter={() => sidebarCollapsed && showSidebarPeek()} onMouseLeave={scheduleSidebarPeekClose}>
         <header className="sidebar-header">
@@ -1096,7 +1122,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               </div>
             ) : null}
           </div>
-          <button type="button" className="sidebar-collapse icon-button" onClick={() => setSidebarCollapsed(true)} aria-label="收起侧栏" title="收起侧栏"><FiChevronsLeft /></button>
+          <button type="button" className="sidebar-collapse icon-button" onClick={() => applySidebarCollapsed(true)} aria-label="收起侧栏" title="收起侧栏"><FiChevronsLeft /></button>
           <button type="button" className="mobile-close icon-button" onClick={() => setSidebarOpen(false)} aria-label="关闭侧栏" title="关闭侧栏"><FiX /></button>
         </header>
         <nav className="sidebar-actions" aria-label="工作区操作">
@@ -1246,7 +1272,6 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               <strong>{activeFile?.title || "无标题"}</strong>
             )}
           </div>
-          <div className="document-header-actions" ref={setHeaderToolbarTarget} />
           {activeFile ? (
             <DocumentSaveStatus
               state={documentSaveStates[activeFile.id]}
@@ -1263,6 +1288,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               })}
             />
           ) : null}
+          <div className="document-header-actions" ref={setHeaderToolbarTarget} />
         </header>
         <div className="document-stage">
           {!serverReady ? null : activeDocumentStore && activeFile ? (
@@ -1844,7 +1870,7 @@ function NodeMenu({ node, nodes, anchor, moveOpen, onRename, onMoveToggle, onMov
 }
 
 /**
- * 保存状态只有一行字，出问题时才多出一个按钮。
+ * 正常保存是后台行为，标题栏只在失败或冲突需要用户处理时出现。
  *
  * conflict 和 error 要分开：error 重试一次通常就好了，而冲突意味着服务器上的版本比本地新，
  * 重试只会拿回同一个 409，必须由用户决定要不要换成服务器版本。
@@ -1857,9 +1883,7 @@ function DocumentSaveStatus({ state, noticeHidden, onRetry, onReload, onHideNoti
   onHideNotice: () => void;
   onShowNotice: () => void;
 }) {
-  if (!state) return null;
-  if (state.status === "saving") return <span className="document-save-status">保存中…</span>;
-  if (state.status === "saved") return <span className="document-save-status">已保存</span>;
+  if (!state || state.status === "saving" || state.status === "saved") return null;
   if (state.status === "error") {
     return (
       <span className="document-save-status is-error" title={state.message}>
@@ -1924,6 +1948,36 @@ function loadLastOpenFileId(userId: string) {
 function saveLastOpenFileId(userId: string, fileId: string) {
   try {
     window.localStorage.setItem(lastOpenFileStorageKey(userId), fileId);
+  } catch {
+    // Browser storage can be unavailable in private or restricted contexts.
+  }
+}
+
+/** 当前窗口宽度是不是走移动端那套。jsdom 没有 matchMedia，缺了就当桌面端。 */
+function isMobileViewport() {
+  if (typeof window.matchMedia !== "function") return false;
+  return window.matchMedia(MOBILE_VIEWPORT_QUERY).matches;
+}
+
+/**
+ * 桌面端侧栏该不该收起：没有记录就收起，有记录就照着用户上次的选择。
+ *
+ * 移动端一律返回 false。那边侧栏是 `sidebarOpen` 控制的抽屉，`is-collapsed` 会连着把它按成
+ * opacity: 0 / pointer-events: none——抽屉拉出来会是透明且点不动的，所以桌面这条偏好不能读。
+ */
+function loadSidebarCollapsed() {
+  if (isMobileViewport()) return false;
+  try {
+    // 只有明确记着「展开」才展开；没有记录、或者值被写坏了，都走桌面端默认的收起。
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+function saveSidebarCollapsed(collapsed: boolean) {
+  try {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "true" : "false");
   } catch {
     // Browser storage can be unavailable in private or restricted contexts.
   }

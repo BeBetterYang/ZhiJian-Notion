@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createInitialTree, type ZhiJianNode, type ZhiJianTree } from "../core/tree";
 import { blockNoteToTree, treeToBlockNote } from "../outline/blockNoteAdapter";
 import {
+  canFocusMindMapNode,
   displayClickAction,
   hiddenDescendantCount,
   isBlankMindMapSurface,
@@ -24,6 +25,14 @@ import {
 } from "./mindMapInteraction";
 
 describe("MindMap interaction state", () => {
+  it("allows focus below the current focus root but not on the root itself", () => {
+    expect(canFocusMindMapNode("root", null, "root")).toBe(false);
+    expect(canFocusMindMapNode("child", null, "root")).toBe(true);
+    expect(canFocusMindMapNode("child", "child", "root")).toBe(false);
+    expect(canFocusMindMapNode("grandchild", "child", "root")).toBe(true);
+    expect(canFocusMindMapNode(null, "child", "root")).toBe(false);
+  });
+
   it("selects on first click and edits on a second click", () => {
     expect(displayClickAction(null, null, "web", false)).toBe("select");
     expect(displayClickAction("web", null, "web", false)).toBe("edit");

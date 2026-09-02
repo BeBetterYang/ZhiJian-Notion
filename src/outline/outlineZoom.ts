@@ -1,5 +1,13 @@
 import type { ZhiJianTree } from "../core/tree";
 
+export function isProtectedOutlineRoot(
+  nodeId: string,
+  documentRootId: string | null,
+  zoomedNodeId: string | null,
+) {
+  return nodeId === documentRootId || nodeId === zoomedNodeId;
+}
+
 /**
  * 进入当前主题 (Ctrl ]) shows one node's subtree as though it were the whole
  * document. Like collapsing, it is done with CSS over the full projection rather

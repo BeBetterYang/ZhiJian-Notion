@@ -64,6 +64,14 @@ export function shouldExitEditing(editingTarget: EditingTarget, selectedNodeId: 
   return editingTarget !== null && editingTarget.nodeId !== selectedNodeId;
 }
 
+export function canFocusMindMapNode(
+  nodeId: string | null,
+  focusedRootId: string | null,
+  documentRootId: string,
+) {
+  return Boolean(nodeId && nodeId !== (focusedRootId ?? documentRootId));
+}
+
 export function sameEditingTarget(a: EditingTarget, b: EditingTarget) {
   if (a === b) return true;
   if (!a || !b) return false;

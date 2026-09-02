@@ -1617,7 +1617,7 @@ textarea {
 }
 
 .mindmap-canvas:not(.is-focus-mode) .context-menu .menu-list li[id="取消专注"],
-.mindmap-canvas.is-focus-mode .context-menu .menu-list li[id="专注"] {
+.mindmap-canvas .context-menu .menu-list li[hidden] {
   display: none;
 }
 
@@ -2107,6 +2107,22 @@ textarea {
 .map-container me-tpc:has(> .mindmap-add-child-button) + me-epd {
   opacity: 0 !important;
   pointer-events: none;
+}
+
+/* 拖动期间这颗按钮让位。MindElixir 的拖拽预览是 `.mind-elixir-ghost`，内容直接拷的是被拖
+   `me-tpc` 的 innerHTML，选中节点里的「新增下级」也一起被拷了进去；拷贝件的父元素不再是
+   `me-tpc`，上面那些定位规则一条都不命中，于是它以原始尺寸跟在预览文字后面，看着像按钮被拖
+   进了节点内容。预览只在拖动时存在，所以这条不挂状态 class——`.is-node-dragging` 要等指针走
+   过 8px 才加，而预览在 5px 就出来了，挂上去中间那几像素仍会闪一下。 */
+.map-container .mind-elixir-ghost .mindmap-add-child-button {
+  display: none;
+}
+
+/* 原按钮也一起收起，让拖拽画面里只剩节点本身：被拖的节点整块降到 0.5 不透明度，按钮留在原地
+   会和预览里的那颗一起出现两次。`.is-node-dragging` 由 `MindMapEditor` 在拖动真正开始时加到
+   `.mindmap-canvas` 上，pointerup / pointercancel 就移除，所以松手后按钮自己回来。 */
+.mindmap-canvas.is-node-dragging me-tpc > .mindmap-add-child-button {
+  display: none;
 }
 
 /* A table sets the node's width, not the 28em reading measure every other node is
