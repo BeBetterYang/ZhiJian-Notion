@@ -108,6 +108,10 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
   // requestId 记下来是因为这条 effect 也会因为别的 prop 变化重跑，不然一个请求会插好几张表。
   const pendingTableNodeId = useRef<string | null>(null);
   const handledTableRequestId = useRef<number | null>(null);
+  // 「把某个节点挪到视野中间」（工作区搜索跳转、导图里查找上一处/下一处）同样是一次性请求：
+  // requestId 记下来，否则那条 effect 每因为 `tree` 变化重跑一次，画布就被拽回同一个节点一次。
+  const handledFocusNodeRequestId = useRef<number | null>(null);
+  const focusNodeFrame = useRef(0);
   const storeRef = useRef(store);
   const onSelectRef = useRef(onSelectNode);
   const onSelectedNodeIdsRef = useRef(onSelectedNodeIdsChange);
@@ -405,6 +409,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
     window.cancelAnimationFrame(linkFrame.current);
     window.cancelAnimationFrame(geometryMeasureFrame.current);
     window.cancelAnimationFrame(decorationSaveFrame.current);
+    window.cancelAnimationFrame(focusNodeFrame.current);
   }, []);
 
   const reportNodeToolbar = useCallback((active: boolean) => onNodeToolbarRef.current(active), []);
@@ -733,17 +738,6 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
     beginNodeEdit(focusRequest.nodeId, focusRequest.focusBlockId);
   }, [beginNodeEdit, focusRequest, tree.nodes]);
 
-  useEffect(() => {
-    if (!focusNodeRequest?.nodeId || !tree.nodes[focusNodeRequest.nodeId]) return;
-    const mind = mindRef.current;
-    if (!mind) return;
-    const frame = window.requestAnimationFrame(() => {
-      selectAndCenterMindMapNode(mind, focusNodeRequest.nodeId);
-      selectTreeNode(focusNodeRequest.nodeId);
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [focusNodeRequest, selectTreeNode, tree.nodes]);
-
   /**
    * 「插入表格」：先收掉正在进行的编辑，再动 store。
    *
@@ -790,6 +784,29 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
     const frame = window.requestAnimationFrame(() => mindRef.current?.toCenter());
     return () => window.cancelAnimationFrame(frame);
   }, [zoomedNodeId]);
+
+  /**
+   * 把请求的节点挪到视野中间：工作区搜索跳转、导图里的查找命中项都走这一条。
+   *
+   * 声明位置和下面的表格一样有讲究：查找的命中项是跟着 `visibleNodeIds` 一起递过来的，
+   * 得等上面那条结构同步先把过滤后的投影画完，`findEle` 才找得到它、量到的位置才是最终位置。
+   * 帧记在 ref 上而不是用 effect 的清理函数取消：请求刚到的那一下往往紧跟着好几次重渲染，
+   * 一取消就再也没人补发了（requestId 已经记成处理过）。
+   */
+  useEffect(() => {
+    if (!focusNodeRequest?.nodeId || !tree.nodes[focusNodeRequest.nodeId]) return;
+    const mind = mindRef.current;
+    if (!mind) return;
+    if (handledFocusNodeRequestId.current === focusNodeRequest.requestId) return;
+    handledFocusNodeRequestId.current = focusNodeRequest.requestId;
+    const nodeId = focusNodeRequest.nodeId;
+    window.cancelAnimationFrame(focusNodeFrame.current);
+    focusNodeFrame.current = window.requestAnimationFrame(() => {
+      focusNodeFrame.current = 0;
+      selectAndCenterMindMapNode(mind, nodeId);
+      selectTreeNode(nodeId);
+    });
+  }, [focusNodeRequest, selectTreeNode, tree.nodes]);
 
   useEffect(() => {
     const previousNodeId = editingShellRef.current;

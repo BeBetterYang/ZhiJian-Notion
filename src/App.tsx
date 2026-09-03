@@ -132,6 +132,7 @@ export default function App({
   const importInputRef = useRef<HTMLInputElement>(null);
   const mindMapExportImageRef = useRef<(() => Promise<CapturedImage | null>) | null>(null);
   const handledFocusRequestIdRef = useRef<number | null>(null);
+  const mindMapFocusNodeRequestIdRef = useRef(0);
   const searchResultHighlightTimerRef = useRef<number | null>(null);
   const toolbarMoreRef = useRef<HTMLDivElement>(null);
   const collapseMenuRef = useRef<HTMLDivElement>(null);
@@ -175,6 +176,11 @@ export default function App({
   const selectedNode = selectedNodeId ? store.getNode(selectedNodeId) : null;
   const visibleSearchNodeIds = useMemo(() => searchVisibleNodeIds(tree, searchQuery), [searchQuery, tree]);
   const matchedNodeIds = useMemo(() => matchingNodeIds(tree, searchQuery), [searchQuery, tree]);
+  // 当前命中的那一处：上一处/下一处在它上面走，导图的聚焦定位也读它。索引可能还停在上一次
+  // 搜索的结果数量上，兜回第一处。
+  const activeMatchNodeId = matchedNodeIds[activeMatchIndex] ?? matchedNodeIds[0] ?? null;
+  const activeMatchNodeIdRef = useRef(activeMatchNodeId);
+  activeMatchNodeIdRef.current = activeMatchNodeId;
   // A table's cell colours come from BlockNote's own table handles, and the bridge
   // below cannot select a table block's text to act on in the first place.
   const isMindMapMediaSelected = selectedNode?.type === "table";
@@ -338,6 +344,18 @@ export default function App({
     store.replaceTreeFromView(replaceSearchMatch(store.getSnapshot(), searchQuery, replaceText, "all"));
   };
 
+  /**
+   * 请导图把某个节点挪到视野中间。
+   *
+   * 画布是一整块 CSS transform 定位、外面还套着 `overflow: hidden`，`scrollIntoView` 对它
+   * 不起作用，只有导图自己能用 `mind.move` 平移过去。requestId 由这里统一发号：工作区跳转和
+   * 文档内查找共用这一条通道，号不撞才能让导图那边靠它去重。
+   */
+  const requestMindMapFocusNode = useCallback((nodeId: string) => {
+    mindMapFocusNodeRequestIdRef.current += 1;
+    setMindMapFocusNodeRequest({ nodeId, requestId: mindMapFocusNodeRequestIdRef.current });
+  }, []);
+
   const goToSearchMatch = (direction: -1 | 1) => {
     if (!matchedNodeIds.length) return;
     const nextIndex = (activeMatchIndex + direction + matchedNodeIds.length) % matchedNodeIds.length;
@@ -346,13 +364,29 @@ export default function App({
     setActiveSearchNodeId(nodeId);
     setSelectedNodeId(nodeId);
     setSelectionActive(true);
+    if (activeView === "mindmap") {
+      requestMindMapFocusNode(nodeId);
+      return;
+    }
     window.requestAnimationFrame(() => {
-      const selector = activeView === "outline"
-        ? `.outline-panel .bn-block-outer[data-id="${cssEscape(nodeId)}"]`
-        : `.mindmap-canvas [data-node-id="${cssEscape(nodeId)}"]`;
-      document.querySelector(selector)?.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+      document
+        .querySelector(`.outline-panel .bn-block-outer[data-id="${cssEscape(nodeId)}"]`)
+        ?.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
     });
   };
+
+  /**
+   * 导图里一输入关键词就把第一处命中挪到视野中间——过滤后的投影可能整个落在视野外面，
+   * 不定位过去的话用户只看到一片空白画布。
+   *
+   * 只认关键词和视图两件事：命中项数组每次 `tree` 变化都是新的，跟着它跑会在节点里打字时
+   * 一直拽画布；换命中项由 `goToSearchMatch` 自己发请求，两边不重复。
+   */
+  useEffect(() => {
+    if (activeView !== "mindmap" || !searchQuery.trim()) return;
+    const nodeId = activeMatchNodeIdRef.current;
+    if (nodeId) requestMindMapFocusNode(nodeId);
+  }, [activeView, requestMindMapFocusNode, searchQuery]);
 
   useEffect(() => {
     if (!focusNodeRequest || !tree.nodes[focusNodeRequest.nodeId]) return;
@@ -370,7 +404,7 @@ export default function App({
     }
     if (activeView === "mindmap") {
       setActiveSearchNodeId(null);
-      setMindMapFocusNodeRequest({ nodeId, requestId: focusNodeRequest.requestId });
+      requestMindMapFocusNode(nodeId);
       return;
     }
     setActiveSearchNodeId(nodeId);
@@ -383,7 +417,7 @@ export default function App({
         .querySelector(`.outline-panel .bn-block-outer[data-id="${cssEscape(nodeId)}"]`)
         ?.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
     });
-  }, [activeView, focusNodeRequest, tree.nodes]);
+  }, [activeView, focusNodeRequest, requestMindMapFocusNode, tree.nodes]);
 
   useEffect(() => () => {
     if (searchResultHighlightTimerRef.current !== null) {
@@ -782,6 +816,9 @@ export default function App({
           onQueryChange={(query) => {
             setSearchQuery(query);
             setActiveSearchNodeId(null);
+            // 和关键词同一次提交里归零，导图那边算「第一处命中」时才不会先按上一次的序号
+            // 挑中一个不相干的节点、白定位一次。
+            setActiveMatchIndex(0);
           }}
           onReplacementChange={setReplaceText}
           onClose={() => {

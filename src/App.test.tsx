@@ -6,7 +6,16 @@ import { SHORTCUTS, formatShortcutHint } from "./shared/shortcuts/shortcutRegist
 
 // 两个编辑器都是懒加载的重依赖（BlockNote / MindElixir），这里只看标题栏的菜单，换成占位。
 vi.mock("./outline/OutlineEditor", () => ({ OutlineEditor: () => <div data-testid="outline-editor" /> }));
-vi.mock("./mindmap/MindMapEditor", () => ({ MindMapEditor: () => <div data-testid="mindmap-editor" /> }));
+vi.mock("./mindmap/MindMapEditor", () => ({
+  // 「聚焦到某个节点」是 App 递给导图的一次性请求，占位把它摊在属性上，好断言。
+  MindMapEditor: ({ focusNodeRequest }: { focusNodeRequest?: { nodeId: string; requestId: number } | null }) => (
+    <div
+      data-testid="mindmap-editor"
+      data-focus-node-id={focusNodeRequest?.nodeId ?? ""}
+      data-focus-request-id={focusNodeRequest?.requestId ?? ""}
+    />
+  ),
+}));
 
 import App from "./App";
 
@@ -154,5 +163,80 @@ describe("默认视图", () => {
 
     expect(await renderApp({ defaultView: "mindmap" })).toHaveAccessibleName("切换到思维导图");
     expect(screen.getByTestId("outline-editor")).toBeInTheDocument();
+  });
+});
+
+describe("导图里的查找定位", () => {
+  let store: TreeStore;
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    // createInitialTree: 产品规划 →（Web端、App端），搜「端」正好两处命中，顺序是 web、app。
+    store = new TreeStore(createInitialTree());
+  });
+
+  async function openSearch(defaultView: "outline" | "mindmap") {
+    render(<App store={store} defaultView={defaultView} />);
+    await screen.findByTestId(defaultView === "mindmap" ? "mindmap-editor" : "outline-editor");
+    fireEvent.click(screen.getByRole("button", { name: "查找替换" }));
+    return screen.getByPlaceholderText("搜索关键词");
+  }
+
+  function focusedNodeId() {
+    return screen.getByTestId("mindmap-editor").getAttribute("data-focus-node-id");
+  }
+
+  function focusRequestId() {
+    return screen.getByTestId("mindmap-editor").getAttribute("data-focus-request-id");
+  }
+
+  it("输入关键词就把第一处命中递给导图去定位", async () => {
+    const input = await openSearch("mindmap");
+    expect(focusedNodeId()).toBe("");
+
+    fireEvent.change(input, { target: { value: "端" } });
+
+    expect(focusedNodeId()).toBe("web");
+  });
+
+  it("上一处下一处换命中项，每次都是新的请求号", async () => {
+    const input = await openSearch("mindmap");
+    fireEvent.change(input, { target: { value: "端" } });
+    const firstRequestId = focusRequestId();
+
+    // 上一处/下一处挂在替换那一行里，先把它展开。
+    fireEvent.click(screen.getByRole("button", { name: "查找" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一处" }));
+
+    expect(focusedNodeId()).toBe("app");
+    expect(Number(focusRequestId())).toBeGreaterThan(Number(firstRequestId));
+
+    // 走到头绕回第一处，画布也得跟着回去，所以请求号还得再涨一次。
+    fireEvent.click(screen.getByRole("button", { name: "下一处" }));
+    expect(focusedNodeId()).toBe("web");
+
+    fireEvent.click(screen.getByRole("button", { name: "上一处" }));
+    expect(focusedNodeId()).toBe("app");
+  });
+
+  it("关键词换成没有命中的，画布留在原处", async () => {
+    const input = await openSearch("mindmap");
+    fireEvent.change(input, { target: { value: "端" } });
+    const requestId = focusRequestId();
+
+    fireEvent.change(input, { target: { value: "查无此词" } });
+
+    expect(focusedNodeId()).toBe("web");
+    expect(focusRequestId()).toBe(requestId);
+  });
+
+  it("在大纲里搜好再切到导图，命中项跟着定位过去", async () => {
+    const input = await openSearch("outline");
+    fireEvent.change(input, { target: { value: "端" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "切换到思维导图" }));
+    await screen.findByTestId("mindmap-editor");
+
+    expect(focusedNodeId()).toBe("web");
   });
 });
