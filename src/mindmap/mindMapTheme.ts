@@ -454,7 +454,7 @@ export function mindMapSubBranchPath(
 function elbowPath(fromX: number, fromY: number, toX: number, toY: number, rounded: boolean) {
   const towards = toX >= fromX ? 1 : -1;
   const trunkX = toX - towards * Math.min(TRUNK_GAP, Math.abs(toX - fromX) / 2);
-  if (Math.abs(toY - fromY) < 1) return `M ${round(fromX)} ${round(fromY)} H ${round(toX)}`;
+  if (Math.abs(toY - fromY) <= 1) return `M ${round(fromX)} ${round(fromY)} H ${round(toX)}`;
   if (rounded) {
     const vertical = toY >= fromY ? 1 : -1;
     const radius = Math.min(ROUNDED_CORNER_RADIUS, Math.abs(toX - trunkX), Math.abs(toY - fromY));
