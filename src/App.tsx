@@ -21,11 +21,11 @@ import {
 } from "react-icons/fi";
 import { markdownFileName, markdownImportTitle, markdownToTree, treeToMarkdown } from "./core/markdown/markdownDocument";
 import { outlineExportFileName, treeToOutlineHtmlDocument } from "./core/export/outlineDocument";
-import { createInitialTree, richTextToPlainText, type ZhiJianMindMapDefaults } from "./core/tree";
+import { createInitialTree, type ZhiJianMindMapDefaults } from "./core/tree";
 import { TreeStore, attachTreePersistence, loadPersistedTree } from "./core/treeStore";
 import { useTree } from "./core/treeStore/useTree";
 import type { MindMapTextSelection } from "./mindmap/MindMapEditor";
-import { zoomPath } from "./outline/outlineZoom";
+import { focusBreadcrumbItems as buildFocusBreadcrumbItems, type FocusBreadcrumbItem } from "./outline/outlineZoom";
 import type { DocumentViewState, MindMapViewportState } from "./shared/documentViewState";
 import { preloadEditorView } from "./shared/editorPreload";
 import { captureOutlinePng, downloadBlob, imageBlobToPdf, preloadImageExporter } from "./shared/exportFiles";
@@ -54,6 +54,11 @@ interface AppProps {
   toolbarTarget?: HTMLElement | null;
   onFocusBreadcrumbChange?: (state: FocusBreadcrumbState | null) => void;
   viewStateStorageKey?: string;
+  /**
+   * 这篇文档还没自己记住视图时先打开哪个（工作区偏好里的「默认视图」）。没给就是大纲笔记。
+   * 记过视图的文档以自己的记录为准——偏好只管新文档，不覆盖用户在某篇里切过的选择。
+   */
+  defaultView?: "outline" | "mindmap";
   focusNodeRequest?: {
     nodeId: string;
     query: string;
@@ -78,11 +83,7 @@ interface AppProps {
   readOnly?: boolean;
 }
 
-export interface FocusBreadcrumbItem {
-  id: string;
-  label: string;
-  current: boolean;
-}
+export type { FocusBreadcrumbItem, FocusBreadcrumbSibling } from "./outline/outlineZoom";
 
 export interface FocusBreadcrumbState {
   items: FocusBreadcrumbItem[];
@@ -97,6 +98,7 @@ export default function App({
   toolbarTarget = null,
   onFocusBreadcrumbChange,
   viewStateStorageKey,
+  defaultView = "outline",
   focusNodeRequest = null,
   onShare,
   onImportDocuments,
@@ -123,7 +125,7 @@ export default function App({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [mindMapSelectedNodeIds, setMindMapSelectedNodeIds] = useState<string[]>([]);
   const [selectionActive, setSelectionActive] = useState(false);
-  const [activeView, setActiveView] = useState<"outline" | "mindmap">(initialViewState?.activeView ?? "outline");
+  const [activeView, setActiveView] = useState<"outline" | "mindmap">(initialViewState?.activeView ?? defaultView);
   // Set while the node being edited in the map is formatting one of its own quote or
   // picture blocks, which it does through its own toolbar in the shared host.
   const [mindMapNodeToolbarActive, setMindMapNodeToolbarActive] = useState(false);
@@ -253,14 +255,10 @@ export default function App({
     }
   }, [tree, zoomedNodeId]);
 
-  const focusBreadcrumbItems = useMemo<FocusBreadcrumbItem[]>(() => {
-    if (!zoomedNodeId) return [];
-    return zoomPath(tree, zoomedNodeId).slice(1).map((nodeId, index, path) => ({
-      id: nodeId,
-      label: richTextToPlainText(tree.nodes[nodeId]?.content ?? { text: "" }) || "未命名",
-      current: index === path.length - 1,
-    }));
-  }, [tree, zoomedNodeId]);
+  const focusBreadcrumbItems = useMemo(
+    () => (zoomedNodeId ? buildFocusBreadcrumbItems(tree, zoomedNodeId) : []),
+    [tree, zoomedNodeId],
+  );
 
   const navigateFocusBreadcrumb = useCallback(
     (nodeId: string | null) => {

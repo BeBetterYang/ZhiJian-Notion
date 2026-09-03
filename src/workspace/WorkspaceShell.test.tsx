@@ -17,14 +17,29 @@ const serverMocks = vi.hoisted(() => ({
   updateWorkspaceAccount: vi.fn(),
 }));
 const editorPreloadMocks = vi.hoisted(() => ({ preloadEditorView: vi.fn() }));
+/** 假的专注面包屑：`items` 由用例摆好，点一下假编辑器里那颗按钮就交给工作区。 */
+const focusBreadcrumbMocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  items: [] as {
+    id: string;
+    label: string;
+    current: boolean;
+    siblings: { id: string; label: string; current: boolean }[];
+  }[],
+}));
 
 vi.mock("../App", () => ({
-  default: ({ store, onShare, favorite, onToggleFavorite, onDeleteDocument }: {
+  default: ({ store, defaultView, onShare, favorite, onToggleFavorite, onDeleteDocument, onFocusBreadcrumbChange }: {
     store: TreeStore;
+    defaultView?: "outline" | "mindmap";
     onShare?: () => void;
     favorite?: boolean;
     onToggleFavorite?: () => void;
     onDeleteDocument?: () => void;
+    onFocusBreadcrumbChange?: (state: {
+      items: typeof focusBreadcrumbMocks.items;
+      navigate: typeof focusBreadcrumbMocks.navigate;
+    } | null) => void;
   }) => {
     const tree = store.getSnapshot();
     return (
@@ -32,6 +47,7 @@ vi.mock("../App", () => ({
         data-testid="document-editor"
         data-theme={tree.mindMap?.theme?.id ?? ""}
         data-layout={tree.mindMap?.layout?.type ?? ""}
+        data-default-view={defaultView ?? ""}
       >
         {tree.nodes[tree.rootId]?.content.text}
         {onShare ? <button type="button" onClick={onShare}>分享</button> : null}
@@ -40,6 +56,18 @@ vi.mock("../App", () => ({
           <button type="button" onClick={onToggleFavorite}>{favorite ? "标题栏取消星标" : "标题栏添加星标"}</button>
         ) : null}
         {onDeleteDocument ? <button type="button" onClick={onDeleteDocument}>标题栏删除</button> : null}
+        {/* 进入专注模式：真编辑器算路径，这儿只把摆好的面包屑递上去。 */}
+        {onFocusBreadcrumbChange ? (
+          <button
+            type="button"
+            onClick={() => onFocusBreadcrumbChange({
+              items: focusBreadcrumbMocks.items,
+              navigate: focusBreadcrumbMocks.navigate,
+            })}
+          >
+            进入专注
+          </button>
+        ) : null}
       </div>
     );
   },
@@ -479,6 +507,84 @@ describe("工作区 Toast 反馈", () => {
     expect(screen.queryByText("已保存")).not.toBeInTheDocument();
     expect(await screen.findByText("保存失败", {}, { timeout: 3500 })).toBeInTheDocument();
     expect(getToastSnapshot().some((item) => item.message.includes("文档保存"))).toBe(false);
+  });
+});
+
+describe("默认视图偏好", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    window.history.replaceState(null, "", "/workspace.html");
+    editorPreloadMocks.preloadEditorView.mockReset().mockResolvedValue({});
+    serverMocks.saveWorkspaceState.mockReset().mockResolvedValue(undefined);
+    serverMocks.loadWorkspaceState.mockReset().mockResolvedValue({
+      profile: { name: "枝间用户", email: session.email, avatarUrl: "" },
+      nodes: [{ id: "file-1", title: "产品规划", type: "file", parentId: null, order: 0, favorite: false, openedAt: 1 }],
+      documents: { "file-1": createInitialTree() },
+    });
+  });
+
+  async function openPreferences() {
+    fireEvent.click(await screen.findByRole("button", { name: /枝间用户/ }));
+    fireEvent.click(screen.getByRole("button", { name: "设置" }));
+    fireEvent.click(screen.getByRole("button", { name: "偏好" }));
+  }
+
+  it("没设置过时选中大纲笔记，也不给文档传默认视图", async () => {
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+    expect(await screen.findByTestId("document-editor")).toHaveAttribute("data-default-view", "");
+
+    await openPreferences();
+
+    expect(screen.getByRole("radio", { name: "大纲笔记" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "思维导图" })).not.toBeChecked();
+  });
+
+  it("选了思维导图之后存进偏好，并传给文档做默认视图", async () => {
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+    await openPreferences();
+
+    fireEvent.click(screen.getByRole("radio", { name: "思维导图" }));
+
+    expect(screen.getByRole("radio", { name: "思维导图" })).toBeChecked();
+    expect(screen.getByTestId("document-editor")).toHaveAttribute("data-default-view", "mindmap");
+    await waitFor(() => expect(serverMocks.saveWorkspaceState).toHaveBeenCalledWith(
+      session,
+      expect.objectContaining({ preferences: expect.objectContaining({ defaultDocumentView: "mindmap" }) }),
+      expect.anything(),
+    ), { timeout: 2500 });
+  });
+
+  it("服务器上存着思维导图时，没记过视图的文档就按它预加载", async () => {
+    serverMocks.loadWorkspaceState.mockResolvedValue({
+      profile: { name: "枝间用户", email: session.email, avatarUrl: "" },
+      preferences: { defaultDocumentView: "mindmap" },
+      nodes: [{ id: "file-1", title: "产品规划", type: "file", parentId: null, order: 0, favorite: false, openedAt: 1 }],
+      documents: { "file-1": createInitialTree() },
+    });
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+
+    expect(await screen.findByTestId("document-editor")).toHaveAttribute("data-default-view", "mindmap");
+    // 服务器状态回来之前只能先按大纲猜，拿到偏好后要补上导图那一块，否则等的是错的分块。
+    expect(editorPreloadMocks.preloadEditorView).toHaveBeenCalledWith("mindmap");
+    await openPreferences();
+    expect(screen.getByRole("radio", { name: "思维导图" })).toBeChecked();
+  });
+
+  it("这篇自己记过大纲时不跟着偏好走", async () => {
+    window.localStorage.setItem("zhijian.workspace.document.file-1.view-state.v1", JSON.stringify({ activeView: "outline" }));
+    serverMocks.loadWorkspaceState.mockResolvedValue({
+      profile: { name: "枝间用户", email: session.email, avatarUrl: "" },
+      preferences: { defaultDocumentView: "mindmap" },
+      nodes: [{ id: "file-1", title: "产品规划", type: "file", parentId: null, order: 0, favorite: false, openedAt: 1 }],
+      documents: { "file-1": createInitialTree() },
+    });
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+
+    await screen.findByTestId("document-editor");
+    // 判断在 `App` 里：偏好只是兜底，这篇记着大纲就还是大纲，所以预加载也不该跑去要导图。
+    expect(editorPreloadMocks.preloadEditorView).not.toHaveBeenCalledWith("mindmap");
   });
 });
 
@@ -1076,5 +1182,140 @@ describe("标题栏菜单接到工作区", () => {
 
     expect(screen.queryByRole("heading", { name: "移到回收站？" })).not.toBeInTheDocument();
     expect(within(sidebar()).getByText("产品规划")).toBeInTheDocument();
+  });
+});
+
+describe("专注面包屑的同级弹层", () => {
+  /** 例子里的那条路径：产品规划 > 产品 > 枝间 > 编辑器。 */
+  function breadcrumbItems() {
+    return [
+      {
+        id: "product",
+        label: "产品",
+        current: false,
+        siblings: [
+          { id: "product", label: "产品", current: true },
+          { id: "market", label: "市场", current: false },
+        ],
+      },
+      {
+        id: "zhijian",
+        label: "枝间",
+        current: false,
+        siblings: [
+          { id: "notion", label: "Notion", current: false },
+          { id: "zhijian", label: "枝间", current: true },
+          { id: "obsidian", label: "Obsidian", current: false },
+          { id: "logseq", label: "Logseq", current: false },
+        ],
+      },
+      {
+        id: "editor",
+        label: "编辑器",
+        current: true,
+        siblings: [
+          { id: "editor", label: "编辑器", current: true },
+          { id: "sync", label: "同步", current: false },
+        ],
+      },
+    ];
+  }
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    window.history.replaceState(null, "", "/workspace.html");
+    focusBreadcrumbMocks.navigate.mockReset();
+    focusBreadcrumbMocks.items = [];
+    serverMocks.saveWorkspaceState.mockReset().mockResolvedValue(undefined);
+    serverMocks.saveWorkspaceDocument.mockReset().mockResolvedValue({ ok: true, revision: 1 });
+    serverMocks.loadWorkspaceState.mockReset().mockResolvedValue({
+      profile: { name: "枝间用户", email: session.email, avatarUrl: "" },
+      nodes: [{ id: "file-1", title: "产品规划", type: "file", parentId: null, order: 0, favorite: false, openedAt: 1 }],
+      documents: { "file-1": createInitialTree() },
+    });
+  });
+
+  async function enterFocus(items = breadcrumbItems()) {
+    focusBreadcrumbMocks.items = items;
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+    await screen.findByTestId("document-editor");
+    fireEvent.click(await screen.findByRole("button", { name: "进入专注" }));
+  }
+
+  function focusPart(label: string) {
+    const part = Array.from(document.querySelectorAll<HTMLElement>(".document-focus-part"))
+      .find((item) => item.textContent === label);
+    if (!part) throw new Error(`面包屑里没有「${label}」这一级。`);
+    return part;
+  }
+
+  function siblingMenu() {
+    return document.querySelector<HTMLElement>(".focus-sibling-menu");
+  }
+
+  it("悬浮一级就列出同级主题，顺序照原样，当前那个高亮", async () => {
+    await enterFocus();
+
+    expect(siblingMenu()).toBeNull();
+    fireEvent.mouseEnter(focusPart("枝间"));
+
+    const menu = siblingMenu()!;
+    expect(Array.from(menu.querySelectorAll("button")).map((button) => button.textContent))
+      .toEqual(["Notion", "枝间", "Obsidian", "Logseq"]);
+    expect(within(menu).getByRole("menuitem", { name: "枝间" })).toHaveClass("is-current");
+    expect(within(menu).getByRole("menuitem", { name: "Notion" })).not.toHaveClass("is-current");
+  });
+
+  it("点同级主题就换过去，弹层随手关掉", async () => {
+    await enterFocus();
+
+    fireEvent.mouseEnter(focusPart("枝间"));
+    fireEvent.click(within(siblingMenu()!).getByRole("menuitem", { name: "Obsidian" }));
+
+    expect(focusBreadcrumbMocks.navigate).toHaveBeenCalledWith("obsidian");
+    expect(siblingMenu()).toBeNull();
+  });
+
+  it("最末一级也能弹，文档标题自己不弹", async () => {
+    await enterFocus();
+
+    // 文档标题那颗按钮点了是退出专注，它没有「同级主题」这回事。
+    fireEvent.mouseEnter(document.querySelector<HTMLElement>(".document-path-current")!);
+    expect(siblingMenu()).toBeNull();
+
+    fireEvent.mouseEnter(focusPart("编辑器"));
+    expect(within(siblingMenu()!).getByRole("menuitem", { name: "同步" })).toBeInTheDocument();
+  });
+
+  it("没有别的同级时不弹层，原来的点击返回还在", async () => {
+    await enterFocus([
+      { id: "product", label: "产品", current: false, siblings: [{ id: "product", label: "产品", current: true }] },
+      { id: "editor", label: "编辑器", current: true, siblings: [{ id: "editor", label: "编辑器", current: true }] },
+    ]);
+
+    fireEvent.mouseEnter(focusPart("产品"));
+    expect(siblingMenu()).toBeNull();
+
+    fireEvent.click(within(focusPart("产品")).getByRole("button", { name: "产品" }));
+    expect(focusBreadcrumbMocks.navigate).toHaveBeenCalledWith("product");
+  });
+
+  it("指针从面包屑挪到弹层的这段路上不关，真离开了才关", async () => {
+    // 弹层 portal 到了 body，指针一离开这一级 `mouseleave` 就到了：没有那点延时，这段路走不完。
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await enterFocus();
+      fireEvent.mouseEnter(focusPart("枝间"));
+      fireEvent.mouseLeave(focusPart("枝间"));
+      fireEvent.mouseEnter(siblingMenu()!);
+      act(() => void vi.advanceTimersByTime(1000));
+      expect(siblingMenu()).not.toBeNull();
+
+      fireEvent.mouseLeave(siblingMenu()!);
+      act(() => void vi.advanceTimersByTime(1000));
+      expect(siblingMenu()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -272,6 +272,16 @@ button { color: inherit; }
 .document-focus-part:last-child { max-width: 220px; flex-shrink: 0; }
 .document-focus-part button:disabled { color: #37352f; font-weight: 600; cursor: default; }
 .document-focus-current { max-width: 220px; color: #565550; font-weight: 400; }
+/* 同级主题弹层。portal 到 body，所以是 fixed 定位，左上角由 JS 按面包屑那一级算出来。
+   宽度跟着最长的那条标题走（`max-content`），到 220px 就不再变宽，长标题在各自那一行里打省略号；
+   窄到一两个字时给个下限，否则弹层会瘦成一条。这个 220 上限和 `WorkspaceShell` 里夹左边距用的
+   `FOCUS_SIBLING_MENU_MAX_WIDTH` 是同一个数。 */
+.focus-sibling-menu { position: fixed; z-index: 60; width: max-content; min-width: 120px; max-width: min(220px, calc(100vw - 16px)); max-height: min(320px, 60vh); display: flex; flex-direction: column; gap: 1px; padding: 4px; overflow-y: auto; border: 1px solid rgba(55, 53, 47, 0.09); border-radius: 8px; background: #fff; box-shadow: 0 8px 24px rgba(15, 15, 15, 0.12); }
+/* 省略号要落在按钮自己身上，所以这里是块级：`display: flex` 的话文字会被塞进匿名 flex item，
+   `text-overflow` 就不作用在它上面，长标题只会被裁掉、不出现省略号。 */
+.focus-sibling-menu button { min-height: 28px; display: block; padding: 4px 8px; border: 0; border-radius: 4px; background: transparent; color: #37352f; font: inherit; font-size: 14px; line-height: 20px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.focus-sibling-menu button:hover { background: rgba(55, 53, 47, 0.06); }
+.focus-sibling-menu button.is-current { background: rgba(35, 131, 226, 0.1); color: #2f6fd0; }
 .document-stage { min-height: 0; display: flex; flex: 1; overflow: hidden; }
 .document-empty-state { width: 100%; display: grid; place-items: center; color: #9b9a97; font-size: 14px; }
 .document-placeholder { width: min(760px, 100%); color: #37352f; }
@@ -282,13 +292,18 @@ button { color: inherit; }
 
 .settings-layer { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 50px; background: rgba(15, 15, 15, 0.52); }
 .settings-dialog { position: relative; width: min(1150px, calc(100vw - 100px)); height: min(720px, calc(100vh - 100px)); display: flex; overflow: hidden; border: 1px solid rgba(55, 53, 47, 0.1); border-radius: 8px; background: #fff; box-shadow: 0 24px 80px rgba(15, 15, 15, 0.28); }
+/* 设置弹窗的左侧菜单和主页侧栏用同一套节奏：31px 行高、4px 行距、行内 8px 内缩、17px 图标、
+   同一档 hover 底色（见 `.sidebar-actions` / `.sidebar-action` / `.section-label`）。
+   行宽改成撑满、靠分组的 8px 内边距留出边距，不再用 `margin: 0 6px` 那种和主页对不上的写法。 */
 .settings-sidebar { width: 240px; flex: none; overflow-x: hidden; overflow-y: auto; padding: 4px 0; background: #fbfbfa; }
-.settings-sidebar-group { padding: 8px 0; }
-.settings-sidebar-title { padding: 4px 16px; color: #9b9a97; font-size: 12px; font-weight: 600; }
-.settings-tab { width: calc(100% - 12px); height: 32px; display: flex; align-items: center; gap: 9px; margin: 0 6px; padding: 0 10px; border: 0; border-radius: 5px; background: transparent; color: #55534e; font-size: 14px; text-align: left; cursor: pointer; }
-.settings-tab:hover, .settings-tab.is-active { background: rgba(55, 53, 47, 0.08); color: #37352f; }
-.settings-tab > svg { width: 16px; height: 16px; color: #8b8a85; }
-.settings-tab-avatar { width: 22px; height: 22px; display: inline-flex; flex: none; align-items: center; justify-content: center; border-radius: 50%; background: #37352f; color: #fff; font-size: 11px; font-weight: 700; }
+.settings-sidebar-group { display: flex; flex-direction: column; gap: 4px; padding: 0 8px 11px; }
+.settings-sidebar-title { height: 31px; display: flex; align-items: center; padding: 0 8px; color: #9b9a97; font-size: 12px; font-weight: 600; }
+.settings-tab { width: 100%; height: 31px; display: flex; align-items: center; gap: 9px; padding: 0 8px; border: 0; border-radius: 5px; background: transparent; color: #55534e; font-size: 14px; text-align: left; cursor: pointer; }
+.settings-tab:hover, .settings-tab.is-active { background: rgba(55, 53, 47, 0.07); color: #37352f; }
+.settings-tab > svg { width: 17px; height: 17px; flex: none; }
+/* 只挑标签那个 span：头像也是直接子元素，别让它跟着被拉伸。 */
+.settings-tab > span:last-child { min-width: 0; flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.settings-tab-avatar { width: 20px; height: 20px; display: inline-flex; flex: none; align-items: center; justify-content: center; border-radius: 50%; background: #37352f; color: #fff; font-size: 11px; font-weight: 700; }
 .settings-tab-avatar img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
 .settings-content { position: relative; min-width: 0; flex: 1; overflow-x: hidden; overflow-y: auto; padding: 36px 60px 40px; background: #fff; }
 .settings-close { position: absolute; z-index: 3; top: 12px; right: 12px; color: #8b8a85; }
@@ -319,6 +334,14 @@ button { color: inherit; }
 .settings-rule small { color: #8b8a85; font-size: 12px; }
 .settings-rule > button, .settings-actions button { height: 32px; flex: none; padding: 0 11px; border: 1px solid rgba(55, 53, 47, 0.14); border-radius: 5px; background: #fff; font-size: 13px; cursor: pointer; }
 .settings-rule > button:hover, .settings-actions button:hover { background: #f5f5f3; }
+/* 偏好里的二选一分段控件。原生 radio 只是被压成 0 尺寸藏起来，方向键切换和读屏的「单选」语义都还在；
+   选中态和焦点环都靠 `:has()` 画到外面那颗 label 上，键盘用户才看得出自己停在哪一个上。 */
+.settings-choice { display: flex; flex: none; gap: 2px; padding: 2px; border: 1px solid rgba(55, 53, 47, 0.14); border-radius: 6px; background: #f7f7f5; }
+.settings-choice label { min-height: 28px; display: flex; align-items: center; padding: 0 12px; border-radius: 4px; color: #55534e; font-size: 13px; cursor: pointer; }
+.settings-choice label:hover { color: #37352f; }
+.settings-choice input { width: 0; height: 0; margin: 0; opacity: 0; }
+.settings-choice label:has(input:checked) { background: #fff; color: #37352f; font-weight: 550; box-shadow: 0 1px 2px rgba(15, 15, 15, 0.1); }
+.settings-choice label:has(input:focus-visible) { outline: 2px solid rgba(35, 131, 226, 0.6); outline-offset: 1px; }
 .settings-inline-editor { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 2px 0 10px; }
 .settings-inline-editor > span { color: #8b8a85; font-size: 12px; }
 .settings-inline-editor input { width: min(330px, 48%); }
@@ -388,9 +411,11 @@ button { color: inherit; }
   .settings-layer { padding: 12px; }
   .settings-dialog { width: calc(100vw - 24px); height: calc(100vh - 24px); flex-direction: column; }
   .settings-sidebar { width: 100%; display: flex; overflow: hidden; padding: 7px; border-bottom: 1px solid rgba(55, 53, 47, 0.1); }
-  .settings-sidebar-group { display: flex; flex-wrap: wrap; gap: 4px; padding: 0; }
+  /* 窄屏这排菜单是横着的标签条，得把桌面那条 `flex-direction: column` 掰回来，否则会竖着摞起来。 */
+  .settings-sidebar-group { display: flex; flex-direction: row; flex-wrap: wrap; gap: 4px; padding: 0; }
   .settings-sidebar-title { display: none; }
   .settings-tab { width: auto; padding: 0 12px; white-space: nowrap; }
+  .settings-tab > span:last-child { flex: none; }
   .settings-content { padding: 28px 20px 32px; }
   .settings-content-header { margin-bottom: 30px; }
   .settings-rule { align-items: flex-start; flex-direction: column; gap: 9px; padding: 10px 0; }

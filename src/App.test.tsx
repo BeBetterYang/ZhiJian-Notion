@@ -123,3 +123,36 @@ describe("标题栏「更多」菜单", () => {
     expect(within(menu).queryByRole("menuitem", { name: "删除" })).not.toBeInTheDocument();
   });
 });
+
+describe("默认视图", () => {
+  const viewStateStorageKey = "zhijian.test.document.view-state.v1";
+  let store: TreeStore;
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    store = new TreeStore(createInitialTree());
+  });
+
+  // 切换按钮上写的是「要切去哪」，所以它的名字反过来告诉我们现在开着的是哪个视图。
+  async function renderApp(props: Partial<Parameters<typeof App>[0]> = {}) {
+    render(<App store={store} viewStateStorageKey={viewStateStorageKey} {...props} />);
+    return screen.findByRole("button", { name: /切换到/ });
+  }
+
+  it("没给偏好时开大纲笔记", async () => {
+    expect(await renderApp()).toHaveAccessibleName("切换到思维导图");
+    expect(screen.getByTestId("outline-editor")).toBeInTheDocument();
+  });
+
+  it("偏好选了思维导图，没记过视图的文档就直接开导图", async () => {
+    expect(await renderApp({ defaultView: "mindmap" })).toHaveAccessibleName("切换到大纲笔记");
+    expect(await screen.findByTestId("mindmap-editor")).toBeInTheDocument();
+  });
+
+  it("这篇自己记过视图时以它为准，偏好不覆盖", async () => {
+    window.localStorage.setItem(viewStateStorageKey, JSON.stringify({ activeView: "outline" }));
+
+    expect(await renderApp({ defaultView: "mindmap" })).toHaveAccessibleName("切换到思维导图");
+    expect(screen.getByTestId("outline-editor")).toBeInTheDocument();
+  });
+});

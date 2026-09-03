@@ -16,6 +16,11 @@ export interface WorkspaceProfile {
 
 export interface WorkspacePreferences {
   mindMapDefaults?: ZhiJianMindMapDefaults;
+  /**
+   * 新建（以及任何还没自己记住视图的）文档先打开哪个视图。没有这条就按大纲笔记来。
+   * 和 `mindMapDefaults` 一样跟着账号存在服务器上，换台机器登录还是同一套偏好。
+   */
+  defaultDocumentView?: "outline" | "mindmap";
 }
 
 export interface WorkspaceServerState {

@@ -32,7 +32,7 @@ import {
 import { FaStar } from "react-icons/fa";
 // 展开态的文件夹图标：Feather 没有「打开的文件夹」，Lucide 本身是 Feather 的分支，线条粗细一致。
 import { LuFolderOpen } from "react-icons/lu";
-import App, { type FocusBreadcrumbState } from "../App";
+import App, { type FocusBreadcrumbItem, type FocusBreadcrumbState } from "../App";
 import { richTextToPlainText, cloneTree, plainTextContent, type ZhiJianMindMapDefaults, type ZhiJianNode, type ZhiJianTree } from "../core/tree";
 import { TreeStore } from "../core/treeStore";
 import type { WorkspaceSession } from "./auth";
@@ -330,7 +330,6 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const breadcrumbs = activeFile ? folderPath(nodes, activeFile.id) : [];
   const focusBreadcrumbItems = focusBreadcrumbState?.items ?? [];
   const focusedTitle = focusBreadcrumbItems.at(-1)?.label ?? null;
-  const focusAncestorItems = focusedTitle ? focusBreadcrumbItems.slice(0, -1) : [];
   const activeDocumentStore = activeFile
     ? getDocumentStore(documentStores.current, activeFile, workspacePreferences.mindMapDefaults)
     : null;
@@ -418,7 +417,9 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         const rememberedFileId = loadLastOpenFileId(sessionRef.current.userId);
         const restoredFile = nextNodes.find((node) => node.id === rememberedFileId && node.type === "file");
         const nextActiveFileId = linkedFile?.id ?? restoredFile?.id ?? firstFile?.id ?? "";
-        const activeEditorView = nextActiveFileId ? loadDocumentEditorView(nextActiveFileId) : initialEditorView;
+        const activeEditorView = nextActiveFileId
+          ? loadDocumentEditorView(nextActiveFileId, state?.preferences?.defaultDocumentView ?? "outline")
+          : initialEditorView;
         requiredEditorView = activeEditorView;
         if (activeEditorView !== initialEditorView) {
           setInitialEditorReady(false);
@@ -538,6 +539,14 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       ...current,
       mindMapDefaults: mergeMindMapDefaults(current.mindMapDefaults, patch),
     }));
+  }, []);
+
+  /**
+   * 改「默认视图」只写偏好，不动任何已经打开过的文档——每篇自己记住的视图仍然优先。
+   * 写进 `workspacePreferences` 之后由上面那个防抖 effect 顺手同步到服务器。
+   */
+  const updateDefaultDocumentView = useCallback((view: "outline" | "mindmap") => {
+    setWorkspacePreferences((current) => ({ ...current, defaultDocumentView: view }));
   }, []);
 
   useEffect(() => {
@@ -1273,18 +1282,9 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                 <button type="button" className="document-path-current" onClick={() => focusBreadcrumbState.navigate(null)}>
                   {activeFile?.title || "无标题"}
                 </button>
-                {focusAncestorItems.map((item) => (
-                  <span className="breadcrumb-part document-focus-part" key={item.id}>
-                    <FiChevronRight />
-                    <button type="button" onClick={() => focusBreadcrumbState.navigate(item.id)}>
-                      {item.label}
-                    </button>
-                  </span>
+                {focusBreadcrumbItems.map((item) => (
+                  <FocusBreadcrumbPart key={item.id} item={item} onNavigate={focusBreadcrumbState.navigate} />
                 ))}
-                <span className="breadcrumb-part document-focus-part is-current">
-                  <FiChevronRight />
-                  <span className="document-focus-current">{focusedTitle}</span>
-                </span>
               </>
             ) : (
               <strong>{activeFile?.title || "无标题"}</strong>
@@ -1326,6 +1326,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               onLocalizeImportedTree={localizeImportedTree}
               mindMapDefaults={workspacePreferences.mindMapDefaults}
               onMindMapDefaultsChange={updateMindMapDefaults}
+              defaultView={workspacePreferences.defaultDocumentView}
               focusNodeRequest={
                 documentFocusRequest?.fileId === activeFile.id
                   ? documentFocusRequest
@@ -1379,6 +1380,36 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               ) : (
                 <div className="preferences-settings">
                   <header className="settings-content-header"><h2>偏好</h2><p>自定义工作区使用体验</p></header>
+                  <section className="settings-section">
+                    <h3>文档</h3>
+                    <div className="settings-rule">
+                      <span>
+                        <strong>默认视图</strong>
+                        <small>新建文档先用哪个视图打开。已经切过视图的文档仍按它自己记住的来。</small>
+                      </span>
+                      {/* 用原生 radio 拼分段控件：方向键切换、读屏报「单选」都是浏览器自带的，样式全交给 `:has(:checked)`。 */}
+                      <div className="settings-choice" role="radiogroup" aria-label="默认视图">
+                        <label>
+                          <input
+                            type="radio"
+                            name="default-document-view"
+                            checked={(workspacePreferences.defaultDocumentView ?? "outline") === "outline"}
+                            onChange={() => updateDefaultDocumentView("outline")}
+                          />
+                          <span>大纲笔记</span>
+                        </label>
+                        <label>
+                          <input
+                            type="radio"
+                            name="default-document-view"
+                            checked={workspacePreferences.defaultDocumentView === "mindmap"}
+                            onChange={() => updateDefaultDocumentView("mindmap")}
+                          />
+                          <span>思维导图</span>
+                        </label>
+                      </div>
+                    </div>
+                  </section>
                   <section className="settings-section">
                     <h3>存储</h3>
                     <div className="settings-rule">
@@ -1488,14 +1519,20 @@ function loadInitialWorkspaceEditorView(userId: string): "outline" | "mindmap" {
   return loadDocumentEditorView(fileId);
 }
 
-function loadDocumentEditorView(fileId: string): "outline" | "mindmap" {
+/**
+ * `fallback` 是工作区偏好里的「默认视图」：只有这篇文档还没自己记住视图时才用得上，
+ * 和 `App` 里那份判断保持一致，免得预加载的分块和真正渲染的编辑器对不上、白等一次。
+ * 服务器状态还没回来时（`loadInitialWorkspaceEditorView`）偏好未知，只能先按大纲猜。
+ */
+function loadDocumentEditorView(fileId: string, fallback: "outline" | "mindmap" = "outline"): "outline" | "mindmap" {
   try {
     const raw = window.localStorage.getItem(documentViewStorageKey(fileId));
-    if (!raw) return "outline";
+    if (!raw) return fallback;
     const view = (JSON.parse(raw) as { activeView?: unknown }).activeView;
-    return view === "mindmap" ? "mindmap" : "outline";
+    if (view === "mindmap") return "mindmap";
+    return view === "outline" ? "outline" : fallback;
   } catch {
-    return "outline";
+    return fallback;
   }
 }
 
@@ -1888,6 +1925,94 @@ function NodeMenu({ node, nodes, anchor, moveOpen, onRename, onMoveToggle, onMov
       <button type="button" className="danger" onClick={onDelete}><FiTrash2 />删除</button>
     </div>,
     document.body,
+  );
+}
+
+/**
+ * 弹层最宽能到多少，夹左边距时按这个上限算，和 `.focus-sibling-menu` 的 `max-width` 是同一个数。
+ * 弹层实际宽度跟着标题长短收缩，这里按上限夹只会让它离右边缘更远一点，不会溢出屏幕。
+ */
+const FOCUS_SIBLING_MENU_MAX_WIDTH = 220;
+
+/**
+ * 专注面包屑的一级：悬浮时列出同级主题，点一下就横向换过去，只有自己一个同级时不弹层。
+ *
+ * 弹层要 portal 到 body：`.document-path` 上有 `overflow: hidden`（面包屑靠它做省略号截断），
+ * 留在里面会被那 46px 高的标题栏裁掉。
+ *
+ * 关闭留了一点延时：portal 出去之后弹层不再是这一级的后代，指针刚离开文字 `mouseleave` 就到了，
+ * 没有延时的话根本走不到弹层上。
+ */
+function FocusBreadcrumbPart({ item, onNavigate }: {
+  item: FocusBreadcrumbItem;
+  onNavigate: (nodeId: string) => void;
+}) {
+  const partRef = useRef<HTMLSpanElement>(null);
+  const closeTimer = useRef<number | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const hasSiblings = item.siblings.length > 1;
+
+  const cancelClose = useCallback(() => {
+    if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  }, []);
+  useEffect(() => cancelClose, [cancelClose]);
+
+  const openMenu = () => {
+    cancelClose();
+    const rect = partRef.current?.getBoundingClientRect();
+    if (!hasSiblings || !rect) return;
+    setMenuPosition({
+      top: rect.bottom + 4,
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - FOCUS_SIBLING_MENU_MAX_WIDTH - 8)),
+    });
+  };
+  const closeMenu = () => {
+    cancelClose();
+    closeTimer.current = window.setTimeout(() => setMenuPosition(null), 180);
+  };
+
+  return (
+    <span
+      ref={partRef}
+      className={`breadcrumb-part document-focus-part${item.current ? " is-current" : ""}`}
+      onMouseEnter={openMenu}
+      onMouseLeave={closeMenu}
+    >
+      <FiChevronRight />
+      {item.current ? (
+        <span className="document-focus-current">{item.label}</span>
+      ) : (
+        <button type="button" onClick={() => onNavigate(item.id)}>{item.label}</button>
+      )}
+      {menuPosition ? createPortal(
+        <div
+          className="focus-sibling-menu"
+          role="menu"
+          aria-label={`${item.label} 的同级主题`}
+          style={{ top: menuPosition.top, left: menuPosition.left }}
+          onMouseEnter={cancelClose}
+          onMouseLeave={closeMenu}
+        >
+          {item.siblings.map((sibling) => (
+            <button
+              key={sibling.id}
+              type="button"
+              role="menuitem"
+              className={sibling.current ? "is-current" : undefined}
+              onClick={() => {
+                cancelClose();
+                setMenuPosition(null);
+                onNavigate(sibling.id);
+              }}
+            >
+              {sibling.label}
+            </button>
+          ))}
+        </div>,
+        document.body,
+      ) : null}
+    </span>
   );
 }
 
