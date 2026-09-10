@@ -90,6 +90,25 @@ export function mindMapUpdateMode(structureChanged: boolean, editing: boolean) {
   return editing ? "defer-structure" as const : "refresh-structure" as const;
 }
 
+export function mindMapScrollbarRange(
+  translation: number,
+  viewportStart: number,
+  viewportSize: number,
+  contentStart: number,
+  contentSize: number,
+) {
+  const viewportCenter = viewportStart + viewportSize / 2;
+  const contentEnd = contentStart + contentSize;
+  const min = translation + Math.min(0, viewportCenter - contentEnd);
+  const max = translation + Math.max(0, viewportCenter - contentStart);
+  return {
+    min,
+    max,
+    position: max - translation,
+    size: max - min,
+  };
+}
+
 export function resolveMindMapFocusBlockId(nodeId: string, availableBlockIds: string[], requestedBlockId?: string) {
   return requestedBlockId && availableBlockIds.includes(requestedBlockId) ? requestedBlockId : nodeId;
 }

@@ -13,6 +13,7 @@ import {
   mindMapMeasuredSizeChanged,
   mindMapPressTarget,
   mindMapScaleFromTransform,
+  mindMapScrollbarRange,
   mindMapUpdateMode,
   nodeDocumentSignature,
   nodeTextSelectionOffsets,
@@ -394,6 +395,21 @@ describe("mind map geometry measurement", () => {
     expect(mindMapScaleFromTransform("matrix(0.8, 0, 0, 0.8, 12.5, -4.25)")).toBe(0.8);
     expect(mindMapScaleFromTransform("matrix3d(0.75, 0, 0, 0, 0, 0.75, 0, 0, 0, 0, 1, 0, 20, 30, 0, 1)")).toBe(0.75);
     expect(mindMapScaleFromTransform("none", 0.625)).toBe(0.625);
+  });
+
+  it("maps canvas translation to a stable scrollbar range", () => {
+    expect(mindMapScrollbarRange(120, 20, 800, -80, 1200)).toEqual({
+      min: -580,
+      max: 620,
+      position: 500,
+      size: 1200,
+    });
+    expect(mindMapScrollbarRange(-80, 20, 800, -280, 1200)).toEqual({
+      min: -580,
+      max: 620,
+      position: 700,
+      size: 1200,
+    });
   });
 
   it("only treats table and image editors as live geometry editors", () => {

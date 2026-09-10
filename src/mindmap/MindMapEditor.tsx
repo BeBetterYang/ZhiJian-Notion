@@ -24,7 +24,7 @@ import {
   sameMindMapDecorations,
 } from "./mindMapDecorations";
 import { mindMapFloatingFrameSize } from "./mindMapFloatingFrame";
-import { MINDMAP_DRAGGING_CLASS, canFocusMindMapNode, displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, isMindMapAnnotationTarget, mindMapDisplayDragTopic, mindMapMeasuredSizeChanged, mindMapPressTarget, mindMapScaleFromTransform, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, unscaledMindMapSize, updateMindMapPointerSession, type EditingTarget, type MindMapMeasuredSize, type MindMapPointerSession, type MindMapPressTarget } from "./mindMapInteraction";
+import { MINDMAP_DRAGGING_CLASS, canFocusMindMapNode, displayClickAction, hiddenDescendantCount, isBlankMindMapSurface, isMindMapAnnotationTarget, mindMapDisplayDragTopic, mindMapMeasuredSizeChanged, mindMapPressTarget, mindMapScaleFromTransform, mindMapScrollbarRange, mindMapUpdateMode, sameEditingTarget, shouldExitEditing, unscaledMindMapSize, updateMindMapPointerSession, type EditingTarget, type MindMapMeasuredSize, type MindMapPointerSession, type MindMapPressTarget } from "./mindMapInteraction";
 import { createMindElixirTheme, MIND_MAP_BACKGROUND_PRESETS, MIND_MAP_THEME_GROUPS, MIND_MAP_THEME_PRESETS, resolveMindMapTheme, type MindMapTheme } from "./mindMapTheme";
 import { insertMindMapTable } from "./mindMapTableInsertion";
 import {
@@ -90,6 +90,9 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
   const roundedConnectors = tree.mindMap?.connector?.rounded ?? false;
   const roundedFrames = tree.mindMap?.frame?.rounded ?? false;
   const containerRef = useRef<HTMLDivElement>(null);
+  const horizontalScrollbarRef = useRef<HTMLInputElement>(null);
+  const verticalScrollbarRef = useRef<HTMLInputElement>(null);
+  const scrollbarRanges = useRef({ horizontalMax: 0, verticalMax: 0 });
   const mindRef = useRef<MindElixir | null>(null);
   const suppressOperation = useRef(false);
   const initialTree = useRef(tree);
@@ -197,6 +200,50 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
     if (!mind) return;
     mind.scale(scale);
   };
+
+  const syncMindMapScrollbars = useCallback((mind: MindElixir | null = mindRef.current) => {
+    const horizontal = horizontalScrollbarRef.current;
+    const vertical = verticalScrollbarRef.current;
+    const viewport = mind ? readMindMapViewport(mind) : null;
+    if (!mind || !viewport || !horizontal || !vertical) return;
+
+    const containerRect = mind.container.getBoundingClientRect();
+    const contentRect = mind.nodes.getBoundingClientRect();
+    const horizontalRange = mindMapScrollbarRange(
+      viewport.x,
+      containerRect.left,
+      containerRect.width,
+      contentRect.left,
+      contentRect.width,
+    );
+    const verticalRange = mindMapScrollbarRange(
+      viewport.y,
+      containerRect.top,
+      containerRect.height,
+      contentRect.top,
+      contentRect.height,
+    );
+
+    scrollbarRanges.current = {
+      horizontalMax: horizontalRange.max,
+      verticalMax: verticalRange.max,
+    };
+    updateMindMapScrollbar(horizontal, horizontalRange.position, horizontalRange.size);
+    updateMindMapScrollbar(vertical, verticalRange.position, verticalRange.size);
+  }, []);
+
+  const moveMindMapFromScrollbar = useCallback((axis: "horizontal" | "vertical", position: number) => {
+    const mind = mindRef.current;
+    const viewport = mind ? readMindMapViewport(mind) : null;
+    if (!mind || !viewport) return;
+    if (axis === "horizontal") {
+      const nextX = scrollbarRanges.current.horizontalMax - position;
+      mind.move(nextX - viewport.x, 0);
+    } else {
+      const nextY = scrollbarRanges.current.verticalMax - position;
+      mind.move(0, nextY - viewport.y);
+    }
+  }, []);
 
   const toggleFullscreen = async () => {
     const fullscreenTarget = containerRef.current?.closest<HTMLElement>(".mindmap-pane-body");
@@ -472,6 +519,11 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
         initialLayoutRef.current,
       ),
     });
+    const toCenter = mind.toCenter.bind(mind);
+    mind.toCenter = () => {
+      toCenter();
+      syncMindMapScrollbars(mind);
+    };
     mind.init({ ...treeToMindElixir(initialTree.current, projectionOptionsRef.current), direction: directionRef.current });
     mind.bus.addListener("showContextMenu", () => {
       const item = containerRef.current?.querySelector<HTMLElement>(
@@ -581,11 +633,13 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
     mind.bus.addListener("move", () => {
       const viewport = readMindMapViewport(mind);
       if (viewport) onViewportChange?.(viewport);
+      syncMindMapScrollbars(mind);
     });
     mind.bus.addListener("scale", (scale: number) => {
       setScalePercent(Math.round(scale * 100));
       const viewport = readMindMapViewport(mind);
       if (viewport) onViewportChange?.(viewport);
+      syncMindMapScrollbars(mind);
     });
     mind.bus.addListener("changeDirection", (direction: number) => {
       if (direction === MindElixir.LEFT || direction === MindElixir.RIGHT || direction === MindElixir.SIDE || direction === MindElixir.DOWN) {
@@ -603,16 +657,21 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
     // when nothing changed, which is what keeps a drag from filling the undo stack.
     mind.bus.addListener("updateArrowDelta", () => scheduleSaveDecorations());
     mindRef.current = mind;
+    const resizeObserver = new ResizeObserver(() => syncMindMapScrollbars(mind));
+    resizeObserver.observe(mind.container);
+    resizeObserver.observe(mind.nodes);
+    syncMindMapScrollbars(mind);
     // Photographed from the live canvas rather than through `mind.exportPng`, which
     // re-draws the map from mind-elixir's own idea of a topic — plain text — and so
     // knows nothing of the quotes, pictures and tables inside our nodes.
     onExportImageReadyRef.current?.(() => captureMindMapPng());
     return () => {
       onExportImageReadyRef.current?.(null);
+      resizeObserver.disconnect();
       mind.destroy();
       mindRef.current = null;
     };
-  }, [applyEditingTarget, collectTargets, onViewportChange]);
+  }, [applyEditingTarget, collectTargets, onViewportChange, syncMindMapScrollbars]);
 
   const selectTreeNode = useCallback((nodeId: string) => {
     if (shouldExitEditing(editingTargetRef.current, nodeId)) applyEditingTarget(null);
@@ -1185,6 +1244,28 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
           borrows so a coloured run of text or table cell looks the same at rest as
           it does in the editor — see `.mindmap-canvas.bn-root` in `styles.css`. */}
       <div className={`mindmap-canvas bn-root ${mindMapLayoutClassName(activeLayout)} ${zoomedNodeId ? "is-focus-mode" : ""} ${revealAllCloze ? CLOZE_REVEAL_ALL_CLASS : ""}`} ref={containerRef} />
+      <input
+        ref={horizontalScrollbarRef}
+        className="mindmap-pan-scrollbar is-horizontal"
+        type="range"
+        min="0"
+        max="0"
+        step="any"
+        defaultValue="0"
+        aria-label="横向滚动导图"
+        onChange={(event) => moveMindMapFromScrollbar("horizontal", Number(event.target.value))}
+      />
+      <input
+        ref={verticalScrollbarRef}
+        className="mindmap-pan-scrollbar is-vertical"
+        type="range"
+        min="0"
+        max="0"
+        step="any"
+        defaultValue="0"
+        aria-label="纵向滚动导图"
+        onChange={(event) => moveMindMapFromScrollbar("vertical", Number(event.target.value))}
+      />
       <div className="mindmap-canvas-toolbar" aria-label="导图视图工具栏">
         <div className="mindmap-style-menu-wrap" onPointerEnter={cancelStyleMenuClose} onPointerLeave={scheduleStyleMenuClose}>
           <button
@@ -1653,6 +1734,13 @@ function readMindMapViewport(mind: MindElixir): MindMapViewportState | null {
 function restoreMindMapViewport(mind: MindElixir, viewport: MindMapViewportState) {
   mind.scaleVal = viewport.scale;
   mind.map.style.transform = `translate3d(${viewport.x}px, ${viewport.y}px, 0) scale(${viewport.scale})`;
+}
+
+function updateMindMapScrollbar(scrollbar: HTMLInputElement, position: number, size: number) {
+  const normalizedSize = Math.max(0, size);
+  scrollbar.max = String(normalizedSize);
+  scrollbar.value = String(Math.min(normalizedSize, Math.max(0, position)));
+  scrollbar.disabled = normalizedSize < 1;
 }
 
 function selectAndCenterMindMapNode(mind: MindElixir, nodeId: string) {
