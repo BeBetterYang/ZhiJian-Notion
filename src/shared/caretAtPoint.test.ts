@@ -5,8 +5,8 @@ import {
   caretPositionBesideText,
   correctCaretAfterClick,
   extendSelectionFromCaret,
+  handleMindMapTableClipboard,
   placeCaretInTableCell,
-  prepareTableTextCut,
 } from "./caretAtPoint";
 
 describe("caretPositionAtPoint", () => {
@@ -181,7 +181,7 @@ describe("placeCaretInTableCell", () => {
   });
 });
 
-describe("prepareTableTextCut", () => {
+describe("handleMindMapTableClipboard", () => {
   function tableShortcutEditor() {
     const root = document.createElement("div");
     root.className = "ProseMirror";
@@ -191,45 +191,77 @@ describe("prepareTableTextCut", () => {
     const secondText = root.querySelectorAll("td")[1]?.firstChild;
     const setTextSelection = vi.fn();
     const posAtDOM = vi.fn((node: Node, offset: number) => node === firstText ? 10 + offset : 20 + offset);
+    const deleteSelection = vi.fn();
     const editor = {
       _tiptapEditor: {
         view: { dom: root, posAtDOM },
-        commands: { setTextSelection },
+        commands: { setTextSelection, deleteSelection },
       },
     } as unknown as BlockNoteEditor;
-    return { editor, firstText, secondText, posAtDOM, setTextSelection, cleanup: () => root.remove() };
+    return { editor, root, firstText, secondText, posAtDOM, setTextSelection, deleteSelection, cleanup: () => root.remove() };
   }
 
-  it("restores only the selected characters in one cell", () => {
-    const { editor, firstText, posAtDOM, setTextSelection, cleanup } = tableShortcutEditor();
-    vi.spyOn(window, "getSelection").mockReturnValue({
-      isCollapsed: false,
-      anchorNode: firstText,
-      anchorOffset: 2,
-      focusNode: firstText,
-      focusOffset: 4,
-    } as Selection);
+  function clipboardEvent(type: "copy" | "cut") {
+    const event = new Event(type, { bubbles: true, cancelable: true }) as ClipboardEvent;
+    const setData = vi.fn();
+    Object.defineProperty(event, "clipboardData", { value: { setData } });
+    return { event, setData };
+  }
 
-    expect(prepareTableTextCut(editor, { code: "KeyX", ctrlKey: true } as KeyboardEvent)).toBe(true);
+  function selectText(node: Node, from: number, to: number) {
+    const range = document.createRange();
+    range.setStart(node, from);
+    range.setEnd(node, to);
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  it("handles a real copy event with only the selected characters", () => {
+    const { editor, root, firstText, posAtDOM, setTextSelection, cleanup } = tableShortcutEditor();
+    selectText(firstText!, 7, 9);
+    const { event, setData } = clipboardEvent("copy");
+    root.addEventListener("copy", (nextEvent) => handleMindMapTableClipboard(editor, nextEvent as ClipboardEvent));
+
+    root.dispatchEvent(event);
+
     expect(posAtDOM).toHaveBeenCalledTimes(2);
-    expect(setTextSelection).toHaveBeenCalledWith({ from: 12, to: 14 });
-    vi.restoreAllMocks();
+    expect(setTextSelection).toHaveBeenCalledWith({ from: 17, to: 19 });
+    expect(setData).toHaveBeenCalledWith("text/plain", "合同");
+    expect(event.defaultPrevented).toBe(true);
+    cleanup();
+  });
+
+  it("handles a real cut event and deletes only that text selection", () => {
+    const { editor, root, firstText, setTextSelection, deleteSelection, cleanup } = tableShortcutEditor();
+    selectText(firstText!, 7, 9);
+    const { event, setData } = clipboardEvent("cut");
+    root.addEventListener("cut", (nextEvent) => handleMindMapTableClipboard(editor, nextEvent as ClipboardEvent));
+
+    root.dispatchEvent(event);
+
+    expect(setData).toHaveBeenCalledWith("text/plain", "合同");
+    expect(setTextSelection).toHaveBeenCalledWith({ from: 17, to: 19 });
+    expect(deleteSelection).toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(true);
     cleanup();
   });
 
   it("leaves a cross-cell selection to native table handling", () => {
-    const { editor, firstText, secondText, setTextSelection, cleanup } = tableShortcutEditor();
-    vi.spyOn(window, "getSelection").mockReturnValue({
-      isCollapsed: false,
-      anchorNode: firstText,
-      anchorOffset: 2,
-      focusNode: secondText,
-      focusOffset: 1,
-    } as Selection);
+    const { editor, root, firstText, secondText, setTextSelection, cleanup } = tableShortcutEditor();
+    selectText(firstText!, 7, 9);
+    const selection = window.getSelection()!;
+    const range = document.createRange();
+    range.setStart(firstText!, 2);
+    range.setEnd(secondText!, 1);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    const { event } = clipboardEvent("copy");
+    root.addEventListener("copy", (nextEvent) => handleMindMapTableClipboard(editor, nextEvent as ClipboardEvent));
 
-    expect(prepareTableTextCut(editor, { code: "KeyC", metaKey: true } as KeyboardEvent)).toBe(false);
+    root.dispatchEvent(event);
+
     expect(setTextSelection).not.toHaveBeenCalled();
-    vi.restoreAllMocks();
     cleanup();
   });
 });

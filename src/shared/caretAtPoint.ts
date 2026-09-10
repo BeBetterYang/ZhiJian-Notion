@@ -36,7 +36,24 @@ export function placeCaretAtPoint(editor: BlockNoteEditor, point?: CaretPoint) {
   return true;
 }
 
-/** Restore a browser text selection before native copy/cut handles the shortcut. */
+/** Let a real same-cell text selection override BlockNote's structural table selection. */
+export function handleMindMapTableClipboard(editor: BlockNoteEditor, event: ClipboardEvent) {
+  if (event.type !== "copy" && event.type !== "cut") return false;
+  const selection = restoreTableTextSelection(editor);
+  if (!selection || !event.clipboardData) return false;
+  try {
+    event.clipboardData.setData("text/plain", selection.text);
+    if (selection.html) event.clipboardData.setData("text/html", selection.html);
+    if (event.type === "cut") editor._tiptapEditor.commands.deleteSelection();
+    event.preventDefault();
+    event.stopPropagation();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Compatibility entry for the outline editor; it never expands CellSelection. */
 export function prepareTableTextCut(editor: BlockNoteEditor, event: KeyboardEvent) {
   if (
     (event.code !== "KeyC" && event.code !== "KeyX") ||
@@ -44,25 +61,35 @@ export function prepareTableTextCut(editor: BlockNoteEditor, event: KeyboardEven
     event.shiftKey ||
     !(event.ctrlKey || event.metaKey)
   ) return false;
+  return Boolean(restoreTableTextSelection(editor));
+}
 
+function restoreTableTextSelection(editor: BlockNoteEditor) {
   const nativeSelection = window.getSelection();
-  if (!nativeSelection || nativeSelection.isCollapsed) return false;
+  if (!nativeSelection || nativeSelection.isCollapsed) return null;
   const view = editor._tiptapEditor.view;
   const anchorCell = tableCellForSelectionPoint(view.dom, nativeSelection.anchorNode);
   const focusCell = tableCellForSelectionPoint(view.dom, nativeSelection.focusNode);
-  if (!anchorCell || anchorCell !== focusCell) return false;
+  if (!anchorCell || anchorCell !== focusCell) return null;
 
   try {
+    const text = nativeSelection.toString();
     const anchor = view.posAtDOM(nativeSelection.anchorNode!, nativeSelection.anchorOffset);
     const focus = view.posAtDOM(nativeSelection.focusNode!, nativeSelection.focusOffset);
-    if (anchor === focus) return false;
+    if (!text || anchor === focus) return null;
+    const range = nativeSelection.rangeCount > 0 ? nativeSelection.getRangeAt(0) : null;
     editor._tiptapEditor.commands.setTextSelection({
       from: Math.min(anchor, focus),
       to: Math.max(anchor, focus),
     });
-    return true;
+    const html = range ? (() => {
+      const wrapper = document.createElement("div");
+      wrapper.append(range.cloneContents());
+      return wrapper.innerHTML;
+    })() : "";
+    return { text, html };
   } catch {
-    return false;
+    return null;
   }
 }
 

@@ -7,7 +7,7 @@ import type { ZhiJianNode, ZhiJianTree } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
 import { blockNoteToTree, treeToBlockNote } from "../outline/blockNoteAdapter";
 import { insertImageBlocks } from "../shared/attachmentInsertion";
-import { correctCaretAfterClick, placeCaretAtPoint, placeCaretInTableCell, prepareTableTextCut } from "../shared/caretAtPoint";
+import { correctCaretAfterClick, handleMindMapTableClipboard, placeCaretAtPoint, placeCaretInTableCell } from "../shared/caretAtPoint";
 import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 import { saveImageAsset } from "../shared/imageAssetStore";
 import { LinkDialog } from "../shared/LinkDialog";
@@ -322,7 +322,6 @@ function MindMapNodeEditor({
       apply?.();
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      prepareTableTextCut(editor, event);
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
@@ -380,12 +379,17 @@ function MindMapNodeEditor({
         event.stopPropagation();
       }
     };
+    const onClipboard = (event: ClipboardEvent) => {
+      handleMindMapTableClipboard(editor, event);
+    };
     container.addEventListener("pointerdown", placeCursor);
     container.addEventListener("click", correctCursor);
     container.addEventListener("mousedown", stopMindMapPointerHandling);
     container.addEventListener("dblclick", stopMindMapPointerHandling);
     container.addEventListener("keydown", onKeyDown, true);
     container.addEventListener("keydown", stopMindMapPointerHandling);
+    container.addEventListener("copy", onClipboard, true);
+    container.addEventListener("cut", onClipboard, true);
     container.addEventListener("compositionstart", onCompositionStart, true);
     container.addEventListener("compositionend", onCompositionEnd, true);
     return () => {
@@ -395,6 +399,8 @@ function MindMapNodeEditor({
       container.removeEventListener("dblclick", stopMindMapPointerHandling);
       container.removeEventListener("keydown", onKeyDown, true);
       container.removeEventListener("keydown", stopMindMapPointerHandling);
+      container.removeEventListener("copy", onClipboard, true);
+      container.removeEventListener("cut", onClipboard, true);
       container.removeEventListener("compositionstart", onCompositionStart, true);
       container.removeEventListener("compositionend", onCompositionEnd, true);
     };
