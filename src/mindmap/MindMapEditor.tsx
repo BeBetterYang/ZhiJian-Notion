@@ -230,8 +230,22 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
       verticalMin: verticalRange.minPan,
       verticalMax: verticalRange.maxPan,
     };
-    updateMindMapScrollbar(horizontal, horizontalRange.progress, horizontalRange.maxPan - horizontalRange.minPan);
-    updateMindMapScrollbar(vertical, verticalRange.progress, verticalRange.maxPan - verticalRange.minPan);
+    updateMindMapScrollbar(
+      horizontal,
+      horizontalRange.progress,
+      horizontalRange.maxPan - horizontalRange.minPan,
+      containerRect.width,
+      contentRect.width,
+      "horizontal",
+    );
+    updateMindMapScrollbar(
+      vertical,
+      verticalRange.progress,
+      verticalRange.maxPan - verticalRange.minPan,
+      containerRect.height,
+      contentRect.height,
+      "vertical",
+    );
   }, []);
 
   const moveMindMapFromScrollbar = useCallback((axis: "horizontal" | "vertical", value: number) => {
@@ -1751,10 +1765,24 @@ function restoreMindMapViewport(mind: MindElixir, viewport: MindMapViewportState
   mind.map.style.transform = `translate3d(${viewport.x}px, ${viewport.y}px, 0) scale(${viewport.scale})`;
 }
 
-function updateMindMapScrollbar(scrollbar: HTMLInputElement, progress: number, panSpan: number) {
+function updateMindMapScrollbar(
+  scrollbar: HTMLInputElement,
+  progress: number,
+  panSpan: number,
+  viewportSize: number,
+  contentSize: number,
+  axis: "horizontal" | "vertical",
+) {
   scrollbar.max = String(MIND_MAP_SCROLLBAR_STEPS);
   scrollbar.value = String(Math.round(Math.min(1, Math.max(0, progress)) * MIND_MAP_SCROLLBAR_STEPS));
   scrollbar.disabled = panSpan < 1;
+
+  const trackSize = axis === "horizontal" ? scrollbar.clientWidth : scrollbar.clientHeight;
+  const thumbSize = Math.min(
+    trackSize,
+    Math.max(48, trackSize * viewportSize / Math.max(1, contentSize)),
+  );
+  scrollbar.style.setProperty("--mindmap-scrollbar-thumb-size", `${thumbSize}px`);
 }
 
 function selectAndCenterMindMapNode(mind: MindElixir, nodeId: string) {
