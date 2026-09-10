@@ -1603,7 +1603,7 @@ textarea {
 }
 
 .mindmap-pan-scrollbar::-webkit-slider-thumb {
-  width: 44px;
+  width: 48px;
   height: 8px;
   appearance: none;
   border: 0;
@@ -1613,7 +1613,7 @@ textarea {
 
 .mindmap-pan-scrollbar.is-vertical::-webkit-slider-thumb {
   width: 8px;
-  height: 44px;
+  height: 48px;
 }
 
 .mindmap-pan-scrollbar::-moz-range-track {
@@ -1625,7 +1625,7 @@ textarea {
 }
 
 .mindmap-pan-scrollbar::-moz-range-thumb {
-  width: 44px;
+  width: 48px;
   height: 8px;
   border: 0;
   border-radius: 4px;
@@ -1634,7 +1634,7 @@ textarea {
 
 .mindmap-pan-scrollbar.is-vertical::-moz-range-thumb {
   width: 8px;
-  height: 44px;
+  height: 48px;
 }
 
 .mindmap-pan-scrollbar:hover::-webkit-slider-thumb,

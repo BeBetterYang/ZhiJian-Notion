@@ -22,6 +22,7 @@ export interface MindMapPointerSession {
   startX: number;
   startY: number;
   dragged: boolean;
+  button?: number;
   /** What the press aimed at, for the click that follows it. */
   press?: MindMapPressTarget;
 }
@@ -36,6 +37,10 @@ export function updateMindMapPointerSession(
   if (!session || session.pointerId !== pointerId || session.dragged) return session;
   if (Math.hypot(x - session.startX, y - session.startY) < threshold) return session;
   return { ...session, dragged: true };
+}
+
+export function isDraggedRightPointerSession(session: MindMapPointerSession | null) {
+  return Boolean(session?.button === 2 && session.dragged);
 }
 
 export type DisplayClickAction = "ignore" | "select" | "edit";
@@ -90,6 +95,8 @@ export function mindMapUpdateMode(structureChanged: boolean, editing: boolean) {
   return editing ? "defer-structure" as const : "refresh-structure" as const;
 }
 
+export const MIND_MAP_SCROLLBAR_STEPS = 1000;
+
 export function mindMapScrollbarRange(
   translation: number,
   viewportStart: number,
@@ -101,11 +108,11 @@ export function mindMapScrollbarRange(
   const contentEnd = contentStart + contentSize;
   const min = translation + Math.min(0, viewportCenter - contentEnd);
   const max = translation + Math.max(0, viewportCenter - contentStart);
+  const span = Math.max(0, max - min);
   return {
-    min,
-    max,
-    position: max - translation,
-    size: max - min,
+    minPan: min,
+    maxPan: max,
+    progress: span ? Math.min(1, Math.max(0, (translation - min) / span)) : 0,
   };
 }
 
