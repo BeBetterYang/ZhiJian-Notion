@@ -19,6 +19,8 @@
 - 在导图中编辑、移动或新增节点，大纲内容同步变化。
 - 标题、正文、待办、引用、图片和表格在两个视图中保持一致。
 - 支持展开/收起、专注节点、面包屑返回和文档内查找替换。
+<img width="1920" height="911" alt="导图" src="https://github.com/user-attachments/assets/f75892fa-48bd-43dd-958c-acff520246aa" />
+<img width="1920" height="911" alt="大纲" src="https://github.com/user-attachments/assets/07891037-2740-468d-a169-973d263d69ec" />
 
 ### 不止一种导图
 
