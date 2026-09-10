@@ -254,7 +254,7 @@ function richTextToBlockNoteInline(content: RichTextContent) {
   return richText.text;
 }
 
-function tableDataFromBlock(block: Block): ZhiJianTableData {
+export function tableDataFromBlock(block: Block): ZhiJianTableData {
   const content = block.content as unknown as { columnWidths?: (number | undefined)[]; headerRows?: number; headerCols?: number; rows?: Array<{ cells: Array<unknown> }> };
   const rows = (content.rows ?? []).map((row) => row.cells.map((cell) => {
     const tableCell = Array.isArray(cell) ? { content: cell, props: undefined } : cell as { content?: unknown; props?: Record<string, unknown> };

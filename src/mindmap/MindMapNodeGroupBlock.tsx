@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ZhiJianNode, ZhiJianTree } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
-import { blockNoteToTree, treeToBlockNote } from "../outline/blockNoteAdapter";
+import { blockNoteToTree, tableDataFromBlock, treeToBlockNote } from "../outline/blockNoteAdapter";
 import { insertImageBlocks } from "../shared/attachmentInsertion";
 import { correctCaretAfterClick, handleMindMapTableClipboard, placeCaretAtPoint, placeCaretInTableCell } from "../shared/caretAtPoint";
 import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
@@ -382,6 +382,31 @@ function MindMapNodeEditor({
     const onClipboard = (event: ClipboardEvent) => {
       handleMindMapTableClipboard(editor, event);
     };
+    const onPaste = (event: ClipboardEvent) => {
+      const html = event.clipboardData?.getData("text/html");
+      if (!html) return;
+      let blocks: ReturnType<typeof editor.tryParseHTMLToBlocks>;
+      try {
+        blocks = editor.tryParseHTMLToBlocks(html);
+      } catch {
+        return;
+      }
+      const tableBlock = blocks.length === 1 && blocks[0]?.type === "table" ? blocks[0] : null;
+      if (!tableBlock || !node.parentId) return;
+      const parent = store.getNode(node.parentId);
+      const index = parent?.children.indexOf(node.id);
+      if (!parent || index === undefined || index < 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onFinishEdit();
+      const pastedId = store.createNode({
+        parentId: parent.id,
+        index: index + 1,
+        type: "table",
+        props: { table: tableDataFromBlock(tableBlock) },
+      });
+      onFocusNode(pastedId);
+    };
     container.addEventListener("pointerdown", placeCursor);
     container.addEventListener("click", correctCursor);
     container.addEventListener("mousedown", stopMindMapPointerHandling);
@@ -390,6 +415,7 @@ function MindMapNodeEditor({
     container.addEventListener("keydown", stopMindMapPointerHandling);
     container.addEventListener("copy", onClipboard, true);
     container.addEventListener("cut", onClipboard, true);
+    container.addEventListener("paste", onPaste, true);
     container.addEventListener("compositionstart", onCompositionStart, true);
     container.addEventListener("compositionend", onCompositionEnd, true);
     return () => {
@@ -401,6 +427,7 @@ function MindMapNodeEditor({
       container.removeEventListener("keydown", stopMindMapPointerHandling);
       container.removeEventListener("copy", onClipboard, true);
       container.removeEventListener("cut", onClipboard, true);
+      container.removeEventListener("paste", onPaste, true);
       container.removeEventListener("compositionstart", onCompositionStart, true);
       container.removeEventListener("compositionend", onCompositionEnd, true);
     };
