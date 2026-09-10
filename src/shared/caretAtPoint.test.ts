@@ -6,6 +6,7 @@ import {
   correctCaretAfterClick,
   extendSelectionFromCaret,
   placeCaretInTableCell,
+  prepareTableTextCut,
 } from "./caretAtPoint";
 
 describe("caretPositionAtPoint", () => {
@@ -177,5 +178,58 @@ describe("placeCaretInTableCell", () => {
     const { editor, focus } = tableEditor({ table: false });
     expect(placeCaretInTableCell(editor, { row: 0, column: 0 })).toBe(false);
     expect(focus).not.toHaveBeenCalled();
+  });
+});
+
+describe("prepareTableTextCut", () => {
+  function tableShortcutEditor() {
+    const root = document.createElement("div");
+    root.className = "ProseMirror";
+    root.innerHTML = `<table><tbody><tr><td>中华人民共和国合同法</td><td>其他</td></tr></tbody></table>`;
+    document.body.append(root);
+    const firstText = root.querySelector("td")?.firstChild;
+    const secondText = root.querySelectorAll("td")[1]?.firstChild;
+    const setTextSelection = vi.fn();
+    const posAtDOM = vi.fn((node: Node, offset: number) => node === firstText ? 10 + offset : 20 + offset);
+    const editor = {
+      _tiptapEditor: {
+        view: { dom: root, posAtDOM },
+        commands: { setTextSelection },
+      },
+    } as unknown as BlockNoteEditor;
+    return { editor, firstText, secondText, posAtDOM, setTextSelection, cleanup: () => root.remove() };
+  }
+
+  it("restores only the selected characters in one cell", () => {
+    const { editor, firstText, posAtDOM, setTextSelection, cleanup } = tableShortcutEditor();
+    vi.spyOn(window, "getSelection").mockReturnValue({
+      isCollapsed: false,
+      anchorNode: firstText,
+      anchorOffset: 2,
+      focusNode: firstText,
+      focusOffset: 4,
+    } as Selection);
+
+    expect(prepareTableTextCut(editor, { code: "KeyX", ctrlKey: true } as KeyboardEvent)).toBe(true);
+    expect(posAtDOM).toHaveBeenCalledTimes(2);
+    expect(setTextSelection).toHaveBeenCalledWith({ from: 12, to: 14 });
+    vi.restoreAllMocks();
+    cleanup();
+  });
+
+  it("leaves a cross-cell selection to native table handling", () => {
+    const { editor, firstText, secondText, setTextSelection, cleanup } = tableShortcutEditor();
+    vi.spyOn(window, "getSelection").mockReturnValue({
+      isCollapsed: false,
+      anchorNode: firstText,
+      anchorOffset: 2,
+      focusNode: secondText,
+      focusOffset: 1,
+    } as Selection);
+
+    expect(prepareTableTextCut(editor, { code: "KeyC", metaKey: true } as KeyboardEvent)).toBe(false);
+    expect(setTextSelection).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+    cleanup();
   });
 });

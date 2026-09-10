@@ -1,4 +1,4 @@
-import { isTableCellSelection, type BlockNoteEditor } from "@blocknote/core";
+import type { BlockNoteEditor } from "@blocknote/core";
 
 export interface CaretPoint {
   x: number;
@@ -36,25 +36,40 @@ export function placeCaretAtPoint(editor: BlockNoteEditor, point?: CaretPoint) {
   return true;
 }
 
-/** Keep native cut from treating a table cell selection as a structural deletion. */
+/** Restore a browser text selection before native copy/cut handles the shortcut. */
 export function prepareTableTextCut(editor: BlockNoteEditor, event: KeyboardEvent) {
-  if (event.code !== "KeyX" || event.altKey || event.shiftKey || !(event.ctrlKey || event.metaKey)) return false;
-  const selection = editor.prosemirrorState.selection;
-  if (!isTableCellSelection(selection)) return false;
-  const cellStart = selection.$anchorCell.pos;
-  const cell = selection.$anchorCell.nodeAfter;
-  if (!cell) return false;
-  let textFrom: number | null = null;
-  let textTo: number | null = null;
-  cell.descendants((node, position) => {
-    if (textFrom !== null || !node.isTextblock) return textFrom === null;
-    textFrom = cellStart + position + 2;
-    textTo = textFrom + node.content.size;
+  if (
+    (event.code !== "KeyC" && event.code !== "KeyX") ||
+    event.altKey ||
+    event.shiftKey ||
+    !(event.ctrlKey || event.metaKey)
+  ) return false;
+
+  const nativeSelection = window.getSelection();
+  if (!nativeSelection || nativeSelection.isCollapsed) return false;
+  const view = editor._tiptapEditor.view;
+  const anchorCell = tableCellForSelectionPoint(view.dom, nativeSelection.anchorNode);
+  const focusCell = tableCellForSelectionPoint(view.dom, nativeSelection.focusNode);
+  if (!anchorCell || anchorCell !== focusCell) return false;
+
+  try {
+    const anchor = view.posAtDOM(nativeSelection.anchorNode!, nativeSelection.anchorOffset);
+    const focus = view.posAtDOM(nativeSelection.focusNode!, nativeSelection.focusOffset);
+    if (anchor === focus) return false;
+    editor._tiptapEditor.commands.setTextSelection({
+      from: Math.min(anchor, focus),
+      to: Math.max(anchor, focus),
+    });
+    return true;
+  } catch {
     return false;
-  });
-  if (textFrom === null || textTo === null) return false;
-  editor._tiptapEditor.commands.setTextSelection({ from: textFrom, to: textTo });
-  return true;
+  }
+}
+
+function tableCellForSelectionPoint(root: HTMLElement, point: Node | null) {
+  if (!point || !root.contains(point)) return null;
+  const element = point.nodeType === Node.ELEMENT_NODE ? point as Element : point.parentElement;
+  return element?.closest("td, th") ?? null;
 }
 
 /**
