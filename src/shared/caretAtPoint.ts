@@ -1,4 +1,4 @@
-import type { BlockNoteEditor } from "@blocknote/core";
+import { isTableCellSelection, type BlockNoteEditor } from "@blocknote/core";
 
 export interface CaretPoint {
   x: number;
@@ -33,6 +33,27 @@ export function placeCaretAtPoint(editor: BlockNoteEditor, point?: CaretPoint) {
   const target = point ? caretTargetAtPoint(editor, point) : null;
   if (!target) return false;
   editor._tiptapEditor.commands.setTextSelection(target.caret);
+  return true;
+}
+
+/** Keep native cut from treating a table cell selection as a structural deletion. */
+export function prepareTableTextCut(editor: BlockNoteEditor, event: KeyboardEvent) {
+  if (event.code !== "KeyX" || event.altKey || event.shiftKey || !(event.ctrlKey || event.metaKey)) return false;
+  const selection = editor.prosemirrorState.selection;
+  if (!isTableCellSelection(selection)) return false;
+  const cellStart = selection.$anchorCell.pos;
+  const cell = selection.$anchorCell.nodeAfter;
+  if (!cell) return false;
+  let textFrom: number | null = null;
+  let textTo: number | null = null;
+  cell.descendants((node, position) => {
+    if (textFrom !== null || !node.isTextblock) return textFrom === null;
+    textFrom = cellStart + position + 2;
+    textTo = textFrom + node.content.size;
+    return false;
+  });
+  if (textFrom === null || textTo === null) return false;
+  editor._tiptapEditor.commands.setTextSelection({ from: textFrom, to: textTo });
   return true;
 }
 

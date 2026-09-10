@@ -46,6 +46,7 @@ import {
   caretPositionBesideText,
   correctCaretAfterClick,
   extendSelectionFromCaret,
+  prepareTableTextCut,
 } from "../shared/caretAtPoint";
 import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 import { handleOutlineNodeKeyDown } from "./outlineNodeKeymap";
@@ -379,6 +380,7 @@ export function OutlineEditor({
       }}
       onKeyDownCapture={(event) => {
         if (readOnly) return;
+        prepareTableTextCut(editor, event.nativeEvent);
         if (handleTreeHistoryKeyDown(event.nativeEvent, store)) return;
         if (
           handleShortcutKeyDown(event.nativeEvent, {

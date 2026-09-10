@@ -7,7 +7,7 @@ import type { ZhiJianNode, ZhiJianTree } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
 import { blockNoteToTree, treeToBlockNote } from "../outline/blockNoteAdapter";
 import { insertImageBlocks } from "../shared/attachmentInsertion";
-import { correctCaretAfterClick, placeCaretAtPoint, placeCaretInTableCell } from "../shared/caretAtPoint";
+import { correctCaretAfterClick, placeCaretAtPoint, placeCaretInTableCell, prepareTableTextCut } from "../shared/caretAtPoint";
 import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 import { saveImageAsset } from "../shared/imageAssetStore";
 import { LinkDialog } from "../shared/LinkDialog";
@@ -311,6 +311,7 @@ function MindMapNodeEditor({
       apply?.();
     };
     const onKeyDown = (event: KeyboardEvent) => {
+      prepareTableTextCut(editor, event);
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
