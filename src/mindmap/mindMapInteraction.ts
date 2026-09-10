@@ -112,7 +112,7 @@ export function mindMapScrollbarRange(
   return {
     minPan: min,
     maxPan: max,
-    progress: span ? Math.min(1, Math.max(0, (translation - min) / span)) : 0,
+    progress: span ? Math.min(1, Math.max(0, (max - translation) / span)) : 0,
   };
 }
 

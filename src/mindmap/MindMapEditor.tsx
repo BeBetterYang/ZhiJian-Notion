@@ -240,11 +240,13 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
     if (!mind || !viewport) return;
     if (axis === "horizontal") {
       const { horizontalMin, horizontalMax } = scrollbarRanges.current;
-      const nextX = horizontalMin + (value / MIND_MAP_SCROLLBAR_STEPS) * (horizontalMax - horizontalMin);
+      const progress = value / MIND_MAP_SCROLLBAR_STEPS;
+      const nextX = horizontalMax - progress * (horizontalMax - horizontalMin);
       mind.move(nextX - viewport.x, 0);
     } else {
       const { verticalMin, verticalMax } = scrollbarRanges.current;
-      const nextY = verticalMin + (value / MIND_MAP_SCROLLBAR_STEPS) * (verticalMax - verticalMin);
+      const progress = value / MIND_MAP_SCROLLBAR_STEPS;
+      const nextY = verticalMax - progress * (verticalMax - verticalMin);
       mind.move(0, nextY - viewport.y);
     }
   }, []);

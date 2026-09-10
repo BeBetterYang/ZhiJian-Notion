@@ -401,12 +401,12 @@ describe("mind map geometry measurement", () => {
     expect(mindMapScrollbarRange(120, 20, 800, -80, 1200)).toEqual({
       minPan: -580,
       maxPan: 620,
-      progress: 700 / 1200,
+      progress: 500 / 1200,
     });
     expect(mindMapScrollbarRange(-80, 20, 800, -280, 1200)).toEqual({
       minPan: -580,
       maxPan: 620,
-      progress: 500 / 1200,
+      progress: 700 / 1200,
     });
   });
 
