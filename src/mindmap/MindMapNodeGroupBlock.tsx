@@ -262,8 +262,18 @@ function MindMapNodeEditor({
       const id = (event.target as Element | null)?.closest<HTMLElement>("[data-id]")?.dataset.id;
       return id && blockIds.includes(id) ? id : node.id;
     };
+    const isTableTarget = (target: EventTarget | null) =>
+      Boolean((target as Element | null)?.closest("table, td, th, [data-content-type='table']"));
     const placeCursor = (event: PointerEvent, forceEdit = false) => {
-      if (event.button !== 0 || !(event.target as Element | null)?.closest(".ProseMirror")) return;
+      const target = event.target as Element | null;
+      if (event.button !== 0 || !target?.closest(".ProseMirror")) return;
+      // Once editing is active, table pointer gestures belong to ProseMirror. In
+      // particular, re-placing the caret here can turn a text drag into a cell
+      // selection, which makes native cut/copy operate on table structure.
+      if (isTableTarget(target)) {
+        event.stopPropagation();
+        return;
+      }
       if (!selected && !forceEdit) {
         event.preventDefault();
         onSelect(node.id);
@@ -292,7 +302,8 @@ function MindMapNodeEditor({
     // the pointerdown that owns entering the edit and keeping the event away from
     // mind-elixir; this only has the last word on where the caret ends up.
     const correctCursor = (event: MouseEvent) => {
-      if (event.button !== 0 || !(event.target as Element | null)?.closest(".ProseMirror")) return;
+      const target = event.target as Element | null;
+      if (event.button !== 0 || !target?.closest(".ProseMirror") || isTableTarget(target)) return;
       correctCaretAfterClick(editor, { x: event.clientX, y: event.clientY });
     };
     const stopMindMapPointerHandling = (event: Event) => event.stopPropagation();
