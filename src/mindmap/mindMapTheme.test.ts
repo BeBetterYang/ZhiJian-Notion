@@ -118,17 +118,17 @@ describe("mind map theme presets", () => {
     expect(yanpi.connector.color).toBe("#d5d1ca");
   });
 
-  it("uses darker root colours for the low-contrast theme connectors", () => {
+  it("uses darker root colours for branch palettes and connectors", () => {
     expect(Object.fromEntries(
       MIND_MAP_THEME_PRESETS
         .filter((theme) => ["breeze", "pulse", "voyage", "secret-forest", "volcano"].includes(theme.id))
-        .map((theme) => [theme.id, theme.connector.color]),
+        .map((theme) => [theme.id, { connector: theme.connector.color, branchPalette: theme.branchPalette, root: theme.root.background }]),
     )).toEqual({
-      breeze: "#49b84b",
-      pulse: "#ef8148",
-      voyage: "#2f92e6",
-      "secret-forest": "#60731d",
-      volcano: "#a1512d",
+      breeze: { connector: "#49b84b", branchPalette: ["#49b84b"], root: "#49b84b" },
+      pulse: { connector: "#ef8148", branchPalette: ["#ef8148"], root: "#ef8148" },
+      voyage: { connector: "#2f92e6", branchPalette: ["#2f92e6"], root: "#2f92e6" },
+      "secret-forest": { connector: "#60731d", branchPalette: ["#60731d"], root: "#60731d" },
+      volcano: { connector: "#a1512d", branchPalette: ["#a1512d"], root: "#a1512d" },
     });
   });
 

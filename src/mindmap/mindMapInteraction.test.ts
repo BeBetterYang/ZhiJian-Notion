@@ -399,19 +399,19 @@ describe("mind map geometry measurement", () => {
 
   it("maps canvas translation to a stable scrollbar range", () => {
     expect(mindMapScrollbarRange(120, 20, 800, -80, 1200)).toEqual({
-      minPan: -180,
-      maxPan: 220,
-      progress: 1 / 4,
+      minPan: -580,
+      maxPan: 620,
+      progress: 500 / 1200,
     });
     expect(mindMapScrollbarRange(-80, 20, 800, -280, 1200)).toEqual({
-      minPan: -180,
-      maxPan: 220,
-      progress: 3 / 4,
+      minPan: -580,
+      maxPan: 620,
+      progress: 700 / 1200,
     });
-    expect(mindMapScrollbarRange(120, 20, 800, -80, 800)).toEqual({
-      minPan: 120,
-      maxPan: 120,
-      progress: 0,
+    expect(mindMapScrollbarRange(120, 20, 800, -80, 600)).toEqual({
+      minPan: 20,
+      maxPan: 620,
+      progress: 5 / 6,
     });
   });
 

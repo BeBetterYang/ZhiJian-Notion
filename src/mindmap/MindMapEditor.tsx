@@ -240,7 +240,6 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
       horizontalRange.progress,
       horizontalRange.maxPan - horizontalRange.minPan,
       containerRect.width,
-      contentRect.width,
       "horizontal",
     );
     updateMindMapScrollbar(
@@ -248,7 +247,6 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
       verticalRange.progress,
       verticalRange.maxPan - verticalRange.minPan,
       containerRect.height,
-      contentRect.height,
       "vertical",
     );
   }, []);
@@ -1844,7 +1842,6 @@ function updateMindMapScrollbar(
   progress: number,
   panSpan: number,
   viewportSize: number,
-  contentSize: number,
   axis: "horizontal" | "vertical",
 ) {
   scrollbar.max = String(MIND_MAP_SCROLLBAR_STEPS);
@@ -1852,9 +1849,10 @@ function updateMindMapScrollbar(
   scrollbar.disabled = panSpan < 1;
 
   const trackSize = axis === "horizontal" ? scrollbar.clientWidth : scrollbar.clientHeight;
+  const virtualContentSize = viewportSize + panSpan;
   const thumbSize = Math.min(
     trackSize,
-    Math.max(48, trackSize * viewportSize / Math.max(1, contentSize)),
+    Math.max(48, trackSize * viewportSize / Math.max(1, virtualContentSize)),
   );
   scrollbar.style.setProperty("--mindmap-scrollbar-thumb-size", `${thumbSize}px`);
 }
