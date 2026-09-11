@@ -126,6 +126,17 @@ describe("mindElixirAdapter", () => {
     expect(table.dangerouslySetInnerHTML).toContain("单元格");
   });
 
+  it("keeps explicitly resized table columns narrow in display mode", () => {
+    const tree = createInitialTree();
+    tree.nodes.web.type = "table";
+    tree.nodes.web.props = {
+      table: { rows: [[{ content: { text: "第一列" } }, { content: { text: "第二列" } }],], columnWidths: [44, 260] },
+    };
+    const table = (treeToMindElixir(tree).nodeData.children as NodeObj[])[0];
+    expect(table.dangerouslySetInnerHTML).toContain('min-width:44px');
+    expect(table.dangerouslySetInnerHTML).toContain('min-width:260px');
+  });
+
   it("mounts described nodes for inline quote-style editing", () => {
     const tree = createInitialTree();
     tree.nodes.web.description = { text: "这是描述内容" };

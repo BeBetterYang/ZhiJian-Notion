@@ -157,7 +157,8 @@ export function applyMindMapVisualVariables(element: HTMLElement, style: MindMap
 
 function renderTableHtml(node: ZhiJianNode) {
   const rows = node.props?.table?.rows ?? [];
-  const body = rows.map((row, rowIndex) => `<tr>${row.map((cell, columnIndex) => `<td data-table-row="${rowIndex}" data-table-column="${columnIndex}"${renderCellAttributes(cell)}>${renderRichTextHtml(cell.content)}</td>`).join("")}</tr>`).join("");
+  const widths = node.props?.table?.columnWidths ?? [];
+  const body = rows.map((row, rowIndex) => `<tr>${row.map((cell, columnIndex) => `<td data-table-row="${rowIndex}" data-table-column="${columnIndex}"${renderCellAttributes(cell, widths[columnIndex])}>${renderRichTextHtml(cell.content)}</td>`).join("")}</tr>`).join("");
   return `<div class="mindmap-node-table"><table>${renderColumnGroupHtml(node, rows[0]?.length ?? 0)}<tbody>${body}</tbody></table>${rows.length ? "" : "表格"}</div>`;
 }
 
@@ -186,8 +187,9 @@ function renderColumnGroupHtml(node: ZhiJianNode, columnCount: number) {
  * a coloured cell looking the same once the editor closes — without the display
  * layer holding a second copy of the palette.
  */
-function renderCellAttributes(cell: ZhiJianTableCell) {
+function renderCellAttributes(cell: ZhiJianTableCell, columnWidth?: number) {
   return [
+    typeof columnWidth === "number" && columnWidth > 0 ? ` style="min-width:${columnWidth}px"` : "",
     cell.backgroundColor ? ` data-background-color="${escapeHtml(cell.backgroundColor)}"` : "",
     cell.textColor ? ` data-text-color="${escapeHtml(cell.textColor)}"` : "",
     cell.textAlignment ? ` data-text-alignment="${escapeHtml(cell.textAlignment)}"` : "",
