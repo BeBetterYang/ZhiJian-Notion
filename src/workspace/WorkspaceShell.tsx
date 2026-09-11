@@ -1354,7 +1354,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
             <button type="button" className="settings-close icon-button" onClick={() => setSettingsOpen(false)} aria-label="关闭设置"><FiX /></button>
             <div className="settings-content">
               {settingsView === "account" ? (
-                <div className="account-settings">
+                <div key="account" className="settings-view-content account-settings">
                   <header className="settings-content-header"><h2>账号</h2><p>管理你的档案、登录信息和安全设置</p></header>
                   <section className="settings-section">
                     <h3>档案</h3>
@@ -1378,7 +1378,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                   <footer className="settings-actions"><button type="button" onClick={() => setSettingsOpen(false)}>取消</button><button type="button" className="settings-save" onClick={() => void saveAccountSettings()}>保存修改</button></footer>
                 </div>
               ) : (
-                <div className="preferences-settings">
+                <div key="preferences" className="settings-view-content preferences-settings">
                   <header className="settings-content-header"><h2>偏好</h2><p>自定义工作区使用体验</p></header>
                   <section className="settings-section">
                     <h3>文档</h3>

@@ -1,4 +1,28 @@
 :root {
+  --motion-fast: 120ms;
+  --motion-popover: 150ms;
+  --motion-dialog: 180ms;
+  --motion-ease-out: cubic-bezier(.2, .8, .2, 1);
+  --color-accent: #2383e2;
+  --color-accent-hover: #1d75c9;
+  --color-accent-soft: rgba(35, 131, 226, 0.12);
+  --color-accent-ring: rgba(35, 131, 226, 0.32);
+  --color-text-primary: #37352f;
+  --color-text-secondary: #6f6e69;
+  --color-text-muted: #8b8a85;
+  --color-text-disabled: #aaa9a5;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f7f7f5;
+  --color-hover: rgba(55, 53, 47, 0.07);
+  --color-selected: rgba(55, 53, 47, 0.075);
+  --color-border: rgba(55, 53, 47, 0.12);
+  --color-border-soft: rgba(55, 53, 47, 0.08);
+  --color-border-strong: rgba(55, 53, 47, 0.16);
+  --color-danger: #c9352b;
+  --color-danger-hover: #b82f26;
+  --color-error: #c0392b;
+  --color-success: #448361;
+  --color-warning: #b7791f;
   --zhijian-font-family: "Source Sans Pro", -apple-system, "PingFang SC", "Apple Color Emoji",
     BlinkMacSystemFont, Helvetica, Arial, "Segoe UI Emoji", "Segoe UI Symbol",
     "Microsoft YaHei", 微软雅黑, 黑体, Heiti, sans-serif, SimSun, 宋体, serif;
@@ -16,7 +40,7 @@
      looked at in the other view reads as two documents. `mindMapTheme.ts` hands
      these to mind-elixir, and the outline hands them to BlockNote through
      `--bn-colors-editor-*` below. */
-  --zhijian-ink: #273142;
+  --zhijian-ink: #37352f;
   --zhijian-canvas: #ffffff;
   --zhijian-quote-ink: #6b7280;
   /* The hint shown in an empty node or quote, in both views. */
@@ -34,7 +58,7 @@
      inside the container on each side — the left one being the gutter — so the
      column is this width plus those two. */
   --outline-text-width: 720px;
-  color: #1d2430;
+  color: var(--color-text-primary);
   background: #f5f7f8;
   font-family: var(--zhijian-font-family);
 }
@@ -172,6 +196,7 @@ textarea {
 .toolbar .toolbar-more-button {
   border-color: transparent;
   background: transparent;
+  transition: background-color var(--motion-fast, 120ms) ease, color var(--motion-fast, 120ms) ease;
 }
 
 .toolbar .toolbar-more-button:hover:not(:disabled),
@@ -191,6 +216,7 @@ textarea {
   background: #fff;
   font-size: 14px;
   box-shadow: 0 8px 24px rgba(15, 15, 15, 0.14), 0 2px 5px rgba(15, 15, 15, 0.08);
+  animation: zhijian-popover-in var(--motion-popover, 150ms) var(--motion-ease-out, cubic-bezier(.2, .8, .2, 1));
 }
 
 .toolbar .toolbar-more-menu button {
@@ -285,6 +311,7 @@ textarea {
   background: #fff;
   color: #37352f;
   box-shadow: 0 16px 42px rgba(15, 15, 15, 0.16), 0 2px 6px rgba(15, 15, 15, 0.08);
+  animation: zhijian-popover-in var(--motion-popover, 150ms) var(--motion-ease-out, cubic-bezier(.2, .8, .2, 1));
 }
 
 .search-row {
@@ -311,8 +338,8 @@ textarea {
 }
 
 .search-row input:focus {
-  border-color: #5b52d6;
-  box-shadow: 0 0 0 1px #5b52d6;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent-ring);
 }
 
 .search-mode-button {
@@ -406,6 +433,7 @@ textarea {
   justify-content: center;
   padding: 24px;
   background: rgba(15, 15, 15, 0.44);
+  animation: zhijian-dialog-backdrop-in var(--motion-dialog, 180ms) ease-out;
 }
 
 .zhijian-confirm-dialog {
@@ -416,6 +444,7 @@ textarea {
   background: #fff;
   color: #37352f;
   box-shadow: 0 20px 60px rgba(15, 15, 15, 0.24), 0 2px 8px rgba(15, 15, 15, 0.08);
+  animation: zhijian-dialog-in var(--motion-dialog, 180ms) var(--motion-ease-out, cubic-bezier(.2, .8, .2, 1));
 }
 
 .zhijian-confirm-dialog h2 {
@@ -428,7 +457,7 @@ textarea {
 
 .zhijian-confirm-dialog p {
   margin: 12px 0 0;
-  color: #787774;
+  color: var(--color-text-muted);
   font-size: 14px;
   line-height: 1.6;
 }
@@ -480,7 +509,7 @@ textarea {
 .zhijian-link-dialog label span {
   display: block;
   margin-bottom: 6px;
-  color: #787774;
+  color: var(--color-text-muted);
   font-size: 12px;
 }
 
@@ -2512,6 +2541,7 @@ textarea {
   background: transparent;
   color: inherit;
   cursor: pointer;
+  transition: background-color var(--motion-fast, 120ms) ease, color var(--motion-fast, 120ms) ease;
 }
 
 .mindmap-viewport-controls button {
@@ -2610,6 +2640,7 @@ textarea {
   color: inherit;
   font-size: 18px;
   cursor: pointer;
+  transition: background-color var(--motion-fast, 120ms) ease, color var(--motion-fast, 120ms) ease;
 }
 
 .mindmap-style-menu-trigger:hover,
@@ -2635,6 +2666,7 @@ textarea {
   font-family: var(--zhijian-font-family);
   font-size: 14px;
   box-shadow: 0 8px 24px rgba(15, 15, 15, 0.14), 0 2px 5px rgba(15, 15, 15, 0.08);
+  animation: zhijian-popover-in var(--motion-popover, 150ms) var(--motion-ease-out, cubic-bezier(.2, .8, .2, 1));
 }
 
 .mindmap-style-menu button {
@@ -2706,6 +2738,7 @@ textarea {
   border-radius: 6px;
   background: #ffffff;
   box-shadow: 0 8px 24px rgba(15, 15, 15, 0.14), 0 2px 5px rgba(15, 15, 15, 0.08);
+  animation: zhijian-popover-in var(--motion-popover, 150ms) var(--motion-ease-out, cubic-bezier(.2, .8, .2, 1));
 }
 
 .mindmap-style-menu .mindmap-panel-more-menu button {
@@ -2742,6 +2775,7 @@ textarea {
   color: #53514d;
   font-size: 12px;
   white-space: normal;
+  transition: border-color var(--motion-fast, 120ms) ease, background-color var(--motion-fast, 120ms) ease, color var(--motion-fast, 120ms) ease;
 }
 
 .mindmap-style-menu .mindmap-layout-grid > button:hover,
@@ -2848,6 +2882,7 @@ textarea {
   color: #53514d;
   font-size: 12px;
   font-weight: 500;
+  transition: border-color var(--motion-fast, 120ms) ease, background-color var(--motion-fast, 120ms) ease, color var(--motion-fast, 120ms) ease;
 }
 
 .mindmap-style-menu .mindmap-layout-direction button.is-active {
@@ -2890,6 +2925,7 @@ textarea {
   border: 1px solid rgba(55, 53, 47, 0.1);
   border-radius: 7px;
   white-space: normal;
+  transition: border-color var(--motion-fast, 120ms) ease, background-color var(--motion-fast, 120ms) ease, color var(--motion-fast, 120ms) ease;
 }
 
 .mindmap-style-menu .mindmap-theme-grid button:hover,
@@ -2936,6 +2972,7 @@ textarea {
   color: #53514d;
   font-size: 12px;
   font-weight: 500;
+  transition: border-color var(--motion-fast, 120ms) ease, background-color var(--motion-fast, 120ms) ease, color var(--motion-fast, 120ms) ease;
 }
 
 .mindmap-style-menu .mindmap-connector-style button.is-active,
@@ -3034,7 +3071,7 @@ textarea {
   margin-top: 8px;
   padding: 8px 2px 0;
   border-top: 1px solid rgba(55, 53, 47, 0.1);
-  color: #787774;
+  color: var(--color-text-muted);
   font-size: 12px;
   font-weight: 600;
 }
