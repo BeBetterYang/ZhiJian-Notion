@@ -1,7 +1,7 @@
 import "mind-elixir/style.css";
 import MindElixir, { type MindElixirData, type NodeObj, type Operation, type Topic } from "mind-elixir";
 import { zh_CN } from "mind-elixir/i18n";
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type MutableRefObject, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type MutableRefObject, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { FiCheck, FiCrosshair, FiGitBranch, FiMaximize2, FiMinimize2, FiMoreHorizontal, FiPlus, FiZoomIn, FiZoomOut } from "react-icons/fi";
 import { IoColorPaletteOutline } from "react-icons/io5";
@@ -79,6 +79,12 @@ interface MindMapEditorProps {
   onMindMapDefaultsChange?: (patch: ZhiJianMindMapDefaults) => void;
 }
 
+interface MindMapScrollbarDrag {
+  axis: "horizontal" | "vertical";
+  pointerId: number;
+  pointerOffset: number;
+}
+
 export interface MindMapTextSelection {
   nodeId: string;
   from: number;
@@ -94,6 +100,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
   const horizontalScrollbarRef = useRef<HTMLInputElement>(null);
   const verticalScrollbarRef = useRef<HTMLInputElement>(null);
   const scrollbarRanges = useRef({ horizontalMin: 0, horizontalMax: 0, verticalMin: 0, verticalMax: 0 });
+  const scrollbarDrag = useRef<MindMapScrollbarDrag | null>(null);
   const mindRef = useRef<MindElixir | null>(null);
   const suppressOperation = useRef(false);
   const initialTree = useRef(tree);
@@ -277,6 +284,59 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
       mind.move(0, nextY - viewport.y);
     }
   }, []);
+
+  const endMindMapScrollbarDrag = useCallback((event: ReactPointerEvent<HTMLInputElement>) => {
+    if (scrollbarDrag.current?.pointerId !== event.pointerId) return;
+    scrollbarDrag.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  }, []);
+
+  const handleMindMapScrollbarPointerDown = useCallback((event: ReactPointerEvent<HTMLInputElement>) => {
+    if (event.currentTarget.disabled) return;
+    event.preventDefault();
+
+    const scrollbar = event.currentTarget;
+    const axis = scrollbar === horizontalScrollbarRef.current ? "horizontal" : "vertical";
+    const coordinate = axis === "horizontal" ? event.clientX : event.clientY;
+    const start = axis === "horizontal"
+      ? scrollbar.getBoundingClientRect().left
+      : scrollbar.getBoundingClientRect().top;
+    const trackSize = axis === "horizontal" ? scrollbar.clientWidth : scrollbar.clientHeight;
+    const thumbSize = Number.parseFloat(getComputedStyle(scrollbar).getPropertyValue("--mindmap-scrollbar-thumb-size")) || 48;
+    const usableTrackSize = Math.max(0, trackSize - thumbSize);
+    const progress = Number(scrollbar.value) / MIND_MAP_SCROLLBAR_STEPS;
+    const thumbStart = progress * usableTrackSize;
+    const localCoordinate = coordinate - start;
+    const onThumb = localCoordinate >= thumbStart && localCoordinate <= thumbStart + thumbSize;
+    const pointerOffset = onThumb
+      ? localCoordinate - thumbStart
+      : thumbSize / 2;
+
+    scrollbarDrag.current = { axis, pointerId: event.pointerId, pointerOffset };
+    scrollbar.setPointerCapture(event.pointerId);
+    if (!onThumb) {
+      const progress = Math.min(1, Math.max(0, (localCoordinate - pointerOffset) / Math.max(1, usableTrackSize)));
+      const value = progress * MIND_MAP_SCROLLBAR_STEPS;
+      scrollbar.value = String(value);
+      moveMindMapFromScrollbar(axis, value);
+    }
+  }, [moveMindMapFromScrollbar]);
+
+  const handleMindMapScrollbarPointerMove = useCallback((event: ReactPointerEvent<HTMLInputElement>) => {
+    const drag = scrollbarDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    const scrollbar = event.currentTarget;
+    const rect = scrollbar.getBoundingClientRect();
+    const trackSize = drag.axis === "horizontal" ? scrollbar.clientWidth : scrollbar.clientHeight;
+    const thumbSize = Number.parseFloat(getComputedStyle(scrollbar).getPropertyValue("--mindmap-scrollbar-thumb-size")) || 48;
+    const usableTrackSize = Math.max(1, trackSize - thumbSize);
+    const coordinate = drag.axis === "horizontal" ? event.clientX - rect.left : event.clientY - rect.top;
+    const progress = Math.min(1, Math.max(0, (coordinate - drag.pointerOffset) / usableTrackSize));
+    const value = progress * MIND_MAP_SCROLLBAR_STEPS;
+    scrollbar.value = String(value);
+    moveMindMapFromScrollbar(drag.axis, value);
+  }, [moveMindMapFromScrollbar]);
 
   const toggleFullscreen = async () => {
     const fullscreenTarget = containerRef.current?.closest<HTMLElement>(".mindmap-pane-body");
@@ -749,6 +809,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
     onExportImageReadyRef.current?.(() => captureMindMapPng());
     return () => {
       onExportImageReadyRef.current?.(null);
+      scrollbarDrag.current = null;
       canvas.removeEventListener("copy", onMindMapCopy, true);
       canvas.removeEventListener("cut", onMindMapCut, true);
       canvas.removeEventListener("paste", onMindMapPaste, true);
@@ -1361,6 +1422,10 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
         step="any"
         defaultValue="0"
         aria-label="横向滚动导图"
+        onPointerDown={handleMindMapScrollbarPointerDown}
+        onPointerMove={handleMindMapScrollbarPointerMove}
+        onPointerUp={endMindMapScrollbarDrag}
+        onPointerCancel={endMindMapScrollbarDrag}
         onChange={(event) => moveMindMapFromScrollbar("horizontal", Number(event.target.value))}
       />
       <input
@@ -1372,6 +1437,10 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
         step="any"
         defaultValue="0"
         aria-label="纵向滚动导图"
+        onPointerDown={handleMindMapScrollbarPointerDown}
+        onPointerMove={handleMindMapScrollbarPointerMove}
+        onPointerUp={endMindMapScrollbarDrag}
+        onPointerCancel={endMindMapScrollbarDrag}
         onChange={(event) => moveMindMapFromScrollbar("vertical", Number(event.target.value))}
       />
       <div className="mindmap-canvas-toolbar" aria-label="导图视图工具栏">
