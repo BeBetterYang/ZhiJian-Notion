@@ -68,6 +68,25 @@ textarea {
   font: inherit;
 }
 
+@media (pointer: coarse) {
+  input:not([type]),
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  input[type="url"],
+  input[type="tel"],
+  input[type="number"],
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="time"],
+  input[type="month"],
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
 .toolbar-file-input {
   display: none;
 }

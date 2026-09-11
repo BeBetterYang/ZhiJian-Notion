@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { FiEye, FiEyeOff } from "react-icons/fi";
 import type { WorkspaceSession } from "./auth";
 import { login, register } from "./auth";
@@ -18,6 +18,16 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const usernameRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      if (mode === "register") usernameRef.current?.focus();
+      else emailRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [mode]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -41,6 +51,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   };
 
   const switchMode = (nextMode: "login" | "register") => {
+    if (submitting) return;
     const url = new URL(window.location.href);
     if (nextMode === "register") url.searchParams.set("auth", "register"); else url.searchParams.delete("auth");
     window.history.replaceState({}, "", url);
@@ -53,43 +64,47 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   };
 
   return (
-    <main className={`login-screen ${mode === "register" ? "is-register" : "is-login"}`}>
-      <section className={`login-panel ${mode === "register" ? "is-register" : ""}`} aria-labelledby="login-title">
-        <div className="login-heading">
+    <main className="login-screen">
+      <section className="login-panel" aria-labelledby="login-title">
+        <div key={mode} className="login-heading">
           <img className="login-logo" src={logoUrl} alt="枝间 Logo" />
           <h1 id="login-title">{mode === "register" ? "注册枝间" : "登录枝间"}</h1>
           <p>{mode === "register" ? "创建你的枝间账户" : "继续进入你的工作空间"}</p>
         </div>
         <form className="login-form" onSubmit={submit} noValidate>
-          {mode === "register" ? (
-            <label className="auth-form-item">
-              <span className="auth-form-label">用户名</span>
-              <span className="auth-input">
-                <input
-                  type="text"
-                  autoComplete="username"
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
-                  placeholder="输入用户名"
-                  autoFocus
-                />
-              </span>
-            </label>
-          ) : null}
-          {mode === "register" ? (
-            <label className="auth-form-item">
-              <span className="auth-form-label">注册码</span>
-              <span className="auth-input">
-                <input
-                  type="text"
-                  autoComplete="off"
-                  value={registrationCode}
-                  onChange={(event) => setRegistrationCode(event.target.value)}
-                  placeholder="输入注册码"
-                />
-              </span>
-            </label>
-          ) : null}
+          <div className={`register-extra-fields ${mode === "register" ? "is-visible" : ""}`} aria-hidden={mode !== "register"}>
+            <div className="register-extra-fields-inner">
+              <label className="auth-form-item">
+                <span className="auth-form-label">用户名</span>
+                <span className="auth-input">
+                  <input
+                    ref={usernameRef}
+                    type="text"
+                    autoComplete="username"
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
+                    placeholder="输入用户名"
+                    disabled={submitting}
+                    tabIndex={mode === "register" ? 0 : -1}
+                  />
+                </span>
+              </label>
+              <label className="auth-form-item">
+                <span className="auth-form-label">注册码</span>
+                <span className="auth-input">
+                  <input
+                    type="text"
+                    autoComplete="off"
+                    value={registrationCode}
+                    onChange={(event) => setRegistrationCode(event.target.value)}
+                    placeholder="输入注册码"
+                    disabled={submitting}
+                    tabIndex={mode === "register" ? 0 : -1}
+                  />
+                </span>
+              </label>
+            </div>
+          </div>
           <label className="auth-form-item">
             <span className="auth-form-label">邮箱</span>
             <span className="auth-input">
@@ -99,24 +114,28 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="name@example.com"
-                autoFocus={mode === "login"}
+                ref={emailRef}
+                disabled={submitting}
+                tabIndex={mode === "login" ? 0 : -1}
               />
             </span>
           </label>
           <label className="auth-form-item">
             <span className="auth-form-label">密码</span>
             <span className="auth-input password-field">
-              <input
+                <input
                 type={showPassword ? "text" : "password"}
                 autoComplete={mode === "register" ? "new-password" : "current-password"}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="输入密码"
-              />
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="输入密码"
+                  disabled={submitting}
+                />
               <button
                 type="button"
                 className="icon-button password-toggle"
                 onClick={() => setShowPassword((visible) => !visible)}
+                disabled={submitting}
                 aria-label={showPassword ? "隐藏密码" : "显示密码"}
                 title={showPassword ? "隐藏密码" : "显示密码"}
               >
@@ -124,12 +143,13 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
               </button>
             </span>
           </label>
-          <div className="form-error" role="alert">{error}</div>
-          <div className="form-notice" role="status">{notice}</div>
-          <button type="submit" className="primary-button" disabled={submitting}>{submitting ? "处理中..." : mode === "register" ? "注册" : "继续"}</button>
+          <div className={`auth-feedback ${error ? "is-error" : notice ? "is-notice" : ""}`} role={error ? "alert" : "status"}>{error || notice || "\u00a0"}</div>
+          <button type="submit" className="primary-button" disabled={submitting}>
+            {submitting ? <><span className="auth-spinner" aria-hidden="true" />{mode === "register" ? "正在注册" : "正在登录"}</> : mode === "register" ? "创建账户" : "继续"}
+          </button>
           <p className="auth-switch">
             {mode === "register" ? "已有账户？" : "是新用户吗？"}
-            <a href={mode === "register" ? "/workspace.html" : "/workspace.html?auth=register"} onClick={(event) => { event.preventDefault(); switchMode(mode === "register" ? "login" : "register"); }}>{mode === "register" ? "请登录" : "请注册"}</a>
+            <a href={mode === "register" ? "/workspace.html" : "/workspace.html?auth=register"} aria-disabled={submitting} onClick={(event) => { event.preventDefault(); switchMode(mode === "register" ? "login" : "register"); }}>{mode === "register" ? "登录" : "注册"}</a>
           </p>
         </form>
       </section>
