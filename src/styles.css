@@ -933,6 +933,15 @@ textarea {
   color: var(--zhijian-hint);
 }
 
+/* BlockNote adds the empty-block hint as a pseudo-element. Keep that hint in the
+   same line box as a normal paragraph so Enter after a heading does not change the
+   heading-to-paragraph gap when text is entered later. */
+.outline-panel .bn-block-content[data-content-type="paragraph"]:has(.ProseMirror-trailingBreak:only-child)::after {
+  font-size: var(--zhijian-type-body-size);
+  line-height: var(--zhijian-type-body-line-height);
+  font-style: normal;
+}
+
 /* The persistent node marker replaces BlockNote's drag handle. */
 .outline-panel
   .bn-block-group

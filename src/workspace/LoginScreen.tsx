@@ -71,8 +71,8 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
           <h1 id="login-title">{mode === "register" ? "注册枝间" : "登录枝间"}</h1>
           <p>{mode === "register" ? "创建你的枝间账户" : "继续进入你的工作空间"}</p>
         </div>
-        <form className="login-form" onSubmit={submit} noValidate>
-          <div className={`register-extra-fields ${mode === "register" ? "is-visible" : ""}`} aria-hidden={mode !== "register"}>
+        <form className="login-form" onSubmit={submit} noValidate autoComplete="on">
+          {mode === "register" ? <div className="register-extra-fields is-visible">
             <div className="register-extra-fields-inner">
               <label className="auth-form-item">
                 <span className="auth-form-label">用户名</span>
@@ -80,12 +80,11 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                   <input
                     ref={usernameRef}
                     type="text"
-                    autoComplete="username"
+                    name="name"
+                    autoComplete="nickname"
                     value={username}
                     onChange={(event) => setUsername(event.target.value)}
                     placeholder="输入用户名"
-                    disabled={submitting}
-                    tabIndex={mode === "register" ? 0 : -1}
                   />
                 </span>
               </label>
@@ -94,29 +93,27 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                 <span className="auth-input">
                   <input
                     type="text"
+                    name="registrationCode"
                     autoComplete="off"
                     value={registrationCode}
                     onChange={(event) => setRegistrationCode(event.target.value)}
                     placeholder="输入注册码"
-                    disabled={submitting}
-                    tabIndex={mode === "register" ? 0 : -1}
                   />
                 </span>
               </label>
             </div>
-          </div>
+          </div> : null}
           <label className="auth-form-item">
             <span className="auth-form-label">邮箱</span>
             <span className="auth-input">
               <input
                 type="email"
-                autoComplete="email"
+                name={mode === "login" ? "username" : "email"}
+                autoComplete={mode === "login" ? "username" : "email"}
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="name@example.com"
                 ref={emailRef}
-                disabled={submitting}
-                tabIndex={mode === "login" ? 0 : -1}
               />
             </span>
           </label>
@@ -125,11 +122,11 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
             <span className="auth-input password-field">
                 <input
                 type={showPassword ? "text" : "password"}
+                name="password"
                 autoComplete={mode === "register" ? "new-password" : "current-password"}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="输入密码"
-                  disabled={submitting}
                 />
               <button
                 type="button"
