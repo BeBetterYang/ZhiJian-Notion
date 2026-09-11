@@ -118,6 +118,20 @@ describe("mind map theme presets", () => {
     expect(yanpi.connector.color).toBe("#d5d1ca");
   });
 
+  it("uses darker root colours for the low-contrast theme connectors", () => {
+    expect(Object.fromEntries(
+      MIND_MAP_THEME_PRESETS
+        .filter((theme) => ["breeze", "pulse", "voyage", "secret-forest", "volcano"].includes(theme.id))
+        .map((theme) => [theme.id, theme.connector.color]),
+    )).toEqual({
+      breeze: "#49b84b",
+      pulse: "#ef8148",
+      voyage: "#2f92e6",
+      "secret-forest": "#60731d",
+      volcano: "#a1512d",
+    });
+  });
+
   it("overrides only the canvas background with a custom palette colour", () => {
     const original = resolveMindMapTheme({ id: "ocean", version: 1 });
     const customized = resolveMindMapTheme({ id: "ocean", version: 1 }, "#f1f3f5");
