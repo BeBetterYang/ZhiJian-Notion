@@ -370,7 +370,13 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
     if (centerRootAfterLayout.current) {
       centerRootAfterLayout.current = false;
       window.cancelAnimationFrame(layoutCenterFrame.current);
-      layoutCenterFrame.current = window.requestAnimationFrame(() => centerMindMapNode(mindRef.current, data.nodeData.id));
+      layoutCenterFrame.current = window.requestAnimationFrame(() => {
+        const currentMind = mindRef.current;
+        if (!currentMind) return;
+
+        centerMindMapNode(currentMind, data.nodeData.id, false);
+        syncMindMapScrollbars(currentMind);
+      });
     }
     queueMicrotask(() => {
       suppressOperation.current = false;
@@ -379,7 +385,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
       if (!restoreId) return;
       try { mind.selectNode(mind.findEle(restoreId)); } catch { lastSelectedNodeId.current = null; }
     });
-  }, [collectTargets, scheduleMindMapScrollbarSync]);
+  }, [collectTargets, scheduleMindMapScrollbarSync, syncMindMapScrollbars]);
 
   /**
    * Hand the map's current 摘要 and 连接 to the store.
@@ -1867,7 +1873,7 @@ function selectAndCenterMindMapNode(mind: MindElixir, nodeId: string) {
   }
 }
 
-function centerMindMapNode(mind: MindElixir | null, nodeId: string) {
+function centerMindMapNode(mind: MindElixir | null, nodeId: string, smooth = true) {
   if (!mind) return;
   try {
     const nodeRect = mind.findEle(nodeId).getBoundingClientRect();
@@ -1876,7 +1882,7 @@ function centerMindMapNode(mind: MindElixir | null, nodeId: string) {
     const nodeCenterY = nodeRect.top + nodeRect.height / 2;
     const containerCenterX = containerRect.left + containerRect.width / 2;
     const containerCenterY = containerRect.top + containerRect.height / 2;
-    mind.move(containerCenterX - nodeCenterX, containerCenterY - nodeCenterY, true);
+    mind.move(containerCenterX - nodeCenterX, containerCenterY - nodeCenterY, smooth);
   } catch {
     // The requested root may have been replaced before the scheduled frame runs.
   }

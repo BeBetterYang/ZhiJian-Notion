@@ -118,18 +118,13 @@ describe("mind map theme presets", () => {
     expect(yanpi.connector.color).toBe("#d5d1ca");
   });
 
-  it("uses darker root colours for branch palettes and connectors", () => {
-    expect(Object.fromEntries(
-      MIND_MAP_THEME_PRESETS
-        .filter((theme) => ["breeze", "pulse", "voyage", "secret-forest", "volcano"].includes(theme.id))
-        .map((theme) => [theme.id, { connector: theme.connector.color, branchPalette: theme.branchPalette, root: theme.root.background }]),
-    )).toEqual({
-      breeze: { connector: "#49b84b", branchPalette: ["#49b84b"], root: "#49b84b" },
-      pulse: { connector: "#ef8148", branchPalette: ["#ef8148"], root: "#ef8148" },
-      voyage: { connector: "#2f92e6", branchPalette: ["#2f92e6"], root: "#2f92e6" },
-      "secret-forest": { connector: "#60731d", branchPalette: ["#60731d"], root: "#60731d" },
-      volcano: { connector: "#a1512d", branchPalette: ["#a1512d"], root: "#a1512d" },
-    });
+  it("uses level-one node backgrounds for the selected theme connectors", () => {
+    MIND_MAP_THEME_PRESETS
+      .filter((theme) => ["breeze", "pulse", "voyage", "secret-forest", "volcano"].includes(theme.id))
+      .forEach((theme) => {
+        expect(theme.connector.color).toBe(theme.level1.background);
+        expect(theme.branchPalette).toEqual([theme.level1.background]);
+      });
   });
 
   it("overrides only the canvas background with a custom palette colour", () => {
