@@ -137,8 +137,8 @@ function toBlockNoteContent(node: ZhiJianNode): PartialBlock["content"] {
     return {
       type: "tableContent",
       columnWidths: table.columnWidths,
-      headerRows: table.headerRows,
-      headerCols: table.headerCols,
+      headerRows: table.headerRows ?? 0,
+      headerCols: table.headerCols ?? 0,
       rows: table.rows.map((row) => ({
         cells: row.map((cell) => ({
           type: "tableCell",
@@ -279,7 +279,11 @@ function imageDataFromBlock(block: Block): ZhiJianImageData {
 }
 
 function createDefaultTableData(): ZhiJianTableData {
-  return { rows: Array.from({ length: 2 }, () => Array.from({ length: 3 }, () => ({ content: { text: "" } }))) };
+  return {
+    rows: Array.from({ length: 2 }, () => Array.from({ length: 3 }, () => ({ content: { text: "" } }))),
+    headerRows: 0,
+    headerCols: 0,
+  };
 }
 
 function normalizeHeadingLevel(value: unknown): 1 | 2 | 3 {

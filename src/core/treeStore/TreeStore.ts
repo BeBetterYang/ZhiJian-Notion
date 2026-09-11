@@ -649,6 +649,8 @@ function createDefaultTable() {
     rows: Array.from({ length: 2 }, () =>
       Array.from({ length: 3 }, () => ({ content: plainTextContent("") })),
     ),
+    headerRows: 0,
+    headerCols: 0,
   };
 }
 

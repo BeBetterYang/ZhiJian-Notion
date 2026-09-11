@@ -56,6 +56,26 @@ describe("blockNoteAdapter", () => {
     expect(tree.nodes.table.props?.table?.rows[0][0].content.text).toBe("内容");
   });
 
+  it("projects missing table headers as ordinary cells", () => {
+    const tree = createInitialTree();
+    tree.nodes.web.type = "table";
+    tree.nodes.web.props = { table: { rows: [[{ content: { text: "内容" } }]] } };
+
+    const [projected] = treeToBlockNote(tree);
+    expect(projected.children?.[0]?.content).toMatchObject({ headerRows: 0, headerCols: 0 });
+  });
+
+  it("preserves explicit table headers", () => {
+    const tree = createInitialTree();
+    tree.nodes.web.type = "table";
+    tree.nodes.web.props = {
+      table: { rows: [[{ content: { text: "标题" } }]], headerRows: 1, headerCols: 1 },
+    };
+
+    const [projected] = treeToBlockNote(tree);
+    expect(projected.children?.[0]?.content).toMatchObject({ headerRows: 1, headerCols: 1 });
+  });
+
   it("preserves heading and todo node types", () => {
     const tree = createInitialTree();
     tree.nodes.web.type = "heading";

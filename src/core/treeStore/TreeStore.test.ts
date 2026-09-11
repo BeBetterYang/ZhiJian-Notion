@@ -189,6 +189,8 @@ describe("TreeStore", () => {
     const store = new TreeStore(createInitialTree());
     store.updateType("web", "table");
     expect(store.getNode("web")?.props?.table?.rows).toHaveLength(2);
+    expect(store.getNode("web")?.props?.table?.headerRows).toBe(0);
+    expect(store.getNode("web")?.props?.table?.headerCols).toBe(0);
     store.updateType("web", "todo");
     expect(store.getNode("web")?.props?.table).toBeUndefined();
     expect(store.getNode("web")?.props?.checked).toBe(false);

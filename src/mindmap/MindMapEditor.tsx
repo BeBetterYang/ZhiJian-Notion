@@ -374,6 +374,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
         const currentMind = mindRef.current;
         if (!currentMind) return;
 
+        currentMind.map.style.transition = "none";
         centerMindMapNode(currentMind, data.nodeData.id, false);
         syncMindMapScrollbars(currentMind);
       });
@@ -383,7 +384,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
       collectTargets();
       const restoreId = selectedNodeRef.current ?? lastSelectedNodeId.current;
       if (!restoreId) return;
-      try { mind.selectNode(mind.findEle(restoreId)); } catch { lastSelectedNodeId.current = null; }
+      try { mind.selectNodes([mind.findEle(restoreId)]); } catch { lastSelectedNodeId.current = null; }
     });
   }, [collectTargets, scheduleMindMapScrollbarSync, syncMindMapScrollbars]);
 
