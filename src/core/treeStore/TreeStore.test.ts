@@ -73,6 +73,30 @@ describe("TreeStore", () => {
     expect(store.getNode("web")?.description?.text).toBe("第一阶段");
   });
 
+  it("duplicates complete subtrees with fresh ids under a target", () => {
+    const store = new TreeStore(createInitialTree());
+    store.updateType("web", "todo", { checked: true });
+    store.updateDescription("web", "描述");
+    store.updateNodes([{ id: "web", blocks: [{ id: "quote", type: "quote", content: { text: "引用" } }], props: { style: { color: "red" } } }]);
+    const childId = store.createNode({ parentId: "web", content: "子节点" });
+    const source = store.getNode("web")!;
+    const child = store.getNode(childId)!;
+    const [copyId] = store.duplicateSubtrees([[source, child]], "app");
+
+    const copy = store.getNode(copyId)!;
+    const copiedChild = store.getNode(copy.children[0])!;
+    expect(copyId).not.toBe("web");
+    expect(copy.parentId).toBe("app");
+    expect(copy.type).toBe("todo");
+    expect(copy.props).toEqual(source.props);
+    expect(copy.description).toEqual(source.description);
+    expect(copy.blocks).toEqual(source.blocks);
+    expect(copy.children).toHaveLength(1);
+    expect(copiedChild.id).not.toBe(childId);
+    expect(copiedChild.parentId).toBe(copyId);
+    expect(store.getNode("app")?.children).toContain(copyId);
+  });
+
   it("keeps one IME composition to a single undo step", () => {
     const store = new TreeStore(createInitialTree());
     store.beginHistoryCoalescing();

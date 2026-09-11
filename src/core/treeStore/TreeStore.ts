@@ -459,36 +459,42 @@ export class TreeStore {
     if (!source.parentId) {
       return null;
     }
-    const newRootId = createId();
+    const sourceNodes = this.collectSubtreeNodes(this.tree, id);
+    return this.duplicateSubtrees([sourceNodes], source.parentId, this.requireNode(source.parentId).children.indexOf(id) + 1)[0] ?? null;
+  }
+
+  duplicateSubtrees(subtrees: ZhiJianNode[][], parentId: string, index?: number) {
+    const validSubtrees = subtrees.filter((subtree) => subtree.length > 0);
+    if (!validSubtrees.length || !this.getNode(parentId)) return [];
+    const copiedRootIds: string[] = [];
     this.commit((draft) => {
-      const parent = this.requireDraftNode(draft, source.parentId!);
-      const sourceIndex = parent.children.indexOf(id);
-      const idMap = new Map<string, string>([[id, newRootId]]);
-      const cloneSubtree = (sourceId: string, parentId: string | null) => {
-        const original = this.requireNode(sourceId);
-        const copyId = idMap.get(sourceId) ?? createId();
-        idMap.set(sourceId, copyId);
-        const childIds = original.children.map((childId) => {
-          const childCopyId = createId();
-          idMap.set(childId, childCopyId);
-          return childCopyId;
-        });
-        draft.nodes[copyId] = {
-          ...original,
-          id: copyId,
-          parentId,
-          children: childIds,
-          meta: nowMeta(),
+      const parent = this.requireDraftNode(draft, parentId);
+      const insertAt = clampIndex(index ?? parent.children.length, parent.children);
+      validSubtrees.forEach((subtree) => {
+        const sourceById = new Map(subtree.map((node) => [node.id, node]));
+        const cloneSubtree = (sourceId: string, nextParentId: string | null): string | null => {
+          const original = sourceById.get(sourceId);
+          if (!original) return null;
+          const copyId = createId();
+          const childIds = original.children
+            .map((childId) => cloneSubtree(childId, copyId))
+            .filter((childId): childId is string => Boolean(childId));
+          draft.nodes[copyId] = {
+            ...original,
+            id: copyId,
+            parentId: nextParentId,
+            children: childIds,
+            meta: nowMeta(),
+          };
+          return copyId;
         };
-        original.children.forEach((childId) => {
-          cloneSubtree(childId, copyId);
-        });
-      };
-      cloneSubtree(id, source.parentId);
-      parent.children.splice(sourceIndex + 1, 0, newRootId);
+        const copyId = cloneSubtree(subtree[0].id, parent.id);
+        if (copyId) copiedRootIds.push(copyId);
+      });
+      parent.children.splice(insertAt, 0, ...copiedRootIds);
       draft.nodes[parent.id] = touchNode(parent);
     });
-    return newRootId;
+    return copiedRootIds;
   }
 
   /** Starts a run of commits that undo steps over as one. Idempotent. */
@@ -590,6 +596,18 @@ export class TreeStore {
       ids.push(...this.collectSubtreeIds(tree, childId));
     });
     return ids;
+  }
+
+  private collectSubtreeNodes(tree: ZhiJianTree, id: string) {
+    const nodes: ZhiJianNode[] = [];
+    const visit = (nodeId: string) => {
+      const node = tree.nodes[nodeId];
+      if (!node) return;
+      nodes.push(node);
+      node.children.forEach(visit);
+    };
+    visit(id);
+    return nodes;
   }
 
   private isDescendant(id: string, ancestorId: string) {

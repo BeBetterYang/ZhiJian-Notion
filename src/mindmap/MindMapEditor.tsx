@@ -38,6 +38,7 @@ import {
 import { MindMapLinkHoverTracker } from "./MindMapLinkHoverTracker";
 import { renderMindMapNodeDisplayHtml } from "./MindMapNodeRenderer";
 import { MindMapNodeContent } from "./MindMapNodeGroupBlock";
+import { readMindMapNodeClipboard, selectedMindMapNodeIds, writeMindMapNodeClipboard } from "./mindMapClipboard";
 
 interface MindMapEditorProps {
   readOnly?: boolean;
@@ -110,6 +111,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
   // 「插入表格」跨了两次渲染：这一次写 store，下一次等 mind-elixir 把节点画出来了再选中它。
   // requestId 记下来是因为这条 effect 也会因为别的 prop 变化重跑，不然一个请求会插好几张表。
   const pendingTableNodeId = useRef<string | null>(null);
+  const pendingPastedNodeIds = useRef<string[]>([]);
   const handledTableRequestId = useRef<number | null>(null);
   // 「把某个节点挪到视野中间」（工作区搜索跳转、导图里查找上一处/下一处）同样是一次性请求：
   // requestId 记下来，否则那条 effect 每因为 `tree` 变化重跑一次，画布就被拽回同一个节点一次。
@@ -127,9 +129,11 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
   const onDirectionChangeRef = useRef(onDirectionChange);
   const readOnlyRef = useRef(readOnly);
   const selectedNodeRef = useRef(selectedNodeId);
+  const selectedNodeIdsRef = useRef<string[]>([]);
   const lastSelectedNodeId = useRef<string | null>(selectedNodeId);
   const editingTargetRef = useRef<EditingTarget>(null);
   const geometryMeasureFrame = useRef(0);
+  const scrollbarSyncFrame = useRef(0);
   const linkFrame = useRef(0);
   const decorationSaveFrame = useRef(0);
   const layoutCenterFrame = useRef(0);
@@ -187,6 +191,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
   // 渲染都是新对象，直接进依赖数组会让主题每敲一个字就重建一次。
   const activeLayoutRef = useRef(activeLayout);
   activeLayoutRef.current = activeLayout;
+  selectedNodeIdsRef.current = selectedNodeIds;
 
   const selectLayout = (layout: ZhiJianMindMapLayout) => {
     centerRootAfterLayout.current = mindMapLayoutKey(resolveMindMapLayout(layout)) !== activeLayoutKey;
@@ -247,6 +252,16 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
       "vertical",
     );
   }, []);
+
+  const scheduleMindMapScrollbarSync = useCallback((mind: MindElixir | null = mindRef.current) => {
+    window.cancelAnimationFrame(scrollbarSyncFrame.current);
+    scrollbarSyncFrame.current = window.requestAnimationFrame(() => {
+      scrollbarSyncFrame.current = window.requestAnimationFrame(() => {
+        scrollbarSyncFrame.current = 0;
+        syncMindMapScrollbars(mindRef.current ?? mind);
+      });
+    });
+  }, [syncMindMapScrollbars]);
 
   const moveMindMapFromScrollbar = useCallback((axis: "horizontal" | "vertical", value: number) => {
     const mind = mindRef.current;
@@ -353,6 +368,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
     mind.refresh({ ...data, direction: directionRef.current });
     mind.clearHistory?.();
     correctMindMapSummaryOffsets(mind, treeRef.current);
+    scheduleMindMapScrollbarSync(mind);
     if (centerRootAfterLayout.current) {
       centerRootAfterLayout.current = false;
       window.cancelAnimationFrame(layoutCenterFrame.current);
@@ -365,7 +381,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
       if (!restoreId) return;
       try { mind.selectNode(mind.findEle(restoreId)); } catch { lastSelectedNodeId.current = null; }
     });
-  }, [collectTargets]);
+  }, [collectTargets, scheduleMindMapScrollbarSync]);
 
   /**
    * Hand the map's current 摘要 and 连接 to the store.
@@ -408,7 +424,8 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
     if (!mind) return;
     mind.changeTheme(createMindElixirTheme(activeTheme, roundedConnectors, activeLayoutRef.current), false);
     scheduleLinkDiv();
-  }, [activeLayoutKey, activeTheme, roundedConnectors, scheduleLinkDiv]);
+    scheduleMindMapScrollbarSync(mind);
+  }, [activeLayoutKey, activeTheme, roundedConnectors, scheduleLinkDiv, scheduleMindMapScrollbarSync]);
 
   const scheduleGeometryMeasure = useCallback((nodeId: string) => {
     window.cancelAnimationFrame(geometryMeasureFrame.current);
@@ -477,6 +494,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
     window.cancelAnimationFrame(geometryMeasureFrame.current);
     window.cancelAnimationFrame(decorationSaveFrame.current);
     window.cancelAnimationFrame(focusNodeFrame.current);
+    window.cancelAnimationFrame(scrollbarSyncFrame.current);
   }, []);
 
   const reportNodeToolbar = useCallback((active: boolean) => onNodeToolbarRef.current(active), []);
@@ -489,9 +507,10 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
   );
 
   useEffect(() => {
-    if (!containerRef.current || mindRef.current) return;
+    const canvas = containerRef.current;
+    if (!canvas || mindRef.current) return;
     const mind = new MindElixir({
-      el: containerRef.current,
+      el: canvas,
       // One direction, like an outline read left to right. `SIDE` would split the
       // root's children between the two sides, which reads as two maps.
       direction: directionRef.current,
@@ -578,6 +597,40 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
       const press = pressBehindEditRef.current(nodeId);
       beginNodeEditRef.current(nodeId, press?.blockId, press?.point, press?.tableCell);
     };
+    const onMindMapCopy = (event: ClipboardEvent) => {
+      if (editingTargetRef.current || !selectedNodeIdsRef.current.length) return;
+      if (!writeMindMapNodeClipboard(event, storeRef.current.getSnapshot(), selectedNodeIdsRef.current)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    const onMindMapCut = (event: ClipboardEvent) => {
+      if (readOnlyRef.current || editingTargetRef.current || !selectedNodeIdsRef.current.length) return;
+      const tree = storeRef.current.getSnapshot();
+      const rootIds = selectedMindMapNodeIds(tree, selectedNodeIdsRef.current);
+      if (!writeMindMapNodeClipboard(event, tree, selectedNodeIdsRef.current)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      rootIds.forEach((nodeId) => storeRef.current.deleteNode(nodeId));
+      setSelectedNodeIds([]);
+      lastSelectedNodeId.current = null;
+      selectedNodeRef.current = null;
+      onSelectedNodeIdsRef.current([]);
+      onSelectRef.current(null);
+      onActiveRef.current(false);
+      mind.clearSelection();
+    };
+    const onMindMapPaste = (event: ClipboardEvent) => {
+      if (readOnlyRef.current || editingTargetRef.current) return;
+      const payload = readMindMapNodeClipboard(event);
+      const targetId = selectedNodeIdsRef.current.at(-1) ?? selectedNodeRef.current;
+      if (!payload || !targetId || !storeRef.current.getNode(targetId)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      pendingPastedNodeIds.current = storeRef.current.duplicateSubtrees(payload.subtrees, targetId);
+    };
+    canvas.addEventListener("copy", onMindMapCopy, true);
+    canvas.addEventListener("cut", onMindMapCut, true);
+    canvas.addEventListener("paste", onMindMapPaste, true);
     // The summary's own label editor is a clone of the label positioned from it, so
     // the lift has to be in place before it opens. On creation mind-elixir renders
     // the summary and opens the editor before it reports the operation, so the
@@ -667,17 +720,21 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
         if (direction !== MindElixir.DOWN) onDirectionChangeRef.current?.(direction);
       }
       window.requestAnimationFrame(collectTargets);
+      scheduleMindMapScrollbarSync(mind);
     });
     // Every re-render of the annotations ends here, whichever caused it — a layout
     // pass, a refresh, or creating one — so this is the one place the summary lift
     // has to be applied from.
-    mind.bus.addListener("linkDiv", () => correctMindMapSummaryOffsets(mind, treeRef.current));
+    mind.bus.addListener("linkDiv", () => {
+      correctMindMapSummaryOffsets(mind, treeRef.current);
+      scheduleMindMapScrollbarSync(mind);
+    });
     // Dragging an arrow's control point moves it without an `operation`; the delta
     // is part of the arrow, so it has to be stored too. `saveDecorations` no-ops
     // when nothing changed, which is what keeps a drag from filling the undo stack.
     mind.bus.addListener("updateArrowDelta", () => scheduleSaveDecorations());
     mindRef.current = mind;
-    const resizeObserver = new ResizeObserver(() => syncMindMapScrollbars(mind));
+    const resizeObserver = new ResizeObserver(() => scheduleMindMapScrollbarSync(mind));
     resizeObserver.observe(mind.container);
     resizeObserver.observe(mind.nodes);
     syncMindMapScrollbars(mind);
@@ -687,11 +744,15 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
     onExportImageReadyRef.current?.(() => captureMindMapPng());
     return () => {
       onExportImageReadyRef.current?.(null);
+      canvas.removeEventListener("copy", onMindMapCopy, true);
+      canvas.removeEventListener("cut", onMindMapCut, true);
+      canvas.removeEventListener("paste", onMindMapPaste, true);
+      window.cancelAnimationFrame(scrollbarSyncFrame.current);
       resizeObserver.disconnect();
       mind.destroy();
       mindRef.current = null;
     };
-  }, [applyEditingTarget, collectTargets, onViewportChange, syncMindMapScrollbars]);
+  }, [applyEditingTarget, collectTargets, onViewportChange, scheduleMindMapScrollbarSync, syncMindMapScrollbars]);
 
   const selectTreeNode = useCallback((nodeId: string) => {
     if (shouldExitEditing(editingTargetRef.current, nodeId)) applyEditingTarget(null);
@@ -938,6 +999,19 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
     pendingTableNodeId.current = null;
     selectMindElixirNode(nodeId);
   }, [selectMindElixirNode, tree]);
+
+  useEffect(() => {
+    const nodeIds = pendingPastedNodeIds.current;
+    if (!nodeIds.length || !nodeIds.every((nodeId) => tree.nodes[nodeId])) return;
+    pendingPastedNodeIds.current = [];
+    const mind = mindRef.current;
+    if (!mind) return;
+    try {
+      mind.selectNodes(nodeIds.map((nodeId) => mind.findEle(nodeId)));
+    } catch {
+      // A pasted node can be hidden by the current projection.
+    }
+  }, [tree]);
 
   useEffect(() => {
     const container = containerRef.current;
