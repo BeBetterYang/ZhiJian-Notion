@@ -104,15 +104,28 @@ export function mindMapScrollbarRange(
   contentStart: number,
   contentSize: number,
 ) {
-  const viewportCenter = viewportStart + viewportSize / 2;
+  if (contentSize <= viewportSize) {
+    return {
+      minPan: translation,
+      maxPan: translation,
+      progress: 0,
+    };
+  }
+
+  const viewportEnd = viewportStart + viewportSize;
   const contentEnd = contentStart + contentSize;
-  const min = translation + Math.min(0, viewportCenter - contentEnd);
-  const max = translation + Math.max(0, viewportCenter - contentStart);
-  const span = Math.max(0, max - min);
+
+  const alignStart = translation + (viewportStart - contentStart);
+  const alignEnd = translation + (viewportEnd - contentEnd);
+
+  const minPan = Math.min(alignStart, alignEnd);
+  const maxPan = Math.max(alignStart, alignEnd);
+  const span = Math.max(0, maxPan - minPan);
+
   return {
-    minPan: min,
-    maxPan: max,
-    progress: span ? Math.min(1, Math.max(0, (max - translation) / span)) : 0,
+    minPan,
+    maxPan,
+    progress: span ? Math.min(1, Math.max(0, (maxPan - translation) / span)) : 0,
   };
 }
 
