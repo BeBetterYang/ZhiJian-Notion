@@ -4,21 +4,21 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  ChevronsUpDown,
   Command,
-  Download,
+  Ellipsis,
+  FileInput,
+  FileOutput,
   FileText,
-  GitBranch,
   Image,
-  List,
-  ListCollapse,
-  MoreHorizontal,
+  ListTree,
+  Network,
   RotateCcw,
   RotateCw,
-  Search,
-  Share2,
+  ScanSearch,
+  Share,
   Star,
   Trash2,
-  Upload,
   X,
 } from "lucide-react";
 import { markdownFileName, markdownImportTitle, markdownToTree, treeToMarkdown } from "./core/markdown/markdownDocument";
@@ -496,7 +496,7 @@ export default function App({
   const editorToolbar = (
     <div className="toolbar editor-navigation-toolbar">
       <button
-        className="view-toggle-button"
+        className={`view-toggle-button ${activeView === "outline" ? "is-outline-active" : "is-mindmap-active"}`}
         type="button"
         aria-label={activeView === "outline" ? "切换到思维导图" : "切换到大纲笔记"}
         title={activeView === "outline" ? "切换到思维导图" : "切换到大纲笔记"}
@@ -509,7 +509,7 @@ export default function App({
           setExportMenuOpen(false);
         }}
       >
-        {activeView === "outline" ? <GitBranch /> : <List />}
+        {activeView === "outline" ? <Network /> : <ListTree />}
         <span>{activeView === "outline" ? "思维导图" : "大纲笔记"}</span>
       </button>
       <div className="toolbar-more-wrap" ref={collapseMenuRef}>
@@ -524,7 +524,7 @@ export default function App({
             setToolbarMoreOpen(false);
           }}
         >
-          <ExpandCollapseIcon />
+          <ChevronsUpDown />
         </button>
         {collapseMenuOpen ? (
           <div className="toolbar-more-menu collapse-menu" role="menu">
@@ -556,9 +556,9 @@ export default function App({
         aria-expanded={searchOpen}
         onClick={() => setSearchOpen((open) => !open)}
       >
-        <Search />
+        <ScanSearch />
       </button>
-      {onShare ? <button className="toolbar-icon-button toolbar-more-button" type="button" aria-label="分享" title="分享" onClick={onShare}><Share2 /></button> : null}
+      {onShare ? <button className="toolbar-icon-button toolbar-more-button" type="button" aria-label="分享" title="分享" onClick={onShare}><Share /></button> : null}
       <div className="toolbar-more-wrap" ref={toolbarMoreRef}>
         <button
           className="toolbar-icon-button toolbar-more-button"
@@ -571,7 +571,7 @@ export default function App({
             setExportMenuOpen(false);
           }}
         >
-          <MoreHorizontal />
+          <Ellipsis />
         </button>
         {toolbarMoreOpen ? (
           <div className="toolbar-more-menu" role="menu">
@@ -593,7 +593,7 @@ export default function App({
               setExportMenuOpen(false);
               importInputRef.current?.click();
             }}>
-              <Upload />
+              <FileInput />
               <span>导入</span>
             </button> : null}
             <div className="toolbar-submenu-wrap">
@@ -609,7 +609,7 @@ export default function App({
                   setExportMenuOpen((open) => !open);
                 }}
               >
-                <Download />
+                <FileOutput />
                 <span>导出</span>
                 <ChevronRight className="toolbar-submenu-chevron" />
               </button>
@@ -620,7 +620,7 @@ export default function App({
                     setExportMenuOpen(false);
                     exportMarkdown();
                   }}>
-                    <Download /><span>导出 Markdown</span>
+                    <FileOutput /><span>导出 Markdown</span>
                   </button>
                   {activeView === "outline" ? <>
                     <button type="button" role="menuitem" onClick={() => runExport(() => exportOutlineImage())}>
@@ -927,10 +927,6 @@ function isMindMapViewportState(value: unknown): value is MindMapViewportState {
   return typeof viewport.x === "number" &&
     typeof viewport.y === "number" &&
     typeof viewport.scale === "number";
-}
-
-function ExpandCollapseIcon() {
-  return <ListCollapse aria-hidden="true" />;
 }
 
 function SearchPanel({ query, replacement, focusSignal, onQueryChange, onReplacementChange, onClose, onPrevious, onNext, onReplace, onReplaceAll, allowReplace = true }: {
