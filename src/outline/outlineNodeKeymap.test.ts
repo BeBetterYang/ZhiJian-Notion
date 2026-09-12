@@ -139,6 +139,17 @@ describe("outlineEnterAction", () => {
     expect(outlineEnterAction({ block: target, atEnd: true, selectionEmpty: true, focusedNodeId: "other" })).toBe("default");
   });
 
+  it("always adds below the document root", () => {
+    const root = block("root", "heading");
+
+    expect(outlineEnterAction({
+      block: root,
+      atEnd: true,
+      selectionEmpty: true,
+      rootNodeId: "root",
+    })).toBe("insert-child");
+  });
+
   it("jumps past the attachments at the end of a node with them", () => {
     const target = block("n1", "paragraph", [block("img", "image"), block("c1")]);
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { FiEye, FiEyeOff } from "react-icons/fi";
+import { Eye, EyeOff } from "lucide-react";
 import type { WorkspaceSession } from "./auth";
 import { login, register } from "./auth";
 import logoUrl from "./assets/zhijian-logo.png";
@@ -136,7 +136,7 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                 aria-label={showPassword ? "隐藏密码" : "显示密码"}
                 title={showPassword ? "隐藏密码" : "显示密码"}
               >
-                {showPassword ? <FiEyeOff /> : <FiEye />}
+                {showPassword ? <EyeOff /> : <Eye />}
               </button>
             </span>
           </label>

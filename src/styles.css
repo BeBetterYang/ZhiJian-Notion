@@ -23,6 +23,19 @@
   --color-error: #c0392b;
   --color-success: #448361;
   --color-warning: #b7791f;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 40px;
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-popover: 0 8px 24px rgba(15, 15, 15, 0.12), 0 2px 5px rgba(15, 15, 15, 0.08);
+  --shadow-dialog: 0 24px 70px rgba(15, 15, 15, 0.22), 0 2px 8px rgba(15, 15, 15, 0.08);
+  --overlay-dialog: rgba(15, 15, 15, 0.44);
   --zhijian-font-family: "Source Sans Pro", -apple-system, "PingFang SC", "Apple Color Emoji",
     BlinkMacSystemFont, Helvetica, Arial, "Segoe UI Emoji", "Segoe UI Symbol",
     "Microsoft YaHei", 微软雅黑, 黑体, Heiti, sans-serif, SimSun, 宋体, serif;
@@ -69,6 +82,14 @@
 
 * {
   box-sizing: border-box;
+}
+
+:where(.lucide) {
+  width: 16px;
+  height: 16px;
+  display: block;
+  flex: 0 0 auto;
+  stroke-width: 1.8;
 }
 
 /* A colour applied to selected text has to be visible before the selection is
@@ -175,7 +196,7 @@ textarea {
 }
 
 .toolbar .view-toggle-button:hover {
-  background: rgba(55, 53, 47, 0.07);
+  background: var(--color-hover);
 }
 
 .document-header-actions .editor-navigation-toolbar {
@@ -210,12 +231,12 @@ textarea {
   top: calc(100% + 5px);
   right: 0;
   width: 190px;
-  padding: 6px;
-  border: 1px solid rgba(55, 53, 47, 0.12);
-  border-radius: 6px;
-  background: #fff;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
   font-size: 14px;
-  box-shadow: 0 8px 24px rgba(15, 15, 15, 0.14), 0 2px 5px rgba(15, 15, 15, 0.08);
+  box-shadow: var(--shadow-popover);
   animation: zhijian-popover-in var(--motion-popover, 150ms) var(--motion-ease-out, cubic-bezier(.2, .8, .2, 1));
 }
 
@@ -227,14 +248,14 @@ textarea {
   gap: 9px;
   padding: 0 8px;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: transparent;
   font-size: 14px;
   text-align: left;
 }
 
 .toolbar .toolbar-more-menu button:hover:not(:disabled) {
-  background: rgba(55, 53, 47, 0.07);
+  background: var(--color-hover);
 }
 
 /* 删除是唯一一个点下去会丢东西的菜单项，和侧栏节点菜单里的「删除」一样标成红色。 */
@@ -432,18 +453,18 @@ textarea {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(15, 15, 15, 0.44);
+  background: var(--overlay-dialog);
   animation: zhijian-dialog-backdrop-in var(--motion-dialog, 180ms) ease-out;
 }
 
 .zhijian-confirm-dialog {
   width: min(420px, 100%);
   padding: 24px;
-  border: 1px solid rgba(55, 53, 47, 0.1);
-  border-radius: 8px;
-  background: #fff;
-  color: #37352f;
-  box-shadow: 0 20px 60px rgba(15, 15, 15, 0.24), 0 2px 8px rgba(15, 15, 15, 0.08);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-dialog);
   animation: zhijian-dialog-in var(--motion-dialog, 180ms) var(--motion-ease-out, cubic-bezier(.2, .8, .2, 1));
 }
 
@@ -472,26 +493,26 @@ textarea {
 .zhijian-confirm-dialog button {
   height: 32px;
   padding: 0 12px;
-  border: 1px solid rgba(55, 53, 47, 0.14);
-  border-radius: 5px;
-  background: #fff;
-  color: #37352f;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
   font-size: 14px;
   cursor: pointer;
 }
 
 .zhijian-confirm-dialog button:hover {
-  background: #f5f5f3;
+  background: var(--color-hover);
 }
 
 .zhijian-confirm-dialog button.primary {
-  border-color: #2383e2;
-  background: #2383e2;
+  border-color: var(--color-accent);
+  background: var(--color-accent);
   color: #fff;
 }
 
 .zhijian-confirm-dialog button.primary:hover {
-  background: #1d75c9;
+  background: var(--color-accent-hover);
 }
 
 .zhijian-confirm-dialog button:disabled {
@@ -694,16 +715,16 @@ textarea {
 
 .toolbar button {
   height: 32px;
-  border: 1px solid rgba(55, 53, 47, 0.13);
-  border-radius: 5px;
-  background: #ffffff;
-  color: #4f4e49;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
   padding: 0 12px;
   cursor: pointer;
 }
 
 .toolbar button:hover:not(:disabled) {
-  background: rgba(55, 53, 47, 0.07);
+  background: var(--color-hover);
 }
 
 .toolbar .toolbar-icon-button {
@@ -1341,13 +1362,11 @@ textarea {
   position: relative;
   width: 180px;
   padding: 6px;
-  border: 1px solid rgba(15, 15, 15, 0.12);
-  border-radius: 6px;
-  background: #fff;
-  box-shadow:
-    0 8px 24px rgba(15, 15, 15, 0.12),
-    0 2px 8px rgba(15, 15, 15, 0.08);
-  color: #37352f;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-popover);
+  color: var(--color-text-primary);
   font-size: 14px;
   line-height: 1;
 }
@@ -1451,12 +1470,10 @@ textarea {
   left: calc(100% + 6px);
   width: 128px;
   padding: 6px;
-  border: 1px solid rgba(15, 15, 15, 0.12);
-  border-radius: 6px;
-  background: #fff;
-  box-shadow:
-    0 8px 24px rgba(15, 15, 15, 0.12),
-    0 2px 8px rgba(15, 15, 15, 0.08);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-popover);
 }
 
 .outline-row-palette-item {
@@ -1843,6 +1860,22 @@ textarea {
   z-index: 20;
   transform: translateX(-50%);
   max-width: calc(100% - 32px);
+}
+
+.mindmap-toolbar-host:has(.bn-color-picker-dropdown) {
+  z-index: 40;
+}
+
+.mindmap-toolbar-host:has(.bn-color-picker-dropdown) .bn-formatting-toolbar {
+  overflow: visible;
+}
+
+.mindmap-toolbar-host .bn-color-picker-dropdown {
+  top: auto !important;
+  bottom: calc(100% + 8px) !important;
+  max-height: min(520px, calc(100vh - 32px)) !important;
+  max-height: min(520px, calc(100dvh - 32px)) !important;
+  overflow-y: auto;
 }
 
 .mindmap-node-shell,
@@ -2506,10 +2539,10 @@ textarea {
 
 .mindmap-viewport-controls,
 .mindmap-style-menu-wrap {
-  border: 1px solid #efefef;
-  border-radius: 6px;
-  background: #ffffff;
-  box-shadow: 0 4px 12px #cfcfcf;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-popover);
 }
 
 .mindmap-viewport-controls {
@@ -2561,7 +2594,7 @@ textarea {
 
 .mindmap-viewport-controls button:hover,
 .mindmap-scale-reset:hover {
-  background: #efefef;
+  background: var(--color-hover);
 }
 
 .mindmap-viewport-controls input[type="range"] {
@@ -2655,8 +2688,8 @@ textarea {
 .mindmap-style-menu-trigger:hover,
 .mindmap-style-menu-trigger[aria-expanded="true"],
 .mindmap-style-menu-trigger.is-active {
-  border-radius: 4px;
-  background: #efefef;
+  border-radius: var(--radius-sm);
+  background: var(--color-hover);
 }
 
 .mindmap-style-menu {
@@ -2668,13 +2701,13 @@ textarea {
   transform-origin: top right;
   width: 168px;
   padding: 6px;
-  border: 1px solid rgba(55, 53, 47, 0.12);
-  border-radius: 6px;
-  background: #fff;
-  color: #37352f;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
   font-family: var(--zhijian-font-family);
   font-size: 14px;
-  box-shadow: 0 8px 24px rgba(15, 15, 15, 0.14), 0 2px 5px rgba(15, 15, 15, 0.08);
+  box-shadow: var(--shadow-popover);
   animation: zhijian-popover-in var(--motion-popover, 150ms) var(--motion-ease-out, cubic-bezier(.2, .8, .2, 1));
 }
 
@@ -2687,7 +2720,7 @@ textarea {
   gap: 8px;
   padding: 0 8px;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -2697,7 +2730,7 @@ textarea {
 
 .mindmap-style-menu button:hover,
 .mindmap-style-menu button.is-active {
-  background: rgba(55, 53, 47, 0.07);
+  background: var(--color-hover);
 }
 
 .mindmap-style-menu button svg {
@@ -2743,10 +2776,10 @@ textarea {
   right: 0;
   width: 142px;
   padding: 4px;
-  border: 1px solid rgba(55, 53, 47, 0.12);
-  border-radius: 6px;
-  background: #ffffff;
-  box-shadow: 0 8px 24px rgba(15, 15, 15, 0.14), 0 2px 5px rgba(15, 15, 15, 0.08);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-popover);
   animation: zhijian-popover-in var(--motion-popover, 150ms) var(--motion-ease-out, cubic-bezier(.2, .8, .2, 1));
 }
 
@@ -2788,9 +2821,15 @@ textarea {
 }
 
 .mindmap-style-menu .mindmap-layout-grid > button:hover,
-.mindmap-style-menu .mindmap-layout-grid > button.is-active {
-  border-color: rgba(55, 53, 47, 0.72);
-  background: rgba(55, 53, 47, 0.025);
+.mindmap-style-menu .mindmap-theme-grid button:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-hover);
+}
+
+.mindmap-style-menu .mindmap-layout-grid > button.is-active,
+.mindmap-style-menu .mindmap-theme-grid button.is-active {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
 }
 
 .mindmap-layout-grid > button > svg {
@@ -2935,12 +2974,6 @@ textarea {
   border-radius: 7px;
   white-space: normal;
   transition: border-color var(--motion-fast, 120ms) ease, background-color var(--motion-fast, 120ms) ease, color var(--motion-fast, 120ms) ease;
-}
-
-.mindmap-style-menu .mindmap-theme-grid button:hover,
-.mindmap-style-menu .mindmap-theme-grid button.is-active {
-  border-color: rgba(55, 53, 47, 0.72);
-  background: transparent;
 }
 
 .mindmap-theme-grid button > svg {
@@ -3106,8 +3139,13 @@ textarea {
 }
 
 .mindmap-style-menu .mindmap-background-palette button.is-active {
-  border-color: #2383e2;
-  box-shadow: 0 0 0 1px #2383e2;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+:is(.toolbar button, .mindmap-style-menu button, .mindmap-style-menu-trigger, .mindmap-viewport-controls button):focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 1px;
 }
 
 .mindmap-background-custom {

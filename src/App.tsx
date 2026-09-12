@@ -1,24 +1,26 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { FaStar } from "react-icons/fa";
 import {
-  FiChevronDown,
-  FiChevronRight,
-  FiCommand,
-  FiDownload,
-  FiFileText,
-  FiGitBranch,
-  FiImage,
-  FiList,
-  FiMoreHorizontal,
-  FiRotateCcw,
-  FiRotateCw,
-  FiSearch,
-  FiShare2,
-  FiStar,
-  FiTrash2,
-  FiUpload,
-} from "react-icons/fi";
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
+  Command,
+  Download,
+  FileText,
+  GitBranch,
+  Image,
+  List,
+  ListCollapse,
+  MoreHorizontal,
+  RotateCcw,
+  RotateCw,
+  Search,
+  Share2,
+  Star,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import { markdownFileName, markdownImportTitle, markdownToTree, treeToMarkdown } from "./core/markdown/markdownDocument";
 import { outlineExportFileName, treeToOutlineHtmlDocument } from "./core/export/outlineDocument";
 import { createInitialTree, type ZhiJianMindMapDefaults } from "./core/tree";
@@ -507,7 +509,7 @@ export default function App({
           setExportMenuOpen(false);
         }}
       >
-        {activeView === "outline" ? <FiGitBranch /> : <FiList />}
+        {activeView === "outline" ? <GitBranch /> : <List />}
         <span>{activeView === "outline" ? "思维导图" : "大纲笔记"}</span>
       </button>
       <div className="toolbar-more-wrap" ref={collapseMenuRef}>
@@ -554,9 +556,9 @@ export default function App({
         aria-expanded={searchOpen}
         onClick={() => setSearchOpen((open) => !open)}
       >
-        <FiSearch />
+        <Search />
       </button>
-      {onShare ? <button className="toolbar-icon-button toolbar-more-button" type="button" aria-label="分享" title="分享" onClick={onShare}><FiShare2 /></button> : null}
+      {onShare ? <button className="toolbar-icon-button toolbar-more-button" type="button" aria-label="分享" title="分享" onClick={onShare}><Share2 /></button> : null}
       <div className="toolbar-more-wrap" ref={toolbarMoreRef}>
         <button
           className="toolbar-icon-button toolbar-more-button"
@@ -569,18 +571,18 @@ export default function App({
             setExportMenuOpen(false);
           }}
         >
-          <FiMoreHorizontal />
+          <MoreHorizontal />
         </button>
         {toolbarMoreOpen ? (
           <div className="toolbar-more-menu" role="menu">
             {!readOnly ? <>
               <button type="button" role="menuitem" disabled={!store.canUndo()} onClick={() => runFromMenu(() => store.undo())}>
-                <FiRotateCcw />
+                <RotateCcw />
                 <span>撤销</span>
                 <kbd>{nativeShortcutHint("撤销")}</kbd>
               </button>
               <button type="button" role="menuitem" disabled={!store.canRedo()} onClick={() => runFromMenu(() => store.redo())}>
-                <FiRotateCw />
+                <RotateCw />
                 <span>重做</span>
                 <kbd>{nativeShortcutHint("重做")}</kbd>
               </button>
@@ -591,7 +593,7 @@ export default function App({
               setExportMenuOpen(false);
               importInputRef.current?.click();
             }}>
-              <FiUpload />
+              <Upload />
               <span>导入</span>
             </button> : null}
             <div className="toolbar-submenu-wrap">
@@ -607,9 +609,9 @@ export default function App({
                   setExportMenuOpen((open) => !open);
                 }}
               >
-                <FiDownload />
+                <Download />
                 <span>导出</span>
-                <FiChevronRight className="toolbar-submenu-chevron" />
+                <ChevronRight className="toolbar-submenu-chevron" />
               </button>
               {exportMenuOpen ? (
                 <div className="toolbar-more-menu toolbar-submenu" role="menu">
@@ -618,27 +620,27 @@ export default function App({
                     setExportMenuOpen(false);
                     exportMarkdown();
                   }}>
-                    <FiDownload /><span>导出 Markdown</span>
+                    <Download /><span>导出 Markdown</span>
                   </button>
                   {activeView === "outline" ? <>
                     <button type="button" role="menuitem" onClick={() => runExport(() => exportOutlineImage())}>
-                      <FiImage /><span>大纲图片</span>
+                      <Image /><span>大纲图片</span>
                     </button>
                     <button type="button" role="menuitem" onClick={() => runExport(() => exportOutlineImage(true))}>
-                      <FiFileText /><span>大纲 PDF</span>
+                      <FileText /><span>大纲 PDF</span>
                     </button>
                     <button type="button" role="menuitem" onClick={() => runExport(() => exportOutlineDocument(true))}>
-                      <FiFileText /><span>大纲 Word</span>
+                      <FileText /><span>大纲 Word</span>
                     </button>
                     <button type="button" role="menuitem" onClick={() => runExport(() => exportOutlineDocument(false))}>
-                      <FiFileText /><span>大纲 HTML</span>
+                      <FileText /><span>大纲 HTML</span>
                     </button>
                   </> : <>
                     <button type="button" role="menuitem" onClick={() => runExport(() => exportMindMapImage())}>
-                      <FiImage /><span>思维导图图片</span>
+                      <Image /><span>思维导图图片</span>
                     </button>
                     <button type="button" role="menuitem" onClick={() => runExport(() => exportMindMapImage(true))}>
-                      <FiFileText /><span>思维导图 PDF</span>
+                      <FileText /><span>思维导图 PDF</span>
                     </button>
                   </>}
                 </div>
@@ -647,19 +649,19 @@ export default function App({
             {onToggleFavorite || onDeleteDocument ? <div className="menu-divider" /> : null}
             {onToggleFavorite ? (
               <button type="button" role="menuitem" onClick={() => runFromMenu(onToggleFavorite)}>
-                {favorite ? <FaStar className="favorite-filled" /> : <FiStar />}
+                <Star className={favorite ? "favorite-filled" : undefined} fill={favorite ? "currentColor" : "none"} />
                 <span>{favorite ? "取消星标" : "添加星标"}</span>
               </button>
             ) : null}
             {onDeleteDocument ? (
               <button type="button" role="menuitem" className="danger" onClick={() => runFromMenu(onDeleteDocument)}>
-                <FiTrash2 />
+                <Trash2 />
                 <span>删除</span>
               </button>
             ) : null}
             <div className="menu-divider" />
             <button type="button" role="menuitem" onClick={() => runFromMenu(() => setShortcutHelpOpen(true))}>
-              <FiCommand />
+              <Command />
               <span>快捷键列表</span>
               <kbd>{shortcutHint("shortcut-help")}</kbd>
             </button>
@@ -928,15 +930,7 @@ function isMindMapViewportState(value: unknown): value is MindMapViewportState {
 }
 
 function ExpandCollapseIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M10 12L12 10L14 12" stroke="#535353" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M10 4L12 6L14 4" stroke="#535353" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M2 8H7.33333" stroke="#535353" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M2 12H7.33333" stroke="#535353" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M2 4H7.33333" stroke="#535353" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <ListCollapse aria-hidden="true" />;
 }
 
 function SearchPanel({ query, replacement, focusSignal, onQueryChange, onReplacementChange, onClose, onPrevious, onNext, onReplace, onReplaceAll, allowReplace = true }: {
@@ -972,16 +966,16 @@ function SearchPanel({ query, replacement, focusSignal, onQueryChange, onReplace
           aria-expanded={replaceOpen}
           onClick={() => setReplaceOpen((open) => !open)}
         >
-          查找 <FiChevronDown />
+          查找 <ChevronDown />
         </button> : <span className="search-mode-button">查找</span>}
         <input ref={queryRef} value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索关键词" />
         {/* A shared document has no replace row to hang these off, and stepping through the
             matches is most of what searching is for, so they sit in the row itself. */}
         {allowReplace ? null : <>
-          <button type="button" className="search-step icon-button" aria-label="上一处" title="上一处" onClick={onPrevious}>‹</button>
-          <button type="button" className="search-step icon-button" aria-label="下一处" title="下一处" onClick={onNext}>›</button>
+          <button type="button" className="search-step icon-button" aria-label="上一处" title="上一处" onClick={onPrevious}><ChevronUp aria-hidden="true" /></button>
+          <button type="button" className="search-step icon-button" aria-label="下一处" title="下一处" onClick={onNext}><ChevronDown aria-hidden="true" /></button>
         </>}
-        <button type="button" className="search-close icon-button" aria-label="关闭查找" onClick={onClose}>×</button>
+        <button type="button" className="search-close icon-button" aria-label="关闭查找" onClick={onClose}><X aria-hidden="true" /></button>
       </div>
       {allowReplace && replaceOpen ? (
         <>

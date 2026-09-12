@@ -15,7 +15,7 @@ import {
   useEditorState,
 } from "@blocknote/react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { RiBold, RiCheckboxLine, RiDoubleQuotesL, RiEyeLine, RiEyeOffLine, RiImage2Line, RiItalic, RiStrikethrough, RiTable2, RiUnderline } from "react-icons/ri";
+import { Bold, Eye, EyeOff, Image, Italic, ListChecks, Quote, Strikethrough, Table2, Underline } from "lucide-react";
 import { everySpanHasMark } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
 import {
@@ -172,10 +172,10 @@ const batchTextStyles: Array<{
   label: string;
   icon: ReactNode;
 }> = [
-  { style: "bold", label: "加粗", icon: <RiBold /> },
-  { style: "italic", label: "斜体", icon: <RiItalic /> },
-  { style: "underline", label: "下划线", icon: <RiUnderline /> },
-  { style: "strike", label: "删除线", icon: <RiStrikethrough /> },
+  { style: "bold", label: "加粗", icon: <Bold /> },
+  { style: "italic", label: "斜体", icon: <Italic /> },
+  { style: "underline", label: "下划线", icon: <Underline /> },
+  { style: "strike", label: "删除线", icon: <Strikethrough /> },
 ];
 
 function MindMapBatchFormattingToolbar({ selection }: { selection: MindMapBatchSelection }) {
@@ -196,7 +196,7 @@ function MindMapBatchFormattingToolbar({ selection }: { selection: MindMapBatchS
       <Components.FormattingToolbar.Button
         label="检查清单"
         mainTooltip="检查清单"
-        icon={<RiCheckboxLine />}
+        icon={<ListChecks />}
         isSelected={nodeIds.every((id) => tree.nodes[id]!.type === "todo")}
         onClick={() => toggleMindMapBatchTodo(selection.store, nodeIds)}
       />
@@ -274,7 +274,7 @@ function ChecklistButton() {
     <Components.FormattingToolbar.Button
       label="检查清单"
       mainTooltip="检查清单"
-      icon={<RiCheckboxLine />}
+      icon={<ListChecks />}
       isSelected={isChecklist}
       isDisabled={disabled}
       onClick={() => {
@@ -308,7 +308,7 @@ function ViewImageButton() {
       className="bn-button"
       label="查看图片"
       mainTooltip="查看图片"
-      icon={<RiEyeLine />}
+      icon={<Eye />}
       onClick={() => {
         const open = (url: string) => window.open(url, "_blank", "noopener,noreferrer");
         if (editor.resolveFileUrl) {
@@ -339,7 +339,7 @@ function ClozeButton() {
     <Components.FormattingToolbar.Button
       label="挖空"
       mainTooltip="挖空所选文字"
-      icon={<RiEyeOffLine />}
+      icon={<EyeOff />}
       isSelected={active.code === true}
       onClick={() => {
         editor.toggleStyles({ code: true });
@@ -361,7 +361,7 @@ function InsertQuoteButton({
     <Components.FormattingToolbar.Button
       label="引用"
       mainTooltip="在正文后插入引用"
-      icon={<RiDoubleQuotesL />}
+      icon={<Quote />}
       onClick={() => {
         const block = editor.getTextCursorPosition().block;
         const [quote] = insertNodeAttachmentBlocks(editor, block.id, [
@@ -384,7 +384,7 @@ function InsertTableButton({ onInsertTable }: { onInsertTable?: (nodeId: string)
     <Components.FormattingToolbar.Button
       label="插入表格"
       mainTooltip="插入表格"
-      icon={<RiTable2 />}
+      icon={<Table2 />}
       onClick={() => {
         const block = editor.getTextCursorPosition().block;
         // 导图接手时不能走下面这条：一块表格在大纲里就是一个新节点，而导图要按当前节点空不空
@@ -425,7 +425,7 @@ function InsertImageButton() {
       <Components.FormattingToolbar.Button
         label="上传图片"
         mainTooltip="上传图片"
-        icon={<RiImage2Line />}
+        icon={<Image />}
         onClick={() => inputRef.current?.click()}
       />
       <input

@@ -15,22 +15,22 @@ import { BlockNoteView } from "@blocknote/mantine";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
-  RiArrowDownSFill,
-  RiArrowRightSFill,
-  RiBold,
-  RiCheckboxLine,
-  RiDeleteBinLine,
-  RiEditLine,
-  RiEmotionLine,
-  RiFontColor,
-  RiImage2Line,
-  RiItalic,
-  RiMarkPenLine,
-  RiMoreFill,
-  RiStrikethrough,
-  RiTable2,
-  RiUnderline,
-} from "react-icons/ri";
+  Baseline,
+  Bold,
+  ChevronDown,
+  ChevronRight,
+  Highlighter,
+  Image,
+  Italic,
+  ListChecks,
+  MoreHorizontal,
+  Pencil,
+  Smile,
+  Strikethrough,
+  Table2,
+  Trash2,
+  Underline,
+} from "lucide-react";
 import type { TreeStore } from "../core/treeStore";
 import { useTree } from "../core/treeStore/useTree";
 import { blockNoteToTree, treeToBlockNote } from "./blockNoteAdapter";
@@ -321,7 +321,7 @@ export function OutlineEditor({
       onMouseDownCapture={(event) => {
         if (readOnly) return;
         const target = event.target as Element;
-        if (zoomedNodeId && target.closest(".bn-trailing-block")) {
+        if (target.closest(".bn-trailing-block")) {
           event.preventDefault();
           event.stopPropagation();
           return;
@@ -356,11 +356,13 @@ export function OutlineEditor({
       }}
       onClickCapture={(event) => {
         if (readOnly) return;
-        if (!zoomedNodeId || event.button !== 0) return;
+        if (event.button !== 0) return;
         if (!(event.target as Element).closest(".bn-trailing-block")) return;
         event.preventDefault();
         event.stopPropagation();
-        const focused = editor.getBlock(zoomedNodeId);
+        const parentNodeId = zoomedNodeId ?? editor.document[0]?.id;
+        if (!parentNodeId) return;
+        const focused = editor.getBlock(parentNodeId);
         if (!focused) return;
         const updated = editor.updateBlock(focused, {
           children: [...focused.children, { type: "paragraph", content: "" }],
@@ -605,7 +607,7 @@ function OutlineRowMenuButton({ nodeId, rootId }: { nodeId: string; rootId: stri
     <Components.SideMenu.Button
       className={`bn-button outline-row-more-button${headingLevel ? ` outline-heading-level-${headingLevel}` : ""}`}
       label="更多"
-      icon={<RiMoreFill />}
+      icon={<MoreHorizontal />}
       onClick={(event) => {
         if (block) {
           editor.setTextCursorPosition(block, "end");
@@ -766,44 +768,44 @@ function OutlineRowMenuPortal() {
             <RowMenuIconButton label="T" active={activeBlock?.type === "paragraph"} onClick={() => applyShortcut("set-paragraph")} />
           </div>
           <div className="outline-row-menu-grid" aria-label="文字样式">
-            <RowMenuIconButton label="加粗" icon={<RiBold />} active={Boolean(activeStyles.bold)} onClick={() => withTargetBlock(() => toggleWholeBlockStyle(editor, nodeId, "bold"))} />
-            <RowMenuIconButton label="斜体" icon={<RiItalic />} active={Boolean(activeStyles.italic)} onClick={() => withTargetBlock(() => toggleWholeBlockStyle(editor, nodeId, "italic"))} />
-            <RowMenuIconButton label="下划线" icon={<RiUnderline />} active={Boolean(activeStyles.underline)} onClick={() => withTargetBlock(() => toggleWholeBlockStyle(editor, nodeId, "underline"))} />
-            <RowMenuIconButton label="删除线" icon={<RiStrikethrough />} active={Boolean(activeStyles.strike)} onClick={() => withTargetBlock(() => toggleWholeBlockStyle(editor, nodeId, "strike"))} />
+            <RowMenuIconButton label="加粗" icon={<Bold />} active={Boolean(activeStyles.bold)} onClick={() => withTargetBlock(() => toggleWholeBlockStyle(editor, nodeId, "bold"))} />
+            <RowMenuIconButton label="斜体" icon={<Italic />} active={Boolean(activeStyles.italic)} onClick={() => withTargetBlock(() => toggleWholeBlockStyle(editor, nodeId, "italic"))} />
+            <RowMenuIconButton label="下划线" icon={<Underline />} active={Boolean(activeStyles.underline)} onClick={() => withTargetBlock(() => toggleWholeBlockStyle(editor, nodeId, "underline"))} />
+            <RowMenuIconButton label="删除线" icon={<Strikethrough />} active={Boolean(activeStyles.strike)} onClick={() => withTargetBlock(() => toggleWholeBlockStyle(editor, nodeId, "strike"))} />
           </div>
           <button className="outline-row-menu-action" type="button" onClick={() => setPalette(palette === "text" ? null : "text")}>
-            <RiFontColor />
+            <Baseline />
             <span>字体颜色</span>
-            <RiArrowRightSFill className="outline-row-menu-arrow" />
+            <ChevronRight className="outline-row-menu-arrow" />
           </button>
           <button className="outline-row-menu-action" type="button" onClick={() => setPalette(palette === "background" ? null : "background")}>
-            <RiMarkPenLine />
+            <Highlighter />
             <span>荧光笔</span>
-            <RiArrowRightSFill className="outline-row-menu-arrow" />
+            <ChevronRight className="outline-row-menu-arrow" />
           </button>
           <button className="outline-row-menu-action" type="button" onClick={addDescription}>
-            <RiEditLine />
+            <Pencil />
             <span>编辑引用</span>
           </button>
           <button className="outline-row-menu-action" type="button" onClick={() => imageInputRef.current?.click()}>
-            <RiImage2Line />
+            <Image />
             <span>添加图片</span>
           </button>
           <button className="outline-row-menu-action" type="button" onClick={() => applyShortcut("toggle-todo")}>
-            <RiCheckboxLine />
+            <ListChecks />
             <span>添加待办</span>
           </button>
           <button className="outline-row-menu-action" type="button" onClick={() => setPalette(palette === "emoji" ? null : "emoji")}>
-            <RiEmotionLine />
+            <Smile />
             <span>表情符号</span>
-            <RiArrowRightSFill className="outline-row-menu-arrow" />
+            <ChevronRight className="outline-row-menu-arrow" />
           </button>
           <button className="outline-row-menu-action" type="button" onClick={() => applyShortcut("insert-table")}>
-            <RiTable2 />
+            <Table2 />
             <span>添加表格</span>
           </button>
           <button className="outline-row-menu-action is-danger" type="button" onClick={deleteNode}>
-            <RiDeleteBinLine />
+            <Trash2 />
             <span>删除</span>
           </button>
           {palette && palette !== "emoji" ? (
@@ -965,7 +967,7 @@ function CollapseButton({ store, nodeId }: { store: TreeStore; nodeId: string })
     <Components.SideMenu.Button
       className="bn-button outline-collapse-button"
       label={collapsed ? "展开" : "收起"}
-      icon={collapsed ? <RiArrowRightSFill /> : <RiArrowDownSFill />}
+      icon={collapsed ? <ChevronRight /> : <ChevronDown />}
       onClick={() => store.updateProps(nodeId, { collapsed: !collapsed })}
     />
   );
@@ -1044,7 +1046,7 @@ function ReadOnlyCollapseLayer(
       aria-label={collapsed ? "展开" : "收起"}
       onClick={() => store.updateProps(row.nodeId, { collapsed: !collapsed })}
     >
-      {collapsed ? <RiArrowRightSFill /> : <RiArrowDownSFill />}
+      {collapsed ? <ChevronRight /> : <ChevronDown />}
     </button>
   );
 }

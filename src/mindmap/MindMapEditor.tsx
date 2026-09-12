@@ -3,9 +3,7 @@ import MindElixir, { type MindElixirData, type NodeObj, type Operation, type Top
 import { zh_CN } from "mind-elixir/i18n";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type MutableRefObject, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { FiCheck, FiCrosshair, FiGitBranch, FiMaximize2, FiMinimize2, FiMoreHorizontal, FiPlus, FiZoomIn, FiZoomOut } from "react-icons/fi";
-import { IoColorPaletteOutline } from "react-icons/io5";
-import { RiEyeLine, RiEyeOffLine } from "react-icons/ri";
+import { Check, Crosshair, Eye, EyeOff, GitBranch, Maximize2, Minimize2, MoreHorizontal, Palette, Plus, ZoomIn, ZoomOut } from "lucide-react";
 import type { ZhiJianMindMapDefaults, ZhiJianMindMapLayout, ZhiJianTree } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
 import { useTree } from "../core/treeStore/useTree";
@@ -1459,8 +1457,8 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
           </button>
           {styleSubmenu === "scale" ? (
             <div className="mindmap-viewport-controls mindmap-toolbar-flyout" role="group" aria-label="缩放调节" onPointerEnter={cancelStyleMenuClose}>
-              <button type="button" title="定位到中心" aria-label="定位到中心" onClick={() => mindRef.current?.toCenter()}><FiCrosshair /></button>
-              <button type="button" title="缩小" aria-label="缩小" onClick={() => setMindMapScale((scalePercent - 10) / 100)}><FiZoomOut /></button>
+              <button type="button" title="定位到中心" aria-label="定位到中心" onClick={() => mindRef.current?.toCenter()}><Crosshair /></button>
+              <button type="button" title="缩小" aria-label="缩小" onClick={() => setMindMapScale((scalePercent - 10) / 100)}><ZoomOut /></button>
               <input
                 type="range"
                 min="0"
@@ -1474,14 +1472,14 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
                 aria-valuetext={`${scalePercent}%`}
                 onChange={(event) => setMindMapScale(mindMapScalePercentFromSlider(Number(event.target.value)) / 100)}
               />
-              <button type="button" title="放大" aria-label="放大" onClick={() => setMindMapScale((scalePercent + 10) / 100)}><FiZoomIn /></button>
-              <button type="button" title={isFullscreen ? "退出全屏" : "全屏显示"} aria-label={isFullscreen ? "退出全屏" : "全屏显示"} onClick={() => void toggleFullscreen()}>{isFullscreen ? <FiMinimize2 /> : <FiMaximize2 />}</button>
+              <button type="button" title="放大" aria-label="放大" onClick={() => setMindMapScale((scalePercent + 10) / 100)}><ZoomIn /></button>
+              <button type="button" title={isFullscreen ? "退出全屏" : "全屏显示"} aria-label={isFullscreen ? "退出全屏" : "全屏显示"} onClick={() => void toggleFullscreen()}>{isFullscreen ? <Minimize2 /> : <Maximize2 />}</button>
             </div>
           ) : null}
             <div className="mindmap-style-menu-buttons">
-              <button type="button" className="mindmap-style-menu-trigger" title="布局" aria-label="布局" aria-expanded={styleSubmenu === "layout"} onPointerEnter={() => { setStyleMoreMenu(null); setStyleSubmenu("layout"); }} onFocus={() => { setStyleMoreMenu(null); setStyleSubmenu("layout"); }} onClick={() => { setStyleMoreMenu(null); setStyleSubmenu(styleSubmenu === "layout" ? null : "layout"); }}><FiGitBranch /></button>
-              {!readOnly ? <button type="button" className="mindmap-style-menu-trigger" title="样式" aria-label="样式" aria-expanded={styleSubmenu === "theme"} onPointerEnter={() => { setStyleMoreMenu(null); setStyleSubmenu("theme"); }} onFocus={() => { setStyleMoreMenu(null); setStyleSubmenu("theme"); }} onClick={() => { setStyleMoreMenu(null); setStyleSubmenu(styleSubmenu === "theme" ? null : "theme"); }}><IoColorPaletteOutline /></button> : null}
-              {hasCloze ? <button type="button" className={`mindmap-style-menu-trigger ${revealAllCloze ? "is-active" : ""}`} title={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"} aria-label={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"} aria-pressed={revealAllCloze} onPointerEnter={() => { setStyleSubmenu(null); setStyleMoreMenu(null); }} onClick={toggleAllCloze}>{revealAllCloze ? <RiEyeLine /> : <RiEyeOffLine />}</button> : null}
+              <button type="button" className="mindmap-style-menu-trigger" title="布局" aria-label="布局" aria-expanded={styleSubmenu === "layout"} onPointerEnter={() => { setStyleMoreMenu(null); setStyleSubmenu("layout"); }} onFocus={() => { setStyleMoreMenu(null); setStyleSubmenu("layout"); }} onClick={() => { setStyleMoreMenu(null); setStyleSubmenu(styleSubmenu === "layout" ? null : "layout"); }}><GitBranch /></button>
+              {!readOnly ? <button type="button" className="mindmap-style-menu-trigger" title="样式" aria-label="样式" aria-expanded={styleSubmenu === "theme"} onPointerEnter={() => { setStyleMoreMenu(null); setStyleSubmenu("theme"); }} onFocus={() => { setStyleMoreMenu(null); setStyleSubmenu("theme"); }} onClick={() => { setStyleMoreMenu(null); setStyleSubmenu(styleSubmenu === "theme" ? null : "theme"); }}><Palette /></button> : null}
+              {hasCloze ? <button type="button" className={`mindmap-style-menu-trigger ${revealAllCloze ? "is-active" : ""}`} title={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"} aria-label={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"} aria-pressed={revealAllCloze} onPointerEnter={() => { setStyleSubmenu(null); setStyleMoreMenu(null); }} onClick={toggleAllCloze}>{revealAllCloze ? <Eye /> : <EyeOff />}</button> : null}
             </div>
             {styleSubmenu === "layout" ? (
               <div className="mindmap-style-menu mindmap-layout-panel" role="menu" aria-label="导图样式" onPointerEnter={cancelStyleMenuClose}>
@@ -1489,7 +1487,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
                   <span>结构</span>
                   {!readOnly && onMindMapDefaultsChange ? (
                     <div className="mindmap-panel-more-wrap">
-                      <button type="button" className="mindmap-panel-more-button" aria-label="更多样式选项" title="更多" aria-expanded={styleMoreMenu === "layout"} onClick={() => setStyleMoreMenu(styleMoreMenu === "layout" ? null : "layout")}><FiMoreHorizontal /></button>
+                      <button type="button" className="mindmap-panel-more-button" aria-label="更多样式选项" title="更多" aria-expanded={styleMoreMenu === "layout"} onClick={() => setStyleMoreMenu(styleMoreMenu === "layout" ? null : "layout")}><MoreHorizontal /></button>
                       {styleMoreMenu === "layout" ? (
                         <div className="mindmap-panel-more-menu" role="menu">
                           <button
@@ -1522,7 +1520,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
                     >
                       <span className="mindmap-layout-card-name">{preset.name}</span>
                       <MindMapLayoutPreview type={preset.id} />
-                      {activeLayout.type === preset.id ? <FiCheck /> : null}
+                      {activeLayout.type === preset.id ? <Check /> : null}
                     </button>
                   ))}
                 </div>
@@ -1552,7 +1550,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
                   <span>配色</span>
                   {onMindMapDefaultsChange ? (
                     <div className="mindmap-panel-more-wrap">
-                      <button type="button" className="mindmap-panel-more-button" aria-label="更多主题选项" title="更多" aria-expanded={styleMoreMenu === "theme"} onClick={() => setStyleMoreMenu(styleMoreMenu === "theme" ? null : "theme")}><FiMoreHorizontal /></button>
+                      <button type="button" className="mindmap-panel-more-button" aria-label="更多主题选项" title="更多" aria-expanded={styleMoreMenu === "theme"} onClick={() => setStyleMoreMenu(styleMoreMenu === "theme" ? null : "theme")}><MoreHorizontal /></button>
                       {styleMoreMenu === "theme" ? (
                         <div className="mindmap-panel-more-menu" role="menu">
                           <button
@@ -1585,7 +1583,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
                           onClick={() => { store.setMindMapTheme({ id: theme.id, version: theme.version }); setStyleMoreMenu(null); }}
                         >
                           <MindMapThemePreview theme={theme} />
-                          {activeTheme.id === theme.id ? <FiCheck /> : null}
+                          {activeTheme.id === theme.id ? <Check /> : null}
                         </button>
                       ))}
                     </div>
@@ -1674,7 +1672,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
             title="新增下级"
             aria-label="新增下级"
           >
-            <FiPlus />
+            <Plus />
           </button>,
           selectedTopic,
         )

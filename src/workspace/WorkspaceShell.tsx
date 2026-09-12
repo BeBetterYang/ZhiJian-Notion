@@ -1,37 +1,35 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent } from "react";
 import { createPortal } from "react-dom";
 import {
-  FiCamera,
-  FiChevronDown,
-  FiChevronRight,
-  FiChevronsLeft,
-  FiChevronsRight,
-  FiClock,
-  FiCopy,
-  FiEdit2,
-  FiExternalLink,
-  FiFilePlus,
-  FiFileText,
-  FiFolder,
-  FiFolderPlus,
-  FiLink,
-  FiLogOut,
-  FiMenu,
-  FiMoreHorizontal,
-  FiMove,
-  FiPlus,
-  FiSearch,
-  FiSettings,
-  FiSliders,
-  FiStar,
-  FiTrash2,
-  FiRotateCcw,
-  FiUpload,
-  FiX,
-} from "react-icons/fi";
-import { FaStar } from "react-icons/fa";
-// 展开态的文件夹图标：Feather 没有「打开的文件夹」，Lucide 本身是 Feather 的分支，线条粗细一致。
-import { LuFolderOpen } from "react-icons/lu";
+  Camera,
+  ChevronDown,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Clock,
+  Copy,
+  ExternalLink,
+  FilePlus,
+  FileText,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  Link,
+  LogOut,
+  Menu,
+  MoreHorizontal,
+  Move,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Search,
+  Settings,
+  SlidersHorizontal,
+  Star,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import App, { type FocusBreadcrumbItem, type FocusBreadcrumbState } from "../App";
 import { richTextToPlainText, cloneTree, plainTextContent, type ZhiJianMindMapDefaults, type ZhiJianNode, type ZhiJianTree } from "../core/tree";
 import { TreeStore } from "../core/treeStore";
@@ -1072,10 +1070,10 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         >
           {node.type === "folder" ? (
             <button className="tree-leading icon-button" type="button" onClick={() => { setSelectedFolderId(node.id); setSelectedMenuKey(`tree:${node.id}`); toggleFolderExpanded(node.id); }} aria-label={expanded ? `收起${nodeLabel}` : `展开${nodeLabel}`}>
-              {expanded ? <LuFolderOpen className="leading-default-icon" /> : <FiFolder className="leading-default-icon" />}
-              {expanded ? <FiChevronDown className="leading-state-icon" /> : <FiChevronRight className="leading-state-icon" />}
+              {expanded ? <FolderOpen className="leading-default-icon" /> : <Folder className="leading-default-icon" />}
+              {expanded ? <ChevronDown className="leading-state-icon" /> : <ChevronRight className="leading-state-icon" />}
             </button>
-          ) : <span className="tree-leading"><FiFileText /></span>}
+          ) : <span className="tree-leading"><FileText /></span>}
           {renamingId === node.id ? (
             <input
               className="tree-rename-input"
@@ -1100,8 +1098,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
             <button className="tree-node-title" type="button" onClick={() => node.type === "file" ? selectFile(node) : (setSelectedFolderId(node.id), setSelectedMenuKey(`tree:${node.id}`), toggleFolderExpanded(node.id))}>{nodeLabel}</button>
           )}
           <span className="tree-row-actions">
-            {node.type === "folder" ? <button className="tree-action icon-button" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file", node.id)} aria-label={`在${nodeLabel}中新建文档`} title="新增文档"><FiPlus /></button> : null}
-            <button className="tree-action icon-button" type="button" onClick={(event) => { setMenuNodeId(menuOpen ? null : node.id); setMenuAnchor(menuOpen ? null : event.currentTarget); setMoveMenuOpen(false); }} aria-label={`${nodeLabel}的更多操作`} title="更多"><FiMoreHorizontal /></button>
+            {node.type === "folder" ? <button className="tree-action icon-button" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file", node.id)} aria-label={`在${nodeLabel}中新建文档`} title="新增文档"><Plus /></button> : null}
+            <button className="tree-action icon-button" type="button" onClick={(event) => { setMenuNodeId(menuOpen ? null : node.id); setMenuAnchor(menuOpen ? null : event.currentTarget); setMoveMenuOpen(false); }} aria-label={`${nodeLabel}的更多操作`} title="更多"><MoreHorizontal /></button>
           </span>
           {menuOpen ? (
             <NodeMenu
@@ -1128,8 +1126,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   return (
     <LoadingScreen ready={serverReady && initialEditorReady}>
       <main className={`workspace-shell-ui ${sidebarCollapsed ? "is-collapsed" : ""} ${searchMode ? "is-search-mode" : ""}`} style={{ "--sidebar-width": `${sidebarDisplayWidth}px` } as CSSProperties}>
-      <button type="button" className="mobile-menu-button icon-button" onClick={() => setSidebarOpen(true)} aria-label="打开侧栏" title="打开侧栏"><FiMenu /></button>
-      {sidebarCollapsed ? <button type="button" className="desktop-sidebar-open icon-button" onMouseEnter={showSidebarPeek} onMouseLeave={scheduleSidebarPeekClose} onClick={() => applySidebarCollapsed(false)} aria-label="展开侧栏" title="展开侧栏"><FiChevronsRight /></button> : null}
+      <button type="button" className="mobile-menu-button icon-button" onClick={() => setSidebarOpen(true)} aria-label="打开侧栏" title="打开侧栏"><Menu /></button>
+      {sidebarCollapsed ? <button type="button" className="desktop-sidebar-open icon-button" onMouseEnter={showSidebarPeek} onMouseLeave={scheduleSidebarPeekClose} onClick={() => applySidebarCollapsed(false)} aria-label="展开侧栏" title="展开侧栏"><ChevronsRight /></button> : null}
       {sidebarOpen ? <button className="sidebar-backdrop" aria-label="关闭侧栏" onClick={() => setSidebarOpen(false)} /> : null}
       <aside className={`workspace-sidebar ${sidebarOpen ? "is-open" : ""} ${sidebarPeeking ? "is-peeking" : ""}`} onMouseEnter={() => sidebarCollapsed && showSidebarPeek()} onMouseLeave={scheduleSidebarPeekClose}>
         <header className="sidebar-header">
@@ -1137,25 +1135,25 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
             <button className="workspace-switcher" type="button" aria-expanded={accountOpen} onClick={() => setAccountOpen((open) => !open)}>
               <span className="workspace-avatar">{userProfile.avatarUrl ? <img src={userProfile.avatarUrl} alt="" /> : <img src={logoUrl} alt="枝间默认头像" />}</span>
               <span className="workspace-name">{userProfile.name}</span>
-              <FiChevronDown className="account-chevron" />
+              <ChevronDown className="account-chevron" />
             </button>
             {accountOpen ? (
               <div className="account-menu">
                 <div className="account-summary"><strong>{userProfile.name}</strong><span>{userProfile.email}</span></div>
-                <button type="button" onClick={() => { setAccountOpen(false); importInputRef.current?.click(); }}><FiUpload />导入文档</button>
-                <button type="button" onClick={() => openSettings()}><FiSettings />设置</button>
-                <button type="button" onClick={() => { setTrashOpen(true); setSelectedTrashIds(new Set()); setAccountOpen(false); }}><FiTrash2 />回收站</button>
-                <button type="button" onClick={onLogout}><FiLogOut />退出登录</button>
+                <button type="button" onClick={() => { setAccountOpen(false); importInputRef.current?.click(); }}><Upload />导入文档</button>
+                <button type="button" onClick={() => openSettings()}><Settings />设置</button>
+                <button type="button" onClick={() => { setTrashOpen(true); setSelectedTrashIds(new Set()); setAccountOpen(false); }}><Trash2 />回收站</button>
+                <button type="button" onClick={onLogout}><LogOut />退出登录</button>
               </div>
             ) : null}
           </div>
-          <button type="button" className="sidebar-collapse icon-button" onClick={() => applySidebarCollapsed(true)} aria-label="收起侧栏" title="收起侧栏"><FiChevronsLeft /></button>
-          <button type="button" className="mobile-close icon-button" onClick={() => setSidebarOpen(false)} aria-label="关闭侧栏" title="关闭侧栏"><FiX /></button>
+          <button type="button" className="sidebar-collapse icon-button" onClick={() => applySidebarCollapsed(true)} aria-label="收起侧栏" title="收起侧栏"><ChevronsLeft /></button>
+          <button type="button" className="mobile-close icon-button" onClick={() => setSidebarOpen(false)} aria-label="关闭侧栏" title="关闭侧栏"><X /></button>
         </header>
         <nav className="sidebar-actions" aria-label="工作区操作">
           <div className="sidebar-search-wrap">
             <label className="sidebar-search">
-              <FiSearch />
+              <Search />
               <input
                 ref={searchRef}
                 value={search}
@@ -1176,11 +1174,11 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                   }}
                   aria-label="清除搜索"
                 >
-                  <FiX />
+                  <X />
                 </button>
-              ) : searchMode ? <button className="icon-button" type="button" onClick={closeSearchMode} aria-label="关闭搜索"><FiX /></button> : null}
+              ) : searchMode ? <button className="icon-button" type="button" onClick={closeSearchMode} aria-label="关闭搜索"><X /></button> : null}
               {searchMode ? (
-                <button className="icon-button search-filter-button" type="button" aria-label="筛选搜索范围" aria-expanded={searchFilterOpen} onClick={(event) => { event.preventDefault(); setSearchFilterOpen((open) => !open); }}><FiSliders /></button>
+                <button className="icon-button search-filter-button" type="button" aria-label="筛选搜索范围" aria-expanded={searchFilterOpen} onClick={(event) => { event.preventDefault(); setSearchFilterOpen((open) => !open); }}><SlidersHorizontal /></button>
               ) : null}
             </label>
             {searchMode && searchFilterOpen ? (
@@ -1202,8 +1200,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
           </div>
           {searchMode ? null : (
             <>
-              <QuickFileSection title="最近打开" source="recent" icon={<FiClock />} expanded={expandedQuickSections.has("recent")} files={recentFiles} selectedMenuKey={selectedMenuKey} onToggle={() => toggleQuickSection("recent")} onSelect={selectFile} />
-              <QuickFileSection title="星标文件" source="favorites" icon={<FiStar />} expanded={expandedQuickSections.has("favorites")} files={favoriteFiles} selectedMenuKey={selectedMenuKey} onToggle={() => toggleQuickSection("favorites")} onSelect={selectFile} />
+              <QuickFileSection title="最近打开" source="recent" icon={<Clock />} expanded={expandedQuickSections.has("recent")} files={recentFiles} selectedMenuKey={selectedMenuKey} onToggle={() => toggleQuickSection("recent")} onSelect={selectFile} />
+              <QuickFileSection title="星标文件" source="favorites" icon={<Star />} expanded={expandedQuickSections.has("favorites")} files={favoriteFiles} selectedMenuKey={selectedMenuKey} onToggle={() => toggleQuickSection("favorites")} onSelect={selectFile} />
             </>
           )}
         </nav>
@@ -1254,8 +1252,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         </div>
         <div className="sidebar-bottom-action">
           <div className="create-wrap">
-            <button type="button" className="sidebar-new-button" aria-expanded={createMenuOpen} onClick={() => setCreateMenuOpen((open) => !open)}><FiPlus /><span>新增</span></button>
-            {createMenuOpen ? <div className="create-menu"><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file")}><FiFilePlus />新增文档</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("folder")}><FiFolderPlus />新增文件夹</button></div> : null}
+            <button type="button" className="sidebar-new-button" aria-expanded={createMenuOpen} onClick={() => setCreateMenuOpen((open) => !open)}><Plus /><span>新增</span></button>
+            {createMenuOpen ? <div className="create-menu"><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file")}><FilePlus />新增文档</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("folder")}><FolderPlus />新增文件夹</button></div> : null}
           </div>
           <input
             ref={importInputRef}
@@ -1276,7 +1274,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       <section className="workspace-main">
         <header className="document-header">
           <div className="document-path">
-            {breadcrumbs.map((folder) => <span className="breadcrumb-part" key={folder.id}><span>{folder.title}</span><FiChevronRight /></span>)}
+            {breadcrumbs.map((folder) => <span className="breadcrumb-part" key={folder.id}><span>{folder.title}</span><ChevronRight /></span>)}
             {focusedTitle && focusBreadcrumbState ? (
               <>
                 <button type="button" className="document-path-current" onClick={() => focusBreadcrumbState.navigate(null)}>
@@ -1348,10 +1346,10 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                   <span className="settings-tab-avatar">{profileDraft.avatarUrl ? <img src={profileDraft.avatarUrl} alt="" /> : <img src={logoUrl} alt="枝间默认头像" />}</span>
                   <span>{profileDraft.name}</span>
                 </button>
-                <button type="button" className={`settings-tab ${settingsView === "preferences" ? "is-active" : ""}`} onClick={() => setSettingsView("preferences")}><FiSliders /><span>偏好</span></button>
+                <button type="button" className={`settings-tab ${settingsView === "preferences" ? "is-active" : ""}`} onClick={() => setSettingsView("preferences")}><SlidersHorizontal /><span>偏好</span></button>
               </div>
             </aside>
-            <button type="button" className="settings-close icon-button" onClick={() => setSettingsOpen(false)} aria-label="关闭设置"><FiX /></button>
+            <button type="button" className="settings-close icon-button" onClick={() => setSettingsOpen(false)} aria-label="关闭设置"><X /></button>
             <div className="settings-content">
               {settingsView === "account" ? (
                 <div key="account" className="settings-view-content account-settings">
@@ -1361,7 +1359,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                     <div className="profile-row">
                       <label className="settings-avatar editable-avatar" title="更换头像">
                         {profileDraft.avatarUrl ? <img src={profileDraft.avatarUrl} alt="头像预览" /> : <img src={logoUrl} alt="枝间默认头像" />}
-                        <span><FiCamera /></span>
+                        <span><Camera /></span>
                         <input type="file" accept="image/*" onChange={(event) => updateAvatar(event.target.files?.[0])} />
                       </label>
                       <label className="settings-field profile-name-field"><span>偏好名称</span><input value={profileDraft.name} onChange={(event) => setProfileDraft((current) => ({ ...current, name: event.target.value }))} /></label>
@@ -1433,7 +1431,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       {shareOpen ? (
         <div className="workspace-dialog-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShareOpen(false)}>
           <section className="share-dialog" role="dialog" aria-modal="true" aria-labelledby="share-title">
-            <header><h2 id="share-title">分享文档</h2><button type="button" className="icon-button" onClick={() => setShareOpen(false)} aria-label="关闭分享"><FiX /></button></header>
+            <header><h2 id="share-title">分享文档</h2><button type="button" className="icon-button" onClick={() => setShareOpen(false)} aria-label="关闭分享"><X /></button></header>
             <label className="share-toggle-row">
               <span><strong>文档开启分享</strong><small>使用链接或扫描二维码即可访问</small></span>
               <input type="checkbox" checked={shareState.enabled} disabled={shareLoading} onChange={(event) => void toggleShare(event.target.checked)} />
@@ -1453,7 +1451,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
           onMouseDown={(event) => event.target === event.currentTarget && setDeleteTarget(null)}
         >
           <section className="workspace-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-confirm-title">
-            <button type="button" className="workspace-dialog-close icon-button" onClick={() => setDeleteTarget(null)} aria-label="关闭确认"><FiX /></button>
+            <button type="button" className="workspace-dialog-close icon-button" onClick={() => setDeleteTarget(null)} aria-label="关闭确认"><X /></button>
             <h2 id="delete-confirm-title">移到回收站？</h2>
             <p>
               确定要删除「{deleteTarget.title || "无标题"}」吗？
@@ -1471,13 +1469,13 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
           <section className="trash-dialog" role="dialog" aria-modal="true" aria-labelledby="trash-title">
             <header>
               <div><h2 id="trash-title">回收站</h2><p>{trash.length ? `${trash.length} 个项目` : "回收站为空"}</p></div>
-              <button type="button" className="icon-button" onClick={() => setTrashOpen(false)} aria-label="关闭回收站"><FiX /></button>
+              <button type="button" className="icon-button" onClick={() => setTrashOpen(false)} aria-label="关闭回收站"><X /></button>
             </header>
             <div className="trash-toolbar">
               <label><input type="checkbox" checked={trash.length > 0 && selectedTrashIds.size === trash.length} onChange={(event) => setSelectedTrashIds(event.target.checked ? new Set(trash.map((entry) => entry.id)) : new Set())} />全选</label>
               <span />
-              <button type="button" disabled={!selectedTrashIds.size} onClick={() => restoreTrashEntries(selectedTrashIds)}><FiRotateCcw />恢复</button>
-              <button type="button" className="danger" disabled={!selectedTrashIds.size} onClick={() => void permanentlyDeleteTrashEntries(selectedTrashIds)}><FiTrash2 />彻底删除</button>
+              <button type="button" disabled={!selectedTrashIds.size} onClick={() => restoreTrashEntries(selectedTrashIds)}><RotateCcw />恢复</button>
+              <button type="button" className="danger" disabled={!selectedTrashIds.size} onClick={() => void permanentlyDeleteTrashEntries(selectedTrashIds)}><Trash2 />彻底删除</button>
               <button type="button" className="danger" disabled={!trash.length} onClick={() => void permanentlyDeleteTrashEntries(new Set(trash.map((entry) => entry.id)))}>清空回收站</button>
             </div>
             <div className="trash-list">
@@ -1486,10 +1484,10 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                 if (!root) return null;
                 return <label className="trash-item" key={entry.id}>
                   <input type="checkbox" checked={selectedTrashIds.has(entry.id)} onChange={() => setSelectedTrashIds((current) => { const next = new Set(current); if (next.has(entry.id)) next.delete(entry.id); else next.add(entry.id); return next; })} />
-                  {root.type === "folder" ? <FiFolder /> : <FiFileText />}
+                  {root.type === "folder" ? <Folder /> : <FileText />}
                   <span><strong>{root.title || "无标题"}</strong><small>{new Date(entry.deletedAt).toLocaleString("zh-CN")}</small></span>
-                  <button type="button" title="恢复" aria-label={`恢复${root.title}`} onClick={(event) => { event.preventDefault(); restoreTrashEntries(new Set([entry.id])); }}><FiRotateCcw /></button>
-                  <button type="button" className="danger" title="彻底删除" aria-label={`彻底删除${root.title}`} onClick={(event) => { event.preventDefault(); void permanentlyDeleteTrashEntries(new Set([entry.id])); }}><FiTrash2 /></button>
+                  <button type="button" title="恢复" aria-label={`恢复${root.title}`} onClick={(event) => { event.preventDefault(); restoreTrashEntries(new Set([entry.id])); }}><RotateCcw /></button>
+                  <button type="button" className="danger" title="彻底删除" aria-label={`彻底删除${root.title}`} onClick={(event) => { event.preventDefault(); void permanentlyDeleteTrashEntries(new Set([entry.id])); }}><Trash2 /></button>
                 </label>;
               })}
             </div>
@@ -1682,7 +1680,7 @@ function highlightText(text: string, query: string) {
 }
 
 function SimpleFileRow({ file, active, onSelect }: { file: WorkspaceFile; active: boolean; onSelect: (file: WorkspaceFile) => void }) {
-  return <button type="button" className={`simple-file-row ${active ? "is-active" : ""}`} onClick={() => onSelect(file)}><FiFileText /><span>{file.title || "无标题"}</span></button>;
+  return <button type="button" className={`simple-file-row ${active ? "is-active" : ""}`} onClick={() => onSelect(file)}><FileText /><span>{file.title || "无标题"}</span></button>;
 }
 
 function GlobalSearchResults({ query, results, expandedFileIds, onToggleFile, onSelectFolder, onSelectFile, onSelectMatch }: {
@@ -1701,7 +1699,7 @@ function GlobalSearchResults({ query, results, expandedFileIds, onToggleFile, on
         if (result.type === "folder") {
           return (
             <button type="button" className="global-search-item folder-result" key={`folder:${result.folder.id}`} onClick={() => onSelectFolder(result.folder)}>
-              <FiFolder className="global-result-icon" />
+              <Folder className="global-result-icon" />
               <span className="global-result-body">
                 <strong>{highlightText(result.folder.title, query)}</strong>
                 <small>{result.path}</small>
@@ -1714,7 +1712,7 @@ function GlobalSearchResults({ query, results, expandedFileIds, onToggleFile, on
         return (
           <article className="global-search-item document-result" key={`file:${result.file.id}`}>
             <button type="button" className="global-result-heading" onClick={() => onSelectFile(result.file)}>
-              <FiFileText className="global-result-icon" />
+              <FileText className="global-result-icon" />
               <span className="global-result-body">
                 <strong>{highlightText(result.file.title || "无标题", query)}</strong>
                 <small>{result.path}</small>
@@ -1733,7 +1731,7 @@ function GlobalSearchResults({ query, results, expandedFileIds, onToggleFile, on
             ) : null}
             {result.matches.length > 5 ? (
               <button type="button" className="global-search-more" onClick={() => onToggleFile(result.file.id)}>
-                {expanded ? "收起" : "展开更多"} <FiChevronDown />
+                {expanded ? "收起" : "展开更多"} <ChevronDown />
               </button>
             ) : null}
           </article>
@@ -1761,7 +1759,7 @@ function RecentSearchPanel({ searches, onClear, onDelete, onSelect }: {
           {searches.map((item) => (
             <span className="recent-search-tag" key={item}>
               <button type="button" className="recent-search-value" onClick={() => onSelect(item)}>{item}</button>
-              <button type="button" className="recent-search-delete icon-button" onClick={() => onDelete(item)} aria-label={`删除搜索记录 ${item}`}><FiX /></button>
+              <button type="button" className="recent-search-delete icon-button" onClick={() => onDelete(item)} aria-label={`删除搜索记录 ${item}`}><X /></button>
             </span>
           ))}
         </div>
@@ -1816,7 +1814,7 @@ function SearchFilterPopover({ folders, nodes, query, selectedFolderIds, onQuery
                   }
                 }}
               >
-                {expanded ? <FiChevronDown /> : <FiChevronRight />}
+                {expanded ? <ChevronDown /> : <ChevronRight />}
               </span>
             ) : <span className="workspace-filter-expand" />}
             <span>{folder.title}</span>
@@ -1829,7 +1827,7 @@ function SearchFilterPopover({ folders, nodes, query, selectedFolderIds, onQuery
 
   return (
     <div className="workspace-search-filter-popover">
-      <label className="workspace-filter-search"><FiSearch /><input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索文件夹" autoFocus /></label>
+      <label className="workspace-filter-search"><Search /><input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索文件夹" autoFocus /></label>
       <div className="workspace-filter-options">
         {renderFolders(null)}
         {!folders.length ? <div className="move-empty">没有匹配的文件夹</div> : null}
@@ -1855,7 +1853,7 @@ function QuickFileSection({ title, source, icon, expanded, files, selectedMenuKe
   return (
     <section className="quick-file-section">
       <button type="button" className="sidebar-action expandable-action" aria-expanded={expanded} onClick={onToggle}>
-        <span className="expandable-leading"><span className="leading-default-icon">{icon}</span>{expanded ? <FiChevronDown className="leading-state-icon" /> : <FiChevronRight className="leading-state-icon" />}</span>
+        <span className="expandable-leading"><span className="leading-default-icon">{icon}</span>{expanded ? <ChevronDown className="leading-state-icon" /> : <ChevronRight className="leading-state-icon" />}</span>
         <span>{title}</span>
       </button>
       {expanded ? <div className="quick-file-list">{files.map((file) => <SimpleFileRow key={file.id} file={file} active={selectedMenuKey === `${source}:${file.id}`} onSelect={(selected) => onSelect(selected, source)} />)}{!files.length ? <div className="empty-section">暂无文件</div> : null}</div> : null}
@@ -1914,15 +1912,15 @@ function NodeMenu({ node, nodes, anchor, moveOpen, onRename, onMoveToggle, onMov
       className="node-menu"
       style={{ position: "fixed", top: position?.top ?? 0, left: position?.left ?? 0, visibility: position ? "visible" : "hidden" }}
     >
-      <button type="button" onClick={onRename}><FiEdit2 />重命名</button>
-      <button type="button" onClick={toggleMovePopover}><FiMove />移动<FiChevronRight className="menu-chevron" /></button>
-      {moveOpen ? createPortal(<div className="move-popover" style={{ top: movePosition.top, left: movePosition.left, maxHeight: movePosition.maxHeight }}><label className="move-search"><FiSearch /><input value={moveSearch} onChange={(event) => setMoveSearch(event.target.value)} placeholder="搜索文件夹" autoFocus /></label><div className="move-options"><button type="button" onClick={() => onMove(null)}>工作空间顶层</button>{folders.map((folder) => <button type="button" key={folder.id} onClick={() => onMove(folder.id)}><FiFolder />{folder.title}</button>)}{!folders.length ? <div className="move-empty">没有匹配的文件夹</div> : null}</div></div>, document.body) : null}
-      {node.type === "file" ? <button type="button" onClick={onFavorite}>{node.favorite ? <FaStar className="favorite-filled" /> : <FiStar />}{node.favorite ? "取消星标" : "添加星标"}</button> : null}
-      <button type="button" onClick={onCopyLink}><FiLink />拷贝链接</button>
-      <button type="button" onClick={onDuplicate}><FiCopy />创建副本</button>
-      <button type="button" onClick={onOpen}><FiExternalLink />在新选项卡中打开</button>
+      <button type="button" onClick={onRename}><Pencil />重命名</button>
+      <button type="button" onClick={toggleMovePopover}><Move />移动<ChevronRight className="menu-chevron" /></button>
+      {moveOpen ? createPortal(<div className="move-popover" style={{ top: movePosition.top, left: movePosition.left, maxHeight: movePosition.maxHeight }}><label className="move-search"><Search /><input value={moveSearch} onChange={(event) => setMoveSearch(event.target.value)} placeholder="搜索文件夹" autoFocus /></label><div className="move-options"><button type="button" onClick={() => onMove(null)}>工作空间顶层</button>{folders.map((folder) => <button type="button" key={folder.id} onClick={() => onMove(folder.id)}><Folder />{folder.title}</button>)}{!folders.length ? <div className="move-empty">没有匹配的文件夹</div> : null}</div></div>, document.body) : null}
+      {node.type === "file" ? <button type="button" onClick={onFavorite}><Star className={node.favorite ? "favorite-filled" : undefined} fill={node.favorite ? "currentColor" : "none"} />{node.favorite ? "取消星标" : "添加星标"}</button> : null}
+      <button type="button" onClick={onCopyLink}><Link />拷贝链接</button>
+      <button type="button" onClick={onDuplicate}><Copy />创建副本</button>
+      <button type="button" onClick={onOpen}><ExternalLink />在新选项卡中打开</button>
       <div className="menu-divider" />
-      <button type="button" className="danger" onClick={onDelete}><FiTrash2 />删除</button>
+      <button type="button" className="danger" onClick={onDelete}><Trash2 />删除</button>
     </div>,
     document.body,
   );
@@ -1979,7 +1977,7 @@ function FocusBreadcrumbPart({ item, onNavigate }: {
       onMouseEnter={openMenu}
       onMouseLeave={closeMenu}
     >
-      <FiChevronRight />
+      <ChevronRight />
       {item.current ? (
         <span className="document-focus-current">{item.label}</span>
       ) : (

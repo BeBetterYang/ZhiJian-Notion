@@ -88,11 +88,12 @@ export function outlineEnterAction(params: {
   atEnd: boolean;
   selectionEmpty: boolean;
   focusedNodeId?: string | null;
+  rootNodeId?: string | null;
 }): "default" | "insert-child" | "insert-past-attachments" {
-  const { block, atEnd, selectionEmpty, focusedNodeId } = params;
+  const { block, atEnd, selectionEmpty, focusedNodeId, rootNodeId } = params;
   if (!selectionEmpty || !atEnd) return "default";
   if (isAttachmentBlock(block.type) || block.type === "table") return "default";
-  if (focusedNodeId === block.id) return "insert-child";
+  if (focusedNodeId === block.id || rootNodeId === block.id) return "insert-child";
   return hasNodeAttachments(block) ? "insert-past-attachments" : "default";
 }
 
@@ -141,7 +142,13 @@ export function handleOutlineNodeKeyDown<BS extends BlockSchema, IS extends Inli
   const atEnd = selection.$from.parentOffset === parent.content.size;
 
   if (event.key === "Enter") {
-    const enterAction = outlineEnterAction({ block, atEnd, selectionEmpty: selection.empty, focusedNodeId });
+    const enterAction = outlineEnterAction({
+      block,
+      atEnd,
+      selectionEmpty: selection.empty,
+      focusedNodeId,
+      rootNodeId: editor.document[0]?.id,
+    });
     if (enterAction === "default") return false;
     event.preventDefault();
     event.stopPropagation();

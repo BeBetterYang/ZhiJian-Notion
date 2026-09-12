@@ -1,7 +1,7 @@
 import "../shared/sourceSansPro.css";
 import { StrictMode, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { FiCheck, FiDownload } from "react-icons/fi";
+import { Check, Download } from "lucide-react";
 import App from "../App";
 import type { ZhiJianTree } from "../core/tree";
 import { TreeStore } from "../core/treeStore";
@@ -106,9 +106,9 @@ function SharedDocumentApp() {
       <span className="shared-document-badge">只读分享</span>
       <div className="shared-document-actions">
         {save.status === "saved"
-          ? <a className="shared-document-saved" href="/workspace.html"><FiCheck />已保存，去我的枝间查看</a>
+          ? <a className="shared-document-saved" href="/workspace.html"><Check />已保存，去我的枝间查看</a>
           : <button type="button" disabled={save.status === "saving"} onClick={() => void saveToWorkspace()}>
-              <FiDownload />{save.status === "saving" ? "保存中…" : "保存到我的枝间"}
+              <Download />{save.status === "saving" ? "保存中…" : "保存到我的枝间"}
             </button>}
         <div ref={setToolbarTarget} className="document-header-actions" />
       </div>

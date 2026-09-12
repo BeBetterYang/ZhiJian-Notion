@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { X } from "lucide-react";
 import {
   NATIVE_SHORTCUTS,
   SHORTCUTS,
@@ -37,7 +38,7 @@ export function ShortcutHelpDialog({ onClose }: { onClose: () => void }) {
         <header>
           <h2 id="shortcut-help-title">快捷键</h2>
           <button type="button" className="icon-button" aria-label="关闭" onClick={onClose}>
-            ×
+            <X aria-hidden="true" />
           </button>
         </header>
         <div className="zhijian-shortcut-sections">
