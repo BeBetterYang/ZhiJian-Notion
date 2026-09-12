@@ -13,6 +13,9 @@
   --color-text-disabled: #aaa9a5;
   --color-surface: #ffffff;
   --color-surface-subtle: #fafaf9;
+  --scrollbar-size: 8px;
+  --scrollbar-thumb: rgba(55, 53, 47, 0.4);
+  --scrollbar-thumb-hover: rgba(55, 53, 47, 0.58);
   --color-hover: rgba(55, 53, 47, 0.07);
   --color-selected: rgba(55, 53, 47, 0.075);
   --color-border: rgba(55, 53, 47, 0.12);
@@ -89,7 +92,34 @@
   height: 16px;
   display: block;
   flex: 0 0 auto;
-  stroke-width: 1.8;
+  stroke-width: 2.1;
+}
+
+:is(.zhijian-shortcut-sections, .outline-panel, .mindmap-theme-panel, .mindmap-toolbar-host .bn-color-picker-dropdown) {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+:is(.zhijian-shortcut-sections, .outline-panel, .mindmap-theme-panel, .mindmap-toolbar-host .bn-color-picker-dropdown)::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+:is(.zhijian-shortcut-sections, .outline-panel, .mindmap-theme-panel, .mindmap-toolbar-host .bn-color-picker-dropdown)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:is(.zhijian-shortcut-sections, .outline-panel, .mindmap-theme-panel, .mindmap-toolbar-host .bn-color-picker-dropdown)::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: var(--scrollbar-thumb);
+}
+
+:is(.zhijian-shortcut-sections, .outline-panel, .mindmap-theme-panel, .mindmap-toolbar-host .bn-color-picker-dropdown):hover {
+  scrollbar-color: var(--scrollbar-thumb-hover) transparent;
+}
+
+:is(.zhijian-shortcut-sections, .outline-panel, .mindmap-theme-panel, .mindmap-toolbar-host .bn-color-picker-dropdown):hover::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* A colour applied to selected text has to be visible before the selection is
@@ -1692,7 +1722,7 @@ textarea {
   appearance: none;
   border: 0;
   border-radius: 4px;
-  background: rgba(55, 53, 47, 0.4);
+  background: var(--scrollbar-thumb);
 }
 
 .mindmap-pan-scrollbar.is-vertical::-webkit-slider-thumb {
@@ -1713,7 +1743,7 @@ textarea {
   height: 8px;
   border: 0;
   border-radius: 4px;
-  background: rgba(55, 53, 47, 0.4);
+  background: var(--scrollbar-thumb);
 }
 
 .mindmap-pan-scrollbar.is-vertical::-moz-range-thumb {
@@ -1723,12 +1753,12 @@ textarea {
 
 .mindmap-pan-scrollbar:hover::-webkit-slider-thumb,
 .mindmap-pan-scrollbar:focus-visible::-webkit-slider-thumb {
-  background: rgba(55, 53, 47, 0.58);
+  background: var(--scrollbar-thumb-hover);
 }
 
 .mindmap-pan-scrollbar:hover::-moz-range-thumb,
 .mindmap-pan-scrollbar:focus-visible::-moz-range-thumb {
-  background: rgba(55, 53, 47, 0.58);
+  background: var(--scrollbar-thumb-hover);
 }
 
 .mindmap-pan-scrollbar:focus-visible {
@@ -2820,7 +2850,7 @@ textarea {
 .mindmap-style-menu .mindmap-layout-grid > button {
   position: relative;
   display: block;
-  height: 96px;
+  height: 100px;
   padding: 8px;
   border: 1px solid rgba(55, 53, 47, 0.1);
   border-radius: 7px;
@@ -2866,7 +2896,11 @@ textarea {
 .mindmap-layout-preview {
   display: block;
   width: 100%;
-  height: 60px;
+  height: 64px;
+  margin-top: 2px;
+  padding: 2px 0;
+  border-radius: 5px;
+  background: rgba(55, 53, 47, 0.035);
 }
 
 /* The generic menu icon rule is intentionally overridden here: this SVG is the
@@ -2881,10 +2915,10 @@ textarea {
 
 .mindmap-layout-preview-svg path {
   fill: none;
-  stroke: #aaa9a5;
+  stroke: #9aa5ae;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 1.7;
+  stroke-width: 2;
   vector-effect: non-scaling-stroke;
 }
 
@@ -2893,17 +2927,21 @@ textarea {
 }
 
 .mindmap-layout-preview-svg rect {
-  fill: #d8d8d5;
+  fill: #dce4e9;
+  stroke: #aab6bf;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
 }
 
 .mindmap-layout-preview-svg rect.is-root {
   fill: #53514d;
+  stroke: #53514d;
 }
 
 .mindmap-layout-preview-svg circle {
   fill: #8f8e8a;
   stroke: #ffffff;
-  stroke-width: 1.5;
+  stroke-width: 1.75;
 }
 
 @media (max-width: 560px) {
@@ -2950,7 +2988,8 @@ textarea {
 
 .mindmap-theme-panel {
   width: min(500px, calc(100vw - 84px));
-  max-height: calc(100vh - 160px);
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
   padding: 10px;
   overflow-y: auto;
   overscroll-behavior: contain;

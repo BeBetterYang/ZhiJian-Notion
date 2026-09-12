@@ -3,7 +3,7 @@ import MindElixir, { type MindElixirData, type NodeObj, type Operation, type Top
 import { zh_CN } from "mind-elixir/i18n";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type MutableRefObject, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Check, Crosshair, Eye, EyeOff, LayoutTemplate, Maximize2, Minimize2, MoreHorizontal, Plus, SwatchBook, ZoomIn, ZoomOut } from "lucide-react";
+import { Check, Crosshair, Eye, EyeOff, Maximize2, Minimize2, MoreHorizontal, Palette, Plus, Workflow, ZoomIn, ZoomOut } from "lucide-react";
 import type { ZhiJianMindMapDefaults, ZhiJianMindMapLayout, ZhiJianTree } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
 import { useTree } from "../core/treeStore/useTree";
@@ -1477,8 +1477,8 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
             </div>
           ) : null}
             <div className="mindmap-style-menu-buttons">
-              <button type="button" className="mindmap-style-menu-trigger" title="布局" aria-label="布局" aria-expanded={styleSubmenu === "layout"} onPointerEnter={() => { setStyleMoreMenu(null); setStyleSubmenu("layout"); }} onFocus={() => { setStyleMoreMenu(null); setStyleSubmenu("layout"); }} onClick={() => { setStyleMoreMenu(null); setStyleSubmenu(styleSubmenu === "layout" ? null : "layout"); }}><LayoutTemplate /></button>
-              {!readOnly ? <button type="button" className="mindmap-style-menu-trigger" title="样式" aria-label="样式" aria-expanded={styleSubmenu === "theme"} onPointerEnter={() => { setStyleMoreMenu(null); setStyleSubmenu("theme"); }} onFocus={() => { setStyleMoreMenu(null); setStyleSubmenu("theme"); }} onClick={() => { setStyleMoreMenu(null); setStyleSubmenu(styleSubmenu === "theme" ? null : "theme"); }}><SwatchBook /></button> : null}
+              <button type="button" className="mindmap-style-menu-trigger" title="布局" aria-label="布局" aria-expanded={styleSubmenu === "layout"} onPointerEnter={() => { setStyleMoreMenu(null); setStyleSubmenu("layout"); }} onFocus={() => { setStyleMoreMenu(null); setStyleSubmenu("layout"); }} onClick={() => { setStyleMoreMenu(null); setStyleSubmenu(styleSubmenu === "layout" ? null : "layout"); }}><Workflow /></button>
+              {!readOnly ? <button type="button" className="mindmap-style-menu-trigger" title="样式" aria-label="样式" aria-expanded={styleSubmenu === "theme"} onPointerEnter={() => { setStyleMoreMenu(null); setStyleSubmenu("theme"); }} onFocus={() => { setStyleMoreMenu(null); setStyleSubmenu("theme"); }} onClick={() => { setStyleMoreMenu(null); setStyleSubmenu(styleSubmenu === "theme" ? null : "theme"); }}><Palette /></button> : null}
               {hasCloze ? <button type="button" className={`mindmap-style-menu-trigger ${revealAllCloze ? "is-active" : ""}`} title={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"} aria-label={revealAllCloze ? "隐藏挖空内容" : "显示挖空内容"} aria-pressed={revealAllCloze} onPointerEnter={() => { setStyleSubmenu(null); setStyleMoreMenu(null); }} onClick={toggleAllCloze}>{revealAllCloze ? <Eye /> : <EyeOff />}</button> : null}
             </div>
             {styleSubmenu === "layout" ? (
