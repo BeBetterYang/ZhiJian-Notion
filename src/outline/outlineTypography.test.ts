@@ -3,7 +3,9 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const styles = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
+const workspaceStyles = readFileSync(resolve(process.cwd(), "src/workspace/workspace.css"), "utf8");
 const flattened = styles.replaceAll(/\/\*[\s\S]*?\*\//g, "").replaceAll(/\s+/g, " ");
+const sharedFontStack = '-apple-system, BlinkMacSystemFont, "PingFang SC", Helvetica, Arial, "Microsoft YaHei", 微软雅黑, 黑体, Heiti, sans-serif, SimSun, 宋体, serif, "Source Sans Pro"';
 
 function ruleContaining(selector: string, declaration: string) {
   return [...flattened.matchAll(/([^{}]+)\{([^{}]*)\}/g)].find(
@@ -13,16 +15,16 @@ function ruleContaining(selector: string, declaration: string) {
 }
 
 describe("outline typography", () => {
-  it("uses the MuBu fallback order without prioritising Source Sans Pro", () => {
-    expect(flattened).toContain(
-      '--zhijian-outline-font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", Helvetica, Arial, "Microsoft YaHei", 微软雅黑, 黑体, Heiti, sans-serif, SimSun, 宋体, serif, "Source Sans Pro";',
-    );
+  it("uses one MuBu fallback order across the app roots", () => {
+    expect(flattened).toContain(`--zhijian-font-family: ${sharedFontStack};`);
+    expect(workspaceStyles.replaceAll(/\s+/g, " ")).toContain(`--zhijian-font-family: ${sharedFontStack};`);
+    expect(flattened).not.toContain("--zhijian-outline-font-family");
   });
 
   it("applies the same family to outline display and BlockNote editing surfaces", () => {
     const familyRule = ruleContaining(
       ".outline-panel .bn-inline-content",
-      "font-family: var(--zhijian-outline-font-family) !important",
+      "font-family: var(--zhijian-font-family) !important",
     );
     expect(familyRule).toBeDefined();
     expect(familyRule![1]).toContain(".outline-panel .bn-root");

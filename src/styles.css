@@ -39,14 +39,10 @@
   --shadow-popover: 0 8px 24px rgba(15, 15, 15, 0.12), 0 2px 5px rgba(15, 15, 15, 0.08);
   --shadow-dialog: 0 24px 70px rgba(15, 15, 15, 0.22), 0 2px 8px rgba(15, 15, 15, 0.08);
   --overlay-dialog: rgba(15, 15, 15, 0.44);
-  --zhijian-font-family: "Source Sans Pro", -apple-system, "PingFang SC", "Apple Color Emoji",
-    BlinkMacSystemFont, Helvetica, Arial, "Segoe UI Emoji", "Segoe UI Symbol",
-    "Microsoft YaHei", 微软雅黑, 黑体, Heiti, sans-serif, SimSun, 宋体, serif;
-  /* Keep outline metrics aligned with MuBu on Windows. Source Sans Pro is
-     intentionally last: its bundled files only cover Latin characters. */
-  --zhijian-outline-font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", Helvetica,
-    Arial, "Microsoft YaHei", 微软雅黑, 黑体, Heiti, sans-serif, SimSun, 宋体, serif,
-    "Source Sans Pro";
+  /* Keep every screen on MuBu's fallback order. Source Sans Pro is intentionally
+     last: its bundled files only cover Latin characters. */
+  --zhijian-font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", Helvetica, Arial,
+    "Microsoft YaHei", 微软雅黑, 黑体, Heiti, sans-serif, SimSun, 宋体, serif, "Source Sans Pro";
   --zhijian-type-body-size: 16px;
   --zhijian-type-body-line-height: 1.5;
   --zhijian-type-body-weight: 400;
@@ -879,7 +875,7 @@ textarea {
 .outline-panel .bn-editor,
 .outline-panel .bn-block-content,
 .outline-panel .bn-inline-content {
-  font-family: var(--zhijian-outline-font-family) !important;
+  font-family: var(--zhijian-font-family) !important;
 }
 
 .outline-panel .bn-inline-content {
@@ -2929,50 +2925,11 @@ textarea {
   background: rgba(55, 53, 47, 0.035);
 }
 
-/* The generic menu icon rule is intentionally overridden here: this SVG is the
-   structure preview itself, not a 15px action icon. Fixed viewBox coordinates
-   keep every framework legible at the same scale. */
-.mindmap-style-menu button .mindmap-layout-preview-svg {
+.mindmap-style-menu button .mindmap-layout-preview-image {
   display: block;
   width: 100%;
   height: 100%;
-  overflow: visible;
-}
-
-.mindmap-layout-preview-svg path {
-  fill: none;
-  stroke: #686d72;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 2.2;
-  vector-effect: non-scaling-stroke;
-}
-
-.mindmap-layout-preview-svg path.is-axis {
-  stroke-width: 2.5;
-}
-
-.mindmap-layout-preview-svg rect {
-  fill: #bfc3c6;
-  stroke: #bfc3c6;
-  stroke-width: 0.75;
-  vector-effect: non-scaling-stroke;
-}
-
-.mindmap-layout-preview-svg rect.is-root {
-  fill: #595c60;
-  stroke: #595c60;
-}
-
-.mindmap-layout-preview-svg circle {
-  fill: #bfc3c6;
-  stroke: #f8f9f9;
-  stroke-width: 1.5;
-}
-
-.mindmap-layout-preview-svg circle.is-root {
-  fill: #595c60;
-  stroke: #595c60;
+  object-fit: cover;
 }
 
 @media (max-width: 560px) {

@@ -229,7 +229,7 @@ const EXPORT_COLORS: Record<string, string> = {
  * only the text inside it is a heading — so each row kind carries the number.
  */
 const OUTLINE_EXPORT_CSS = `
-*{box-sizing:border-box}body{margin:0;background:#fff;color:#242831;font-family:SourceSansPro,-apple-system,"PingFang SC","Apple Color Emoji",BlinkMacSystemFont,Helvetica,Arial,"Segoe UI Emoji","Segoe UI Symbol","Microsoft YaHei",微软雅黑,黑体,Heiti,sans-serif,SimSun,宋体,serif;font-size:16px;line-height:1.55}.document{width:min(900px,calc(100% - 64px));margin:48px auto 80px}.document>h1{font-size:34px;line-height:1.2;margin:0 0 24px;font-weight:700}
+*{box-sizing:border-box}body{margin:0;background:#fff;color:#242831;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",Helvetica,Arial,"Microsoft YaHei",微软雅黑,黑体,Heiti,sans-serif,SimSun,宋体,serif,"Source Sans Pro";font-size:16px;line-height:1.55}.document{width:min(900px,calc(100% - 64px));margin:48px auto 80px}.document>h1{font-size:34px;line-height:1.2;margin:0 0 24px;font-weight:700}
 .outline,.outline ul{list-style:none;margin:0;padding:0}
 .outline li{--dot:12.4px;position:relative;margin:6px 0;padding-left:38px}
 .outline li.heading-1{--dot:37.2px}.outline li.heading-2{--dot:24.8px}.outline li.heading-3{--dot:16.12px}.outline li.table{--dot:28.4px}
@@ -252,7 +252,7 @@ const OUTLINE_EXPORT_CSS = `
 const WORD_EXPORT_CSS = `
 @page WordSection1{size:21.0cm 29.7cm;margin:2.0cm 2.0cm 2.0cm 2.0cm}
 div.WordSection1{page:WordSection1}
-body{margin:0;color:#242831;font-family:"PingFang SC","Microsoft YaHei",宋体,Calibri,sans-serif;font-size:12.0pt;line-height:1.5}
+body{margin:0;color:#242831;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",Helvetica,Arial,"Microsoft YaHei",微软雅黑,黑体,Heiti,sans-serif,SimSun,宋体,serif,"Source Sans Pro";font-size:12.0pt;line-height:1.5}
 p{margin:0 0 6.0pt 0}
 p.doc-title{margin:0 0 14.0pt 0;font-size:25.5pt;font-weight:700;line-height:1.2}
 p.word-row{font-size:12.0pt}

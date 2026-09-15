@@ -45,6 +45,7 @@ describe("outline document export", () => {
     expect(html).toContain('src="data:image/png;base64,AA=="');
     expect(html).toContain("表格内容");
     expect(html).toContain("#fbf3db");
+    expect(html).toContain('font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",Helvetica,Arial,"Microsoft YaHei",微软雅黑,黑体,Heiti,sans-serif,SimSun,宋体,serif,"Source Sans Pro"');
   });
 
   it("marks each row with its kind so the export keeps the heading sizes and bullet offsets", async () => {

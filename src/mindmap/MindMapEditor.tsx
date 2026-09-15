@@ -1,7 +1,7 @@
 import "mind-elixir/style.css";
 import MindElixir, { type MindElixirData, type NodeObj, type Operation, type Topic } from "mind-elixir";
 import { zh_CN } from "mind-elixir/i18n";
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type MutableRefObject, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type MutableRefObject, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { Check, Crosshair, Eye, EyeOff, Maximize2, Minimize2, MoreHorizontal, Palette, Plus, Workflow, ZoomIn, ZoomOut } from "lucide-react";
 import type { ZhiJianMindMapDefaults, ZhiJianMindMapLayout, ZhiJianTree } from "../core/tree";
@@ -1557,6 +1557,48 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
                     ))}
                   </div>
                 </div>
+                <div className="mindmap-connector-style">
+                  <span>连接线</span>
+                  <div role="group" aria-label="连接线转角">
+                    <button
+                      type="button"
+                      className={!roundedConnectors ? "is-active" : ""}
+                      aria-pressed={!roundedConnectors}
+                      onClick={() => store.setMindMapConnectorRounded(false)}
+                    >
+                      直角
+                    </button>
+                    <button
+                      type="button"
+                      className={roundedConnectors ? "is-active" : ""}
+                      aria-pressed={roundedConnectors}
+                      onClick={() => store.setMindMapConnectorRounded(true)}
+                    >
+                      圆角
+                    </button>
+                  </div>
+                </div>
+                <div className="mindmap-frame-style">
+                  <span>方框</span>
+                  <div role="group" aria-label="节点方框类型">
+                    <button
+                      type="button"
+                      className={!roundedFrames ? "is-active" : ""}
+                      aria-pressed={!roundedFrames}
+                      onClick={() => store.setMindMapFrameRounded(false)}
+                    >
+                      直角
+                    </button>
+                    <button
+                      type="button"
+                      className={roundedFrames ? "is-active" : ""}
+                      aria-pressed={roundedFrames}
+                      onClick={() => store.setMindMapFrameRounded(true)}
+                    >
+                      圆角
+                    </button>
+                  </div>
+                </div>
               </div>
             ) : null}
             {styleSubmenu === "theme" ? (
@@ -1604,48 +1646,6 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
                     </div>
                   </div>
                 ))}
-                <div className="mindmap-connector-style">
-                  <span>连接线</span>
-                  <div role="group" aria-label="连接线转角">
-                    <button
-                      type="button"
-                      className={!roundedConnectors ? "is-active" : ""}
-                      aria-pressed={!roundedConnectors}
-                      onClick={() => store.setMindMapConnectorRounded(false)}
-                    >
-                      直角
-                    </button>
-                    <button
-                      type="button"
-                      className={roundedConnectors ? "is-active" : ""}
-                      aria-pressed={roundedConnectors}
-                      onClick={() => store.setMindMapConnectorRounded(true)}
-                    >
-                      圆角
-                    </button>
-                  </div>
-                </div>
-                <div className="mindmap-frame-style">
-                  <span>方框</span>
-                  <div role="group" aria-label="节点方框类型">
-                    <button
-                      type="button"
-                      className={!roundedFrames ? "is-active" : ""}
-                      aria-pressed={!roundedFrames}
-                      onClick={() => store.setMindMapFrameRounded(false)}
-                    >
-                      直角
-                    </button>
-                    <button
-                      type="button"
-                      className={roundedFrames ? "is-active" : ""}
-                      aria-pressed={roundedFrames}
-                      onClick={() => store.setMindMapFrameRounded(true)}
-                    >
-                      圆角
-                    </button>
-                  </div>
-                </div>
                 <div className="mindmap-background-style">
                   <span>背景色</span>
                   <div className="mindmap-background-palette" role="group" aria-label="导图背景色">
@@ -1758,71 +1758,9 @@ function mindMapScalePercentFromSlider(position: number) {
 }
 
 function MindMapLayoutPreview({ type }: { type: ZhiJianMindMapLayout["type"] }) {
-  let diagram: ReactNode;
-  if (type === "mind-map") {
-    diagram = (
-      <>
-        <path d="M 58 34 H 43 V 14 H 29 M 43 34 V 54 H 29 M 86 34 H 101 V 14 H 115 M 101 34 V 54 H 115" />
-        <rect className="is-root" x="58" y="24" width="28" height="20" rx="6" />
-        <rect x="8" y="8" width="21" height="12" rx="4" />
-        <rect x="8" y="48" width="21" height="12" rx="4" />
-        <rect x="115" y="8" width="21" height="12" rx="4" />
-        <rect x="115" y="48" width="21" height="12" rx="4" />
-      </>
-    );
-  } else if (type === "logic") {
-    diagram = (
-      <>
-        <path d="M 35 34 H 55 V 12 H 76 M 55 34 H 76 M 55 34 V 56 H 76 M 100 12 H 116 M 100 34 H 116" />
-        <rect className="is-root" x="6" y="25" width="29" height="18" rx="5" />
-        <rect x="76" y="6" width="24" height="12" rx="4" />
-        <rect x="76" y="28" width="24" height="12" rx="4" />
-        <rect x="76" y="50" width="24" height="12" rx="4" />
-        <rect x="116" y="7" width="20" height="10" rx="3" />
-        <rect x="116" y="29" width="20" height="10" rx="3" />
-      </>
-    );
-  } else if (type === "org-chart") {
-    diagram = (
-      <>
-        <path d="M 72 22 V 35 M 22 35 H 122 M 22 35 V 49 M 72 35 V 49 M 122 35 V 49" />
-        <rect className="is-root" x="56" y="4" width="32" height="18" rx="5" />
-        <rect x="9" y="49" width="26" height="11" rx="4" />
-        <rect x="59" y="49" width="26" height="11" rx="4" />
-        <rect x="109" y="49" width="26" height="11" rx="4" />
-      </>
-    );
-  } else if (type === "timeline") {
-    diagram = (
-      <>
-        <path className="is-axis" d="M 10 34 H 136" />
-        <path d="M 42 34 V 18 M 78 34 V 51 M 114 34 V 18" />
-        <circle className="is-root" cx="10" cy="34" r="6" />
-        <circle cx="42" cy="34" r="4" />
-        <circle cx="78" cy="34" r="4" />
-        <circle cx="114" cy="34" r="4" />
-        <rect x="31" y="7" width="22" height="11" rx="4" />
-        <rect x="67" y="50" width="22" height="11" rx="4" />
-        <rect x="103" y="7" width="22" height="11" rx="4" />
-      </>
-    );
-  } else {
-    diagram = (
-      <>
-        <path d="M 29 22 V 58 M 29 31 H 56 M 29 45 H 73 M 29 58 H 91 M 98 45 H 109 V 58 H 116" />
-        <rect className="is-root" x="8" y="4" width="38" height="18" rx="5" />
-        <rect x="56" y="25" width="25" height="12" rx="4" />
-        <rect x="73" y="39" width="25" height="12" rx="4" />
-        <rect x="91" y="52" width="25" height="12" rx="4" />
-        <rect x="116" y="53" width="20" height="10" rx="3" />
-      </>
-    );
-  }
   return (
     <span className={`mindmap-layout-preview is-${type}`} aria-hidden="true">
-      <svg className="mindmap-layout-preview-svg" viewBox="0 0 144 68" focusable="false">
-        {diagram}
-      </svg>
+      <img className="mindmap-layout-preview-image" src={`/mindmap-layout-${type}.png`} alt="" />
     </span>
   );
 }
