@@ -158,8 +158,60 @@ export function applyMindMapVisualVariables(element: HTMLElement, style: MindMap
 function renderTableHtml(node: ZhiJianNode) {
   const rows = node.props?.table?.rows ?? [];
   const widths = node.props?.table?.columnWidths ?? [];
-  const body = rows.map((row, rowIndex) => `<tr>${row.map((cell, columnIndex) => `<td data-table-row="${rowIndex}" data-table-column="${columnIndex}"${renderCellAttributes(cell, widths[columnIndex])}>${renderRichTextHtml(cell.content)}</td>`).join("")}</tr>`).join("");
-  return `<div class="mindmap-node-table"><table>${renderColumnGroupHtml(node, rows[0]?.length ?? 0)}<tbody>${body}</tbody></table>${rows.length ? "" : "表格"}</div>`;
+  const layout = layoutTableRows(rows);
+  const body = layout.rows.map((row, rowIndex) => `<tr>${row.map(({ cell, columnIndex, colspan, rowspan }) => `<td data-table-row="${rowIndex}" data-table-column="${columnIndex}"${renderCellAttributes(cell, columnWidthForCell(widths, columnIndex, colspan), colspan, rowspan)}>${renderRichTextHtml(cell.content)}</td>`).join("")}</tr>`).join("");
+  return `<div class="mindmap-node-table"><table>${renderColumnGroupHtml(node, layout.columnCount)}<tbody>${body}</tbody></table>${rows.length ? "" : "表格"}</div>`;
+}
+
+interface RenderedTableCell {
+  cell: ZhiJianTableCell;
+  columnIndex: number;
+  colspan: number;
+  rowspan: number;
+}
+
+/**
+ * BlockNote stores only real cells in each row. A cell with rowspan therefore
+ * shifts the visual column of the following row, so the display layer needs a
+ * small occupancy grid both for correct HTML and for click-to-edit coordinates.
+ */
+function layoutTableRows(rows: ZhiJianTableCell[][]) {
+  const occupied: boolean[][] = [];
+  let columnCount = 0;
+  const laidOutRows: RenderedTableCell[][] = rows.map((row, rowIndex) => {
+    const laidOut: RenderedTableCell[] = [];
+    let columnIndex = 0;
+    for (const cell of row) {
+      const colspan = tableSpan(cell.colspan);
+      const rowspan = tableSpan(cell.rowspan);
+      while (occupied[rowIndex]?.slice(columnIndex, columnIndex + colspan).some(Boolean)) {
+        columnIndex += 1;
+      }
+      laidOut.push({ cell, columnIndex, colspan, rowspan });
+      for (let rowOffset = 0; rowOffset < rowspan; rowOffset += 1) {
+        const occupiedRow = occupied[rowIndex + rowOffset] ?? (occupied[rowIndex + rowOffset] = []);
+        for (let columnOffset = 0; columnOffset < colspan; columnOffset += 1) {
+          occupiedRow[columnIndex + columnOffset] = true;
+        }
+      }
+      columnIndex += colspan;
+      columnCount = Math.max(columnCount, columnIndex);
+    }
+    return laidOut;
+  });
+  return { rows: laidOutRows, columnCount };
+}
+
+function tableSpan(value: number | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 1;
+}
+
+function columnWidthForCell(widths: (number | undefined)[], columnIndex: number, colspan: number) {
+  const width = widths
+    .slice(columnIndex, columnIndex + colspan)
+    .filter((value): value is number => typeof value === "number" && value > 0)
+    .reduce((total, value) => total + value, 0);
+  return width || undefined;
 }
 
 /**
@@ -187,9 +239,11 @@ function renderColumnGroupHtml(node: ZhiJianNode, columnCount: number) {
  * a coloured cell looking the same once the editor closes — without the display
  * layer holding a second copy of the palette.
  */
-function renderCellAttributes(cell: ZhiJianTableCell, columnWidth?: number) {
+function renderCellAttributes(cell: ZhiJianTableCell, columnWidth?: number, colspan = 1, rowspan = 1) {
   return [
     typeof columnWidth === "number" && columnWidth > 0 ? ` style="min-width:${columnWidth}px"` : "",
+    colspan > 1 ? ` colspan="${colspan}"` : "",
+    rowspan > 1 ? ` rowspan="${rowspan}"` : "",
     cell.backgroundColor ? ` data-background-color="${escapeHtml(cell.backgroundColor)}"` : "",
     cell.textColor ? ` data-text-color="${escapeHtml(cell.textColor)}"` : "",
     cell.textAlignment ? ` data-text-alignment="${escapeHtml(cell.textAlignment)}"` : "",

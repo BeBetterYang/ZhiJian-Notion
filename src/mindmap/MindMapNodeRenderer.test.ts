@@ -70,6 +70,30 @@ describe("renderMindMapNodeDisplayHtml table cells", () => {
 
     expect(html).toContain('data-table-row="0" data-table-column="0" data-text-alignment="center"');
   });
+
+  it("renders merged cells and keeps row-spanned cells on their visual columns", () => {
+    const html = renderMindMapNodeDisplayHtml(
+      tableNode({
+        table: {
+          rows: [
+            [
+              { content: { text: "A" }, rowspan: 2 },
+              { content: { text: "B" }, colspan: 2 },
+            ],
+            [
+              { content: { text: "C" } },
+              { content: { text: "D" } },
+            ],
+          ],
+        },
+      }),
+    );
+
+    expect(html).toContain('colspan="2"');
+    expect(html).toContain('rowspan="2"');
+    expect(html).toContain('data-table-row="1" data-table-column="1"');
+    expect(html).toContain('data-table-row="1" data-table-column="2"');
+  });
 });
 
 describe("marks belong to the run they were applied to", () => {

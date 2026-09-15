@@ -101,7 +101,12 @@ function MindMapNodeEditor({
       // Same table features the outline enables — a table edited here is the same
       // table, and its cell colour controls come from this config rather than from
       // our own toolbar.
-      tables: { headers: true, cellBackgroundColor: true, cellTextColor: true },
+      tables: {
+        headers: true,
+        cellBackgroundColor: true,
+        cellTextColor: true,
+        splitCells: true,
+      },
     },
     [node.id],
   );

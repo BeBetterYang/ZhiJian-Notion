@@ -2,6 +2,25 @@ import { richTextToPlainText, type ZhiJianNode, type ZhiJianTree } from "../core
 
 export const MIND_MAP_CLIPBOARD_MIME = "application/x-zhijian-node";
 
+/**
+ * A text selection inside displayed text or an edited text block belongs to the
+ * text layer, not to MindElixir's node clipboard. Table selections stay out of
+ * this guard so the editor's cell-aware clipboard handler can preserve its behavior.
+ */
+export function isMindMapTextClipboardSelection(event: ClipboardEvent) {
+  if (event.type !== "copy" && event.type !== "cut") return false;
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || !selection.toString()) return false;
+
+  const endpoints = [selection.anchorNode, selection.focusNode].map(selectionElement);
+  const displayedText = endpoints.every((element) => element?.closest(".mindmap-node-display"));
+  const editedText = endpoints.every((element) => element?.closest(".mindmap-node-editor .ProseMirror"));
+  const editedQuote = endpoints.every((element) => element?.closest(".mindmap-node-editor [data-content-type='quote'], .mindmap-node-editor .mindmap-node-quote"));
+  if (!displayedText && !editedText && !editedQuote) return false;
+  if (endpoints.some((element) => element?.closest(".mindmap-node-editor table, .mindmap-node-editor [data-content-type='table']"))) return false;
+  return true;
+}
+
 interface MindMapClipboardPayload {
   version: 1;
   subtrees: ZhiJianNode[][];
@@ -80,4 +99,8 @@ function collectSubtree(tree: ZhiJianTree, id: string) {
   };
   visit(id);
   return nodes;
+}
+
+function selectionElement(node: Node | null) {
+  return node instanceof Element ? node : node?.parentElement ?? null;
 }

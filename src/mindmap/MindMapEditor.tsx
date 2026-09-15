@@ -36,7 +36,7 @@ import {
 import { MindMapLinkHoverTracker } from "./MindMapLinkHoverTracker";
 import { renderMindMapNodeDisplayHtml } from "./MindMapNodeRenderer";
 import { MindMapNodeContent } from "./MindMapNodeGroupBlock";
-import { readMindMapNodeClipboard, selectedMindMapNodeIds, writeMindMapNodeClipboard } from "./mindMapClipboard";
+import { isMindMapTextClipboardSelection, readMindMapNodeClipboard, selectedMindMapNodeIds, writeMindMapNodeClipboard } from "./mindMapClipboard";
 
 interface MindMapEditorProps {
   readOnly?: boolean;
@@ -661,12 +661,22 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
       beginNodeEditRef.current(nodeId, press?.blockId, press?.point, press?.tableCell);
     };
     const onMindMapCopy = (event: ClipboardEvent) => {
+      if (isMindMapTextClipboardSelection(event)) {
+        // Stop MindElixir's later container listener, but leave default behavior
+        // uncancelled so the browser/BlockNote can copy the selected text.
+        event.stopImmediatePropagation();
+        return;
+      }
       if (editingTargetRef.current || !selectedNodeIdsRef.current.length) return;
       if (!writeMindMapNodeClipboard(event, storeRef.current.getSnapshot(), selectedNodeIdsRef.current)) return;
       event.preventDefault();
       event.stopImmediatePropagation();
     };
     const onMindMapCut = (event: ClipboardEvent) => {
+      if (isMindMapTextClipboardSelection(event)) {
+        event.stopImmediatePropagation();
+        return;
+      }
       if (readOnlyRef.current || editingTargetRef.current || !selectedNodeIdsRef.current.length) return;
       const tree = storeRef.current.getSnapshot();
       const rootIds = selectedMindMapNodeIds(tree, selectedNodeIdsRef.current);
@@ -934,13 +944,18 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
 
   useEffect(() => {
     if (!focusRequest?.nodeId || !tree.nodes[focusRequest.nodeId]) return;
-    // This effect also re-runs on every keystroke, because `tree.nodes` changes.
-    // Re-entering the edit would rebuild the editing target without the caret
-    // coordinates the click supplied, so let the already-mounted editor consume
-    // the request itself — it receives `focusRequest` as a prop.
-    if (editingTargetRef.current?.nodeId === focusRequest.nodeId) return;
+    // A quote inserted from the shared outline toolbar targets the node that is
+    // already being edited. Update only its block target so the mounted editor
+    // moves the caret without losing the edit or its current node geometry.
+    if (editingTargetRef.current?.nodeId === focusRequest.nodeId) {
+      applyEditingTarget({
+        nodeId: focusRequest.nodeId,
+        focusBlockId: focusRequest.focusBlockId,
+      });
+      return;
+    }
     beginNodeEdit(focusRequest.nodeId, focusRequest.focusBlockId);
-  }, [beginNodeEdit, focusRequest, tree.nodes]);
+  }, [applyEditingTarget, beginNodeEdit, focusRequest, tree.nodes]);
 
   /**
    * 「插入表格」：先收掉正在进行的编辑，再动 store。
@@ -1747,22 +1762,22 @@ function MindMapLayoutPreview({ type }: { type: ZhiJianMindMapLayout["type"] }) 
   if (type === "mind-map") {
     diagram = (
       <>
-        <path d="M 55 34 H 40 V 14 H 28 M 40 34 V 54 H 28 M 89 34 H 104 V 14 H 116 M 104 34 V 54 H 116" />
-        <rect className="is-root" x="55" y="25" width="34" height="18" rx="4" />
-        <rect x="7" y="8" width="22" height="12" rx="3" />
-        <rect x="7" y="48" width="22" height="12" rx="3" />
-        <rect x="115" y="8" width="22" height="12" rx="3" />
-        <rect x="115" y="48" width="22" height="12" rx="3" />
+        <path d="M 58 34 H 43 V 14 H 29 M 43 34 V 54 H 29 M 86 34 H 101 V 14 H 115 M 101 34 V 54 H 115" />
+        <rect className="is-root" x="58" y="24" width="28" height="20" rx="6" />
+        <rect x="8" y="8" width="21" height="12" rx="4" />
+        <rect x="8" y="48" width="21" height="12" rx="4" />
+        <rect x="115" y="8" width="21" height="12" rx="4" />
+        <rect x="115" y="48" width="21" height="12" rx="4" />
       </>
     );
   } else if (type === "logic") {
     diagram = (
       <>
-        <path d="M 40 34 H 58 V 12 H 78 M 58 34 H 78 M 58 34 V 56 H 78 M 100 12 H 116 M 100 34 H 116" />
-        <rect className="is-root" x="6" y="25" width="34" height="18" rx="4" />
-        <rect x="78" y="6" width="23" height="12" rx="3" />
-        <rect x="78" y="28" width="23" height="12" rx="3" />
-        <rect x="78" y="50" width="23" height="12" rx="3" />
+        <path d="M 35 34 H 55 V 12 H 76 M 55 34 H 76 M 55 34 V 56 H 76 M 100 12 H 116 M 100 34 H 116" />
+        <rect className="is-root" x="6" y="25" width="29" height="18" rx="5" />
+        <rect x="76" y="6" width="24" height="12" rx="4" />
+        <rect x="76" y="28" width="24" height="12" rx="4" />
+        <rect x="76" y="50" width="24" height="12" rx="4" />
         <rect x="116" y="7" width="20" height="10" rx="3" />
         <rect x="116" y="29" width="20" height="10" rx="3" />
       </>
@@ -1770,11 +1785,11 @@ function MindMapLayoutPreview({ type }: { type: ZhiJianMindMapLayout["type"] }) 
   } else if (type === "org-chart") {
     diagram = (
       <>
-        <path d="M 72 22 V 34 M 22 34 H 122 M 22 34 V 49 M 72 34 V 49 M 122 34 V 49" />
-        <rect className="is-root" x="55" y="4" width="34" height="18" rx="4" />
-        <rect x="9" y="49" width="26" height="12" rx="3" />
-        <rect x="59" y="49" width="26" height="12" rx="3" />
-        <rect x="109" y="49" width="26" height="12" rx="3" />
+        <path d="M 72 22 V 35 M 22 35 H 122 M 22 35 V 49 M 72 35 V 49 M 122 35 V 49" />
+        <rect className="is-root" x="56" y="4" width="32" height="18" rx="5" />
+        <rect x="9" y="49" width="26" height="11" rx="4" />
+        <rect x="59" y="49" width="26" height="11" rx="4" />
+        <rect x="109" y="49" width="26" height="11" rx="4" />
       </>
     );
   } else if (type === "timeline") {
@@ -1782,24 +1797,24 @@ function MindMapLayoutPreview({ type }: { type: ZhiJianMindMapLayout["type"] }) 
       <>
         <path className="is-axis" d="M 10 34 H 136" />
         <path d="M 42 34 V 18 M 78 34 V 51 M 114 34 V 18" />
-        <circle cx="42" cy="34" r="3" />
-        <circle cx="78" cy="34" r="3" />
-        <circle cx="114" cy="34" r="3" />
-        <rect className="is-root" x="3" y="26" width="23" height="16" rx="4" />
-        <rect x="31" y="7" width="22" height="11" rx="3" />
-        <rect x="67" y="50" width="22" height="11" rx="3" />
-        <rect x="103" y="7" width="22" height="11" rx="3" />
+        <circle className="is-root" cx="10" cy="34" r="6" />
+        <circle cx="42" cy="34" r="4" />
+        <circle cx="78" cy="34" r="4" />
+        <circle cx="114" cy="34" r="4" />
+        <rect x="31" y="7" width="22" height="11" rx="4" />
+        <rect x="67" y="50" width="22" height="11" rx="4" />
+        <rect x="103" y="7" width="22" height="11" rx="4" />
       </>
     );
   } else {
     diagram = (
       <>
-        <path d="M 28 22 V 59 M 28 31 H 54 M 28 45 H 72 M 28 59 H 90 M 97 45 H 108 V 59 H 116" />
-        <rect className="is-root" x="8" y="4" width="40" height="18" rx="4" />
-        <rect x="54" y="25" width="25" height="12" rx="3" />
-        <rect x="72" y="39" width="25" height="12" rx="3" />
-        <rect x="90" y="53" width="25" height="12" rx="3" />
-        <rect x="116" y="54" width="20" height="10" rx="3" />
+        <path d="M 29 22 V 58 M 29 31 H 56 M 29 45 H 73 M 29 58 H 91 M 98 45 H 109 V 58 H 116" />
+        <rect className="is-root" x="8" y="4" width="38" height="18" rx="5" />
+        <rect x="56" y="25" width="25" height="12" rx="4" />
+        <rect x="73" y="39" width="25" height="12" rx="4" />
+        <rect x="91" y="52" width="25" height="12" rx="4" />
+        <rect x="116" y="53" width="20" height="10" rx="3" />
       </>
     );
   }

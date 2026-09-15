@@ -144,6 +144,7 @@ export function OutlineEditor({
         headers: true,
         cellBackgroundColor: true,
         cellTextColor: true,
+        splitCells: true,
       },
     },
     [],
