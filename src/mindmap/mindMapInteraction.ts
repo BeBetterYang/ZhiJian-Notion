@@ -417,7 +417,20 @@ function tableSignature(table?: ZhiJianTableData) {
       ].join(","))
       .join(CELL))
     .join(ROW);
-  // `columnWidths` is deliberately excluded: BlockNote materializes an entry per
-  // column, so a stored `undefined` would never compare equal to it.
-  return [rows, table.headerRows ?? 0, table.headerCols ?? 0].join(FIELD);
+  return [
+    rows,
+    table.headerRows ?? 0,
+    table.headerCols ?? 0,
+    columnWidthsSignature(table.columnWidths),
+  ].join(FIELD);
+}
+
+function columnWidthsSignature(widths?: (number | undefined)[]) {
+  const normalized = (widths ?? []).map((width) =>
+    typeof width === "number" && Number.isFinite(width) && width > 0 ? String(width) : "",
+  );
+  // BlockNote materializes undefined entries up to the table's column count.
+  // Trailing empty entries carry no user change and must compare like omission.
+  while (normalized.at(-1) === "") normalized.pop();
+  return normalized.join(",");
 }

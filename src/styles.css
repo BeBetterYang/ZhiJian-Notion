@@ -42,6 +42,11 @@
   --zhijian-font-family: "Source Sans Pro", -apple-system, "PingFang SC", "Apple Color Emoji",
     BlinkMacSystemFont, Helvetica, Arial, "Segoe UI Emoji", "Segoe UI Symbol",
     "Microsoft YaHei", 微软雅黑, 黑体, Heiti, sans-serif, SimSun, 宋体, serif;
+  /* Keep outline metrics aligned with MuBu on Windows. Source Sans Pro is
+     intentionally last: its bundled files only cover Latin characters. */
+  --zhijian-outline-font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", Helvetica,
+    Arial, "Microsoft YaHei", 微软雅黑, 黑体, Heiti, sans-serif, SimSun, 宋体, serif,
+    "Source Sans Pro";
   --zhijian-type-body-size: 16px;
   --zhijian-type-body-line-height: 1.5;
   --zhijian-type-body-weight: 400;
@@ -862,6 +867,26 @@ textarea {
      `!important`. */
   --bn-colors-editor-text: var(--zhijian-ink);
   --bn-colors-editor-background: var(--zhijian-canvas);
+}
+
+/* BlockNote 0.54 declares `Inter` on `.bn-default-styles`; state the same
+   family on the outline's display and editing surfaces so neither layer falls
+   back to BlockNote's default. */
+.outline-panel,
+.outline-panel .bn-root,
+.outline-panel .bn-container,
+.outline-panel .bn-default-styles,
+.outline-panel .bn-editor,
+.outline-panel .bn-block-content,
+.outline-panel .bn-inline-content {
+  font-family: var(--zhijian-outline-font-family) !important;
+}
+
+.outline-panel .bn-inline-content {
+  font-size: inherit;
+  font-style: inherit;
+  font-weight: inherit;
+  line-height: inherit;
 }
 
 .outline-panel:is(
@@ -1777,7 +1802,8 @@ textarea {
    the display layer, being plain HTML, does not. Borrowing the class here is what
    lets one palette serve both, so a colour set in the outline or in a node's editor
    looks the same on the canvas at rest. Its font-family comes back out: the canvas
-   already agrees with the app's stack, two rules below. */
+   keeps the app's map-specific stack, while the outline declares its MuBu-compatible
+   stack separately above. */
 .mindmap-canvas.bn-root {
   font-family: inherit;
 }

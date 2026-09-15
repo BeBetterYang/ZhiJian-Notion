@@ -316,6 +316,26 @@ describe("nodeDocumentSignature", () => {
     expect(nodeDocumentSignature(roundTrip(node))).toBe(nodeDocumentSignature(node));
   });
 
+  it("preserves real column widths without treating materialized empty widths as edits", () => {
+    const base = baseNode({
+      type: "table",
+      content: { text: "" },
+      props: { table: { rows: [[{ content: { text: "甲" } }, { content: { text: "乙" } }]] } },
+    });
+    const materialized = baseNode({
+      ...base,
+      props: { table: { ...base.props!.table!, columnWidths: [undefined, undefined] } },
+    });
+    const resized = baseNode({
+      ...base,
+      props: { table: { ...base.props!.table!, columnWidths: [180, 260] } },
+    });
+
+    expect(nodeDocumentSignature(materialized)).toBe(nodeDocumentSignature(base));
+    expect(nodeDocumentSignature(resized)).not.toBe(nodeDocumentSignature(base));
+    expect(nodeDocumentSignature(roundTrip(resized))).toBe(nodeDocumentSignature(resized));
+  });
+
   it("survives a projection round trip for marked-up rich text", () => {
     const node = baseNode({
       content: { text: "粗体", spans: [{ text: "粗体", marks: { bold: true, textColor: "#dc2626" } }] },
