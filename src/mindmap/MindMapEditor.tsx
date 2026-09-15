@@ -12,6 +12,7 @@ import { captureMindMapPng } from "../shared/exportFiles";
 import type { CapturedImage } from "../shared/exportFiles";
 import { handleTreeHistoryKeyDown } from "../shared/handleTreeHistoryKeyDown";
 import { handleShortcutKeyDown } from "../shared/shortcuts";
+import { useImageAssetRevision } from "../shared/imageAssetStore";
 import { createMindMapStructureSignature, treeToMindElixir } from "./mindElixirAdapter";
 import { applyMindElixirOperation } from "./mindElixirCommands";
 import { MIND_MAP_BRANCH_ORDERS, MIND_MAP_LAYOUT_PRESETS, mindMapLayoutClassName, mindMapLayoutDirection, mindMapLayoutKey, resolveMindMapLayout } from "./mindMapLayout";
@@ -34,7 +35,7 @@ import {
   treeHasClozeContent,
 } from "./mindMapCloze";
 import { MindMapLinkHoverTracker } from "./MindMapLinkHoverTracker";
-import { renderMindMapNodeDisplayHtml } from "./MindMapNodeRenderer";
+import { getMindMapNodeVisualStyle, renderMindMapNodeDisplayHtml } from "./MindMapNodeRenderer";
 import { MindMapNodeContent } from "./MindMapNodeGroupBlock";
 import { isMindMapTextClipboardSelection, readMindMapNodeClipboard, selectedMindMapNodeIds, writeMindMapNodeClipboard } from "./mindMapClipboard";
 
@@ -91,6 +92,7 @@ export interface MindMapTextSelection {
 
 export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelectedNodeIdsChange, onSelectionActiveChange, onTextSelectionChange, onNodeToolbarActiveChange, onFocusNode, onExitFocus, selectedNodeId, toolbarTarget, focusRequest, focusNodeRequest = null, insertTableRequest = null, onFocusRequestHandled, searchQuery = "", visibleNodeIds = null, zoomedNodeId = null, initialViewport, onViewportChange, initialDirection = MindElixir.RIGHT, onDirectionChange, onExportImageReady, mindMapDefaults, onMindMapDefaultsChange }: MindMapEditorProps) {
   const tree = useTree(store);
+  const imageAssetRevision = useImageAssetRevision();
   const activeTheme = resolveMindMapTheme(tree.mindMap?.theme, tree.mindMap?.canvas?.background);
   const roundedConnectors = tree.mindMap?.connector?.rounded ?? false;
   const roundedFrames = tree.mindMap?.frame?.rounded ?? false;
@@ -994,7 +996,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
     }
     refreshStructure(nextData, nextSignature, activeLayoutKey);
     if (activeLayoutDirection !== MindElixir.DOWN) onDirectionChangeRef.current?.(activeLayoutDirection);
-  }, [activeLayoutDirection, activeLayoutKey, collectTargets, refreshStructure, scheduleLinkDiv, searchQuery, tree, visibleNodeIds, zoomedNodeId]);
+  }, [activeLayoutDirection, activeLayoutKey, collectTargets, imageAssetRevision, refreshStructure, scheduleLinkDiv, searchQuery, tree, visibleNodeIds, zoomedNodeId]);
 
   const previousZoomedNodeId = useRef(zoomedNodeId);
   useEffect(() => {
@@ -1694,11 +1696,18 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
         : null}
       {contentTargets.map(({ id, host }) => {
         const node = tree.nodes[id];
-        return node ? createPortal(
-          <MindMapNodeContent node={node} store={store} selected={selectedNodeIds.includes(id)} editing={editingTarget?.nodeId === id} toolbarTarget={toolbarTarget} onSelect={selectTreeNode} onFocusNode={selectMindElixirNode} onFinishEdit={finishNodeEdit} onToolbarActiveChange={reportNodeToolbar} onTextSelectionChange={reportTextSelection} focusBlockId={editingTarget?.nodeId === id ? editingTarget.focusBlockId : undefined} focusPoint={editingTarget?.nodeId === id ? editingTarget.focusPoint : undefined} focusTableCell={editingTarget?.nodeId === id ? editingTarget.focusTableCell : undefined} onGeometryChange={scheduleGeometryMeasure} focusRequest={focusRequest} onFocusRequestHandled={onFocusRequestHandled} />,
+        if (!node) return null;
+        const mindMapRootId = zoomedNodeId && tree.nodes[zoomedNodeId] ? zoomedNodeId : tree.rootId;
+        const nodeVisual = getMindMapNodeVisualStyle(node, node.id === mindMapRootId, {
+          theme: activeTheme,
+          level: mindMapNodeLevel(tree, node.id, mindMapRootId),
+          roundedFrames,
+        });
+        return createPortal(
+          <MindMapNodeContent node={node} editorTextColor={nodeVisual.color ?? activeTheme.child.text} store={store} selected={selectedNodeIds.includes(id)} editing={editingTarget?.nodeId === id} toolbarTarget={toolbarTarget} onSelect={selectTreeNode} onFocusNode={selectMindElixirNode} onFinishEdit={finishNodeEdit} onToolbarActiveChange={reportNodeToolbar} onTextSelectionChange={reportTextSelection} focusBlockId={editingTarget?.nodeId === id ? editingTarget.focusBlockId : undefined} focusPoint={editingTarget?.nodeId === id ? editingTarget.focusPoint : undefined} focusTableCell={editingTarget?.nodeId === id ? editingTarget.focusTableCell : undefined} onGeometryChange={scheduleGeometryMeasure} focusRequest={focusRequest} onFocusRequestHandled={onFocusRequestHandled} />,
           host,
           id,
-        ) : null;
+        );
       })}
     </>
   );
@@ -1757,10 +1766,18 @@ function mindMapScalePercentFromSlider(position: number) {
   return position <= 80 ? position + 20 : 100 + (position - 80) / 2;
 }
 
+const MIND_MAP_LAYOUT_PREVIEW_SOURCES: Record<ZhiJianMindMapLayout["type"], string> = {
+  "mind-map": "/mindmap-layout-mind-map.svg",
+  logic: "/mindmap-layout-logic.svg",
+  "org-chart": "/mindmap-layout-org-chart.svg",
+  timeline: "/mindmap-layout-timeline.svg",
+  tree: "/mindmap-layout-tree.svg",
+};
+
 function MindMapLayoutPreview({ type }: { type: ZhiJianMindMapLayout["type"] }) {
   return (
     <span className={`mindmap-layout-preview is-${type}`} aria-hidden="true">
-      <img className="mindmap-layout-preview-image" src={`/mindmap-layout-${type}.png`} alt="" />
+      <img className="mindmap-layout-preview-image" src={MIND_MAP_LAYOUT_PREVIEW_SOURCES[type]} alt="" />
     </span>
   );
 }
@@ -1907,6 +1924,16 @@ function centerMindMapNode(mind: MindElixir | null, nodeId: string, smooth = tru
   } catch {
     // The requested root may have been replaced before the scheduled frame runs.
   }
+}
+
+function mindMapNodeLevel(tree: ZhiJianTree, nodeId: string, rootId: string) {
+  let level = 0;
+  let current = tree.nodes[nodeId];
+  while (current && current.id !== rootId && current.parentId) {
+    level += 1;
+    current = tree.nodes[current.parentId];
+  }
+  return level;
 }
 
 function syncEditingShells(container: HTMLElement | null, editingNodeId: string | undefined) {

@@ -46,6 +46,9 @@ describe("share read APIs", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.body).toEqual({ token: TOKEN, title: "分享文档", tree: TREE });
+    const metadataRequest = vi.mocked(fetch).mock.calls.find(([input]) => String(input).includes("workspace_states"));
+    expect(String(metadataRequest?.[0])).toContain("select=nodes");
+    expect(String(metadataRequest?.[0])).not.toContain("profile");
     expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining("workspace_assets"), expect.anything());
   });
 

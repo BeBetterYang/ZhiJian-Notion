@@ -1,7 +1,7 @@
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import type { BlockNoteEditor, PartialBlock } from "@blocknote/core";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import type { ZhiJianNode, ZhiJianTree } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
@@ -24,6 +24,7 @@ import { nodeDocumentSignature, nodeTextSelectionOffsets, resolveMindMapFocusBlo
 
 interface MindMapNodeContentProps {
   node: ZhiJianNode;
+  editorTextColor: string;
   store: TreeStore;
   selected: boolean;
   editing: boolean;
@@ -68,6 +69,7 @@ const FOCUS_TABLE_ATTEMPTS = 5;
 
 function MindMapNodeEditor({
   node,
+  editorTextColor,
   store,
   selected,
   onFinishEdit,
@@ -447,7 +449,11 @@ function MindMapNodeEditor({
   }, [node.id, onGeometryChange]);
 
   return (
-    <div ref={containerRef} className={`mindmap-node-editor ${node.parentId === null ? "is-root" : ""}`}>
+    <div
+      ref={containerRef}
+      className={`mindmap-node-editor ${node.parentId === null ? "is-root" : ""}`}
+      style={{ "--mindmap-color": editorTextColor } as CSSProperties}
+    >
       <BlockNoteView
         editor={editor}
         theme="light"

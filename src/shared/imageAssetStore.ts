@@ -1,8 +1,12 @@
+import { useSyncExternalStore } from "react";
+
 const DATABASE_NAME = "zhijian-assets";
 const STORE_NAME = "images";
 const assetReferencesByUrl = new Map<string, { assetId: string; storagePath?: string }>();
 const urlsByAssetId = new Map<string, string>();
 const remoteAssetsById = new Map<string, ImageAssetReference>();
+const imageAssetListeners = new Set<() => void>();
+let imageAssetRevision = 0;
 
 export interface ImageAssetReference {
   assetId: string;
@@ -16,19 +20,36 @@ export function configureImageAssetUpload(upload: ((file: File) => Promise<Image
   uploadImage = upload;
 }
 
+export function useImageAssetRevision() {
+  return useSyncExternalStore(subscribeImageAssets, getImageAssetRevision, getImageAssetRevision);
+}
+
+export function subscribeImageAssets(listener: () => void) {
+  imageAssetListeners.add(listener);
+  return () => imageAssetListeners.delete(listener);
+}
+
+export function getImageAssetRevision() {
+  return imageAssetRevision;
+}
+
 export function hydrateRemoteImageAssets(assets: ImageAssetReference[] | undefined) {
+  let changed = false;
   for (const asset of assets ?? []) {
     remoteAssetsById.set(asset.assetId, asset);
     // A blob URL from the local cache never expires, so it keeps the slot if it is already there.
-    if (!urlsByAssetId.get(asset.assetId)?.startsWith("blob:")) cacheAsset(asset.assetId, asset.url, asset.storagePath);
+    if (!urlsByAssetId.get(asset.assetId)?.startsWith("blob:")) {
+      changed = cacheAsset(asset.assetId, asset.url, asset.storagePath) || changed;
+    }
   }
+  if (changed) notifyImageAssets();
 }
 
 export async function saveImageAsset(file: File) {
   if (!uploadImage) throw new Error("图片云存储尚未准备好，请稍后重试。");
   const asset = await uploadImage(file);
   remoteAssetsById.set(asset.assetId, asset);
-  cacheAsset(asset.assetId, asset.url, asset.storagePath);
+  if (cacheAsset(asset.assetId, asset.url, asset.storagePath)) notifyImageAssets();
   await cacheBlob(asset.assetId, file);
   return asset;
 }
@@ -64,7 +85,7 @@ export async function rehydrateImageAssets(): Promise<void> {
       if (typeof assetId !== "string" || !(file instanceof Blob)) return;
       cachedIds.add(assetId);
       if (!urlsByAssetId.get(assetId)?.startsWith("blob:")) {
-        cacheAsset(assetId, URL.createObjectURL(file), remoteAssetsById.get(assetId)?.storagePath);
+        if (cacheAsset(assetId, URL.createObjectURL(file), remoteAssetsById.get(assetId)?.storagePath)) notifyImageAssets();
       }
     });
   } catch {
@@ -81,7 +102,7 @@ async function cacheRemoteImageAssets(cachedIds: Set<string>) {
       if (!response.ok) continue;
       const blob = await response.blob();
       await cacheBlob(asset.assetId, blob);
-      cacheAsset(asset.assetId, URL.createObjectURL(blob), asset.storagePath);
+      if (cacheAsset(asset.assetId, URL.createObjectURL(blob), asset.storagePath)) notifyImageAssets();
     } catch {
       // The signed URL still works for this session; the download can be retried next load.
     }
@@ -98,9 +119,16 @@ function whenIdle(task: () => void) {
 
 function cacheAsset(assetId: string, url: string, storagePath?: string) {
   const previousUrl = urlsByAssetId.get(assetId);
+  if (previousUrl === url) return false;
   if (previousUrl?.startsWith("blob:") && previousUrl !== url) URL.revokeObjectURL(previousUrl);
   urlsByAssetId.set(assetId, url);
   assetReferencesByUrl.set(url, { assetId, storagePath });
+  return true;
+}
+
+function notifyImageAssets() {
+  imageAssetRevision += 1;
+  imageAssetListeners.forEach((listener) => listener());
 }
 
 async function cacheBlob(assetId: string, file: Blob) {

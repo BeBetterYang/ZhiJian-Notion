@@ -40,7 +40,7 @@ import { ZhiJianFormattingToolbar } from "../shared/ZhiJianFormattingToolbar";
 import type { MindMapTextSelection } from "../mindmap/MindMapEditor";
 import { resolveMindMapTextRange } from "./mindMapTextSelection";
 import { insertImageBlocks, insertNodeAttachmentBlocks } from "../shared/attachmentInsertion";
-import { saveImageAsset } from "../shared/imageAssetStore";
+import { saveImageAsset, useImageAssetRevision } from "../shared/imageAssetStore";
 import { zhijianDictionary } from "../shared/zhijianDictionary";
 import {
   caretPositionBesideText,
@@ -111,6 +111,7 @@ export function OutlineEditor({
   onFocusNode,
 }: OutlineEditorProps) {
   const tree = useTree(store);
+  const imageAssetRevision = useImageAssetRevision();
   const panelRef = useRef<HTMLElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const applyingExternalChange = useRef(false);
@@ -215,6 +216,23 @@ export function OutlineEditor({
       }
     }, 0);
   }, [editor, tree]);
+
+  useEffect(() => {
+    if (!imageAssetRevision) return;
+    const syncImageBlocks = (blocks: ReturnType<typeof treeToBlockNote>) => {
+      blocks.forEach((block) => {
+        const current = block.id ? editor.getBlock(block.id) : undefined;
+        if (block.type === "image") {
+          const url = typeof block.props?.url === "string" ? block.props.url : "";
+          if (current?.type === "image" && url && current.props.url !== url) {
+            editor.updateBlock(current, { props: { url } });
+          }
+        }
+        if (block.children) syncImageBlocks(block.children);
+      });
+    };
+    syncImageBlocks(treeToBlockNote(tree));
+  }, [editor, imageAssetRevision, tree]);
 
   useEffect(() => {
     if (!mindMapNodeId || !editor.getBlock(mindMapNodeId)) {

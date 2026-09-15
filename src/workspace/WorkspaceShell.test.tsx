@@ -29,10 +29,11 @@ const focusBreadcrumbMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../App", () => ({
-  default: ({ store, defaultView, onShare, favorite, onToggleFavorite, onDeleteDocument, onFocusBreadcrumbChange }: {
+  default: ({ store, defaultView, onShare, onSharePrefetch, favorite, onToggleFavorite, onDeleteDocument, onFocusBreadcrumbChange }: {
     store: TreeStore;
     defaultView?: "outline" | "mindmap";
     onShare?: () => void;
+    onSharePrefetch?: () => void;
     favorite?: boolean;
     onToggleFavorite?: () => void;
     onDeleteDocument?: () => void;
@@ -50,7 +51,7 @@ vi.mock("../App", () => ({
         data-default-view={defaultView ?? ""}
       >
         {tree.nodes[tree.rootId]?.content.text}
-        {onShare ? <button type="button" onClick={onShare}>分享</button> : null}
+        {onShare ? <button type="button" onPointerEnter={onSharePrefetch} onFocus={onSharePrefetch} onClick={onShare}>分享</button> : null}
         {/* 标题栏「更多」菜单里的星标和删除。菜单长什么样在 App.test.tsx 里测，这儿只看接到工作区没有。 */}
         {onToggleFavorite ? (
           <button type="button" onClick={onToggleFavorite}>{favorite ? "标题栏取消星标" : "标题栏添加星标"}</button>
@@ -445,6 +446,24 @@ describe("工作区 Toast 反馈", () => {
     expect(copyButton).toHaveTextContent("复制链接");
   });
 
+  it("分享按钮预取与打开共用请求，弹窗不等待网络", async () => {
+    const deferred = createDeferred<{ enabled: boolean; token: string }>();
+    serverMocks.loadDocumentShare.mockReturnValue(deferred.promise);
+    renderWithToasts();
+    const shareButton = await screen.findByRole("button", { name: "分享" });
+
+    fireEvent.pointerEnter(shareButton);
+    fireEvent.click(shareButton);
+
+    expect(screen.getByRole("dialog", { name: "分享文档" })).toBeInTheDocument();
+    expect(serverMocks.loadDocumentShare).toHaveBeenCalledTimes(1);
+
+    deferred.resolve({ enabled: true, token: "prefetched-token" });
+    expect(await screen.findByRole("button", { name: "复制链接" })).toBeInTheDocument();
+    fireEvent.pointerEnter(shareButton);
+    expect(serverMocks.loadDocumentShare).toHaveBeenCalledTimes(1);
+  });
+
   it("账号设置成功和失败使用 Toast", async () => {
     renderWithToasts();
     await openSettings();
@@ -509,6 +528,16 @@ describe("工作区 Toast 反馈", () => {
     expect(getToastSnapshot().some((item) => item.message.includes("文档保存"))).toBe(false);
   });
 });
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
 
 describe("默认视图偏好", () => {
   beforeEach(() => {

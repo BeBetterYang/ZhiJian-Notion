@@ -6,6 +6,7 @@ import {
   getImageAssetStoragePath,
   hydrateRemoteImageAssets,
   saveImageAsset,
+  subscribeImageAssets,
 } from "./imageAssetStore";
 
 describe("image asset storage", () => {
@@ -29,5 +30,14 @@ describe("image asset storage", () => {
   it("hydrates signed URLs supplied by workspace and share APIs", () => {
     hydrateRemoteImageAssets([{ assetId: "asset-1", storagePath: "user/asset-1.webp", url: "https://storage.example/asset-1" }]);
     expect(getCachedImageAssetUrl("asset-1")).toBe("https://storage.example/asset-1");
+  });
+
+  it("notifies image renderers when a remote URL becomes available", () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeImageAssets(listener);
+    hydrateRemoteImageAssets([{ assetId: "asset-2", storagePath: "user/asset-2.webp", url: "https://storage.example/asset-2" }]);
+    unsubscribe();
+
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 });

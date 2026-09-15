@@ -35,6 +35,12 @@ export async function readWorkspaceState(userId) {
   };
 }
 
+export async function readWorkspaceFileMetadata(userId) {
+  const rows = await supabaseRequest(`${WORKSPACE_TABLE}?user_id=eq.${encodeURIComponent(userId)}&select=nodes`, { method: "GET" });
+  const state = Array.isArray(rows) ? rows[0] : null;
+  return { nodes: state?.nodes ?? undefined };
+}
+
 export async function readWorkspace(userId) {
   const [state, documentRows, assetRows] = await Promise.all([
     readWorkspaceState(userId),

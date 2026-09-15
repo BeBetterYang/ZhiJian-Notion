@@ -115,6 +115,12 @@ const EXPANDED_FOLDERS_KEY = "zhijian.workspace.expanded-folders.v1";
 const SIDEBAR_COLLAPSED_KEY = "zhijian.workspace.sidebar-collapsed.v1";
 /** 和 workspace.css 里那条 `@media (max-width: 720px)` 必须一致：断点两边是两套侧栏。 */
 const MOBILE_VIEWPORT_QUERY = "(max-width: 720px)";
+const shareStateCache = new Map<string, WorkspaceDocumentShare>();
+const shareRequestCache = new Map<string, Promise<WorkspaceDocumentShare>>();
+
+function shareCacheKey(userId: string, fileId: string) {
+  return `${userId}:${fileId}`;
+}
 
 interface UserProfile {
   name: string;
@@ -188,6 +194,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const workspaceSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const pendingWorkspaceState = useRef<WorkspaceStateSnapshot | null>(null);
   const sessionRef = useRef(session);
+  const shareFileIdRef = useRef("");
   const workspaceStartedAt = useRef(performance.now());
   const documentMountedLogged = useRef(false);
   const [serverReady, setServerReady] = useState(false);
@@ -209,6 +216,24 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     sessionRef.current = nextSession;
     onSessionRefresh(nextSession);
   }, [onSessionRefresh]);
+
+  const requestDocumentShare = useCallback((fileId: string, revalidate = true) => {
+    const key = shareCacheKey(sessionRef.current.userId, fileId);
+    const pending = shareRequestCache.get(key);
+    if (pending) return pending;
+    const cached = shareStateCache.get(key);
+    if (!revalidate && cached) return Promise.resolve(cached);
+    const request = loadDocumentShare(sessionRef.current, fileId, { onSessionRefresh: handleSessionRefresh })
+      .then((next) => {
+        shareStateCache.set(key, next);
+        return next;
+      })
+      .finally(() => {
+        if (shareRequestCache.get(key) === request) shareRequestCache.delete(key);
+      });
+    shareRequestCache.set(key, request);
+    return request;
+  }, [handleSessionRefresh]);
 
   const updateDocumentSaveState = useCallback((fileId: string, state: DocumentSaveState) => {
     setDocumentSaveStates((current) => ({ ...current, [fileId]: state }));
@@ -640,19 +665,36 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     ? `${window.location.origin}/share.html?token=${encodeURIComponent(shareState.token)}`
     : "";
 
-  const openShare = async () => {
-    if (!activeFile) return;
-    setShareState({ enabled: false });
-    setShareOpen(true);
+  const refreshShareState = useCallback((fileId: string) => {
     setShareLoading(true);
+    void requestDocumentShare(fileId)
+      .then((next) => {
+        if (shareFileIdRef.current === fileId) {
+          setShareState(next);
+          setShareError("");
+        }
+      })
+      .catch((error) => {
+        if (shareFileIdRef.current === fileId) setShareError(errorMessage(error));
+      })
+      .finally(() => {
+        if (shareFileIdRef.current === fileId) setShareLoading(false);
+      });
+  }, [requestDocumentShare]);
+
+  const prefetchDocumentShare = useCallback(() => {
+    if (activeFile) void requestDocumentShare(activeFile.id, false).catch(() => undefined);
+  }, [activeFile, requestDocumentShare]);
+
+  const openShare = () => {
+    if (!activeFile) return;
+    const fileId = activeFile.id;
+    shareFileIdRef.current = fileId;
+    setShareOpen(true);
     setShareError("");
-    try {
-      setShareState(await loadDocumentShare(sessionRef.current, activeFile.id, { onSessionRefresh: handleSessionRefresh }));
-    } catch (error) {
-      setShareError(errorMessage(error));
-    } finally {
-      setShareLoading(false);
-    }
+    const cached = shareStateCache.get(shareCacheKey(sessionRef.current.userId, fileId));
+    setShareState(cached ?? { enabled: false });
+    refreshShareState(fileId);
   };
 
   useEffect(() => {
@@ -671,10 +713,14 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
 
   const toggleShare = async (enabled: boolean) => {
     if (!activeFile) return;
+    const fileId = activeFile.id;
+    shareFileIdRef.current = fileId;
     setShareLoading(true);
     setShareError("");
     try {
-      setShareState(await updateDocumentShare(sessionRef.current, activeFile.id, enabled, { onSessionRefresh: handleSessionRefresh }));
+      const next = await updateDocumentShare(sessionRef.current, fileId, enabled, { onSessionRefresh: handleSessionRefresh });
+      shareStateCache.set(shareCacheKey(sessionRef.current.userId, fileId), next);
+      if (shareFileIdRef.current === fileId) setShareState(next);
     } catch (error) {
       setShareError(errorMessage(error));
     } finally {
@@ -1315,7 +1361,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               toolbarTarget={headerToolbarTarget}
               onFocusBreadcrumbChange={setFocusBreadcrumbState}
               viewStateStorageKey={documentViewStorageKey(activeFile.id)}
-              onShare={() => void openShare()}
+              onShare={() => openShare()}
+              onSharePrefetch={prefetchDocumentShare}
               favorite={activeFile.favorite}
               onToggleFavorite={() => toggleFavorite(activeFile.id)}
               // 走和侧栏「删除」同一条路：先弹「移到回收站？」，确认了才动，也才进得了回收站。

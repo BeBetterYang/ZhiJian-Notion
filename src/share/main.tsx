@@ -25,7 +25,6 @@ type SaveState = { status: "idle" | "saving" | "saved" } | { status: "failed"; m
 
 function SharedDocumentApp() {
   const [sharedDocument, setSharedDocument] = useState<SharedDocument | null>(null);
-  const [assetRevision, setAssetRevision] = useState(0);
   const [error, setError] = useState("");
   const [save, setSave] = useState<SaveState>({ status: "idle" });
   const [toolbarTarget, setToolbarTarget] = useState<HTMLDivElement | null>(null);
@@ -33,36 +32,40 @@ function SharedDocumentApp() {
 
   useEffect(() => {
     if (!token) { setError("分享链接无效。"); return; }
-    void fetch(`/api/shares/${encodeURIComponent(token)}`)
+    let cancelled = false;
+    const documentStartedAt = performance.now();
+    const documentRequest = fetch(`/api/shares/${encodeURIComponent(token)}`);
+    const assetsStartedAt = performance.now();
+    const assetsRequest = fetch(`/api/shares/${encodeURIComponent(token)}/assets`);
+
+    void documentRequest
       .then(async (response) => {
         const result = await response.json() as SharedDocument & { error?: string };
         if (!response.ok) throw new Error(result.error ?? "无法打开分享文档。");
-        setSharedDocument(result);
+        if (!cancelled) {
+          setSharedDocument(result);
+          logShareTiming("share document response", documentStartedAt);
+        }
       })
-      .catch((reason) => setError(reason instanceof Error ? reason.message : "无法打开分享文档。"));
-  }, []);
+      .catch((reason) => {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "无法打开分享文档。");
+      });
 
-  useEffect(() => {
-    if (!sharedDocument) return;
-    let cancelled = false;
-    const frame = window.requestAnimationFrame(() => {
-      void fetch(`/api/shares/${encodeURIComponent(token)}/assets`)
-        .then(async (response) => {
-          const result = await response.json() as { assets?: ImageAssetReference[]; error?: string };
-          if (!response.ok) throw new Error(result.error ?? "无法加载分享图片。");
-          if (cancelled) return;
+    void assetsRequest
+      .then(async (response) => {
+        const result = await response.json() as { assets?: ImageAssetReference[]; error?: string };
+        if (!response.ok) throw new Error(result.error ?? "无法加载分享图片。");
+        if (!cancelled) {
           hydrateRemoteImageAssets(result.assets);
-          if (result.assets?.length) setAssetRevision((current) => current + 1);
-        })
-        .catch((reason) => {
-          if (import.meta.env.DEV) console.info("[share] assets load failed", reason instanceof Error ? reason.message : reason);
-        });
-    });
-    return () => {
-      cancelled = true;
-      window.cancelAnimationFrame(frame);
-    };
-  }, [sharedDocument]);
+          logShareTiming("share assets response", assetsStartedAt);
+        }
+      })
+      .catch((reason) => {
+        if (import.meta.env.DEV && !cancelled) console.info("[share] assets load failed", reason instanceof Error ? reason.message : reason);
+      });
+
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!sharedDocument) return;
@@ -114,7 +117,7 @@ function SharedDocumentApp() {
       </div>
     </header>
     {save.status === "failed" ? <p className="shared-document-error" role="alert">{save.message}</p> : null}
-    <section className="shared-document-stage"><AppErrorBoundary scope="文档"><App key={assetRevision} embedded readOnly store={store} toolbarTarget={toolbarTarget} viewStateStorageKey={viewStateStorageKey} /></AppErrorBoundary></section>
+    <section className="shared-document-stage"><AppErrorBoundary scope="文档"><App embedded readOnly store={store} toolbarTarget={toolbarTarget} viewStateStorageKey={viewStateStorageKey} /></AppErrorBoundary></section>
   </main>;
 }
 

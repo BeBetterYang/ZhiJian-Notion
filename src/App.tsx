@@ -67,6 +67,7 @@ interface AppProps {
     requestId: number;
   } | null;
   onShare?: () => void;
+  onSharePrefetch?: () => void;
   /**
    * 星标和删除的对象是「当前这篇文档」，而不是文档里的某个主题，只有工作区知道它在文件树里
    * 的位置。所以这三个由工作区给：没给（分享页、独立预览）时菜单里就不出现这两项。
@@ -103,6 +104,7 @@ export default function App({
   defaultView = "outline",
   focusNodeRequest = null,
   onShare,
+  onSharePrefetch,
   onImportDocuments,
   onLocalizeImportedTree,
   favorite = false,
@@ -558,7 +560,7 @@ export default function App({
       >
         <ScanSearch />
       </button>
-      {onShare ? <button className="toolbar-icon-button toolbar-more-button" type="button" aria-label="分享" title="分享" onClick={onShare}><Share /></button> : null}
+      {onShare ? <button className="toolbar-icon-button toolbar-more-button" type="button" aria-label="分享" title="分享" onPointerEnter={onSharePrefetch} onFocus={onSharePrefetch} onClick={onShare}><Share /></button> : null}
       <div className="toolbar-more-wrap" ref={toolbarMoreRef}>
         <button
           className="toolbar-icon-button toolbar-more-button"

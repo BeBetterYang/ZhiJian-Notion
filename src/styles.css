@@ -2480,6 +2480,10 @@ textarea {
   --bn-colors-editor-text: var(--mindmap-color, var(--zhijian-ink));
 }
 
+.mindmap-node-editor .bn-editor {
+  color: var(--bn-colors-editor-text) !important;
+}
+
 /* A node holds one line box even with no text, so a freshly created node — or one
    whose last character was just deleted — does not grow by a whole line the moment
    the editor's empty paragraph takes over. `1lh` rather than a fixed height: the
@@ -2921,15 +2925,20 @@ textarea {
   height: 64px;
   margin-top: 2px;
   padding: 2px 0;
+  overflow: hidden;
   border-radius: 5px;
-  background: rgba(55, 53, 47, 0.035);
+  background: #ffffff;
 }
 
+/* The preview files are lightweight SVGs, so they keep the supplied proportions
+   without the decode cost of the old bitmap previews. */
 .mindmap-style-menu button .mindmap-layout-preview-image {
   display: block;
+  box-sizing: border-box;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  background: #ffffff;
 }
 
 @media (max-width: 560px) {
@@ -3376,7 +3385,7 @@ textarea {
 }
 
 .mindmap-node-editor {
-  color: var(--zhijian-ink);
+  color: var(--mindmap-color, var(--zhijian-ink));
 }
 
 /* MindElixir colours every native <em> with its selection colour. Italic is a
@@ -3396,6 +3405,7 @@ textarea {
    必须落在 `.bn-root` 上：BlockNote 自己写了 `.bn-root { --bn-ui-base-z-index: 0 }`，
    声明在外层容器上会被它盖掉——浮层是 `.bn-root` 的后代，读到的是那个 0。 */
 .mindmap-node-editor .bn-root {
+  --bn-colors-editor-text: var(--mindmap-color, var(--zhijian-ink));
   --bn-ui-base-z-index: 10;
 }
 

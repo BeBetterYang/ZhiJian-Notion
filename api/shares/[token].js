@@ -1,6 +1,6 @@
 /* global process, console */
 
-import { readWorkspaceState, readWorkspaceDocument, sendJson, supabaseRequest } from "../_workspaceStorage.js";
+import { readWorkspaceFileMetadata, readWorkspaceDocument, sendJson, supabaseRequest } from "../_workspaceStorage.js";
 
 export default async function handler(request, response) {
   const totalStartedAt = Date.now();
@@ -15,7 +15,7 @@ export default async function handler(request, response) {
     if (!share) return sendJson(response, 404, { error: "分享链接不存在或已关闭。" });
     const documentStartedAt = Date.now();
     const [workspace, document] = await Promise.all([
-      readWorkspaceState(share.owner_user_id),
+      readWorkspaceFileMetadata(share.owner_user_id),
       readWorkspaceDocument(share.owner_user_id, share.file_id),
     ]);
     logTiming("document fetch", documentStartedAt);

@@ -89,6 +89,18 @@ describe("mind map display/editor typography", () => {
     expect(declarationsFor(".mindmap-node-editor .bn-container")).toContain(
       "--bn-colors-editor-text: var(--mindmap-color, var(--zhijian-ink))",
     );
+    expect(declarationsFor(".mindmap-node-editor .bn-root")).toContain(
+      "--bn-colors-editor-text: var(--mindmap-color, var(--zhijian-ink))",
+    );
+    expect(declarationsFor(".mindmap-node-editor .bn-editor")).toContain(
+      "color: var(--bn-colors-editor-text) !important",
+    );
+    expect(declarationsFor(".mindmap-node-editor")).toContain(
+      "color: var(--mindmap-color, var(--zhijian-ink))",
+    );
+    expect(declarationsFor(".mindmap-node-editor")).not.toContain(
+      "color: var(--zhijian-ink)",
+    );
   });
 
   it("gives a checked todo the same ink and line in both layers", () => {
