@@ -718,15 +718,16 @@ describe("文档服务器记录的生命周期", () => {
     await screen.findByTestId("document-editor");
 
     const section = document.querySelector<HTMLElement>(".workspace-files")!;
-    const menu = within(section).getByRole("button", { name: "我的文档" });
+    const menu = section.querySelector<HTMLButtonElement>("#workspace-files-title");
+    expect(menu).not.toBeNull();
     expect(menu).toHaveAttribute("aria-expanded", "true");
     expect(within(section).getByText("产品规划")).toBeInTheDocument();
 
-    fireEvent.click(menu);
+    fireEvent.click(menu!);
     expect(menu).toHaveAttribute("aria-expanded", "false");
     expect(within(section).queryByText("产品规划")).not.toBeInTheDocument();
 
-    fireEvent.click(menu);
+    fireEvent.click(menu!);
     expect(menu).toHaveAttribute("aria-expanded", "true");
     expect(within(section).getByText("产品规划")).toBeInTheDocument();
   });
