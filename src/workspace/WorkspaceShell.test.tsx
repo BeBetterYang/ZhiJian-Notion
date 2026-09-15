@@ -712,6 +712,24 @@ describe("文档服务器记录的生命周期", () => {
     expect(within(sidebar()).queryByText("需求 副本")).not.toBeInTheDocument();
     expect(within(sidebar()).queryByText("子文件夹 副本")).not.toBeInTheDocument();
   });
+
+  it("我的文档是可收起菜单，文件树跟随菜单显示", async () => {
+    renderShell();
+    await screen.findByTestId("document-editor");
+
+    const section = document.querySelector<HTMLElement>(".workspace-files")!;
+    const menu = within(section).getByRole("button", { name: "我的文档" });
+    expect(menu).toHaveAttribute("aria-expanded", "true");
+    expect(within(section).getByText("产品规划")).toBeInTheDocument();
+
+    fireEvent.click(menu);
+    expect(menu).toHaveAttribute("aria-expanded", "false");
+    expect(within(section).queryByText("产品规划")).not.toBeInTheDocument();
+
+    fireEvent.click(menu);
+    expect(menu).toHaveAttribute("aria-expanded", "true");
+    expect(within(section).getByText("产品规划")).toBeInTheDocument();
+  });
 });
 
 describe("Workspace Deep Link", () => {

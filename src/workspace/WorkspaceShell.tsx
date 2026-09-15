@@ -92,7 +92,7 @@ interface WorkspaceShellProps {
 /** 工作区行里由这个组件负责的三个字段，文档和图片各有自己的存储路径。 */
 type WorkspaceStateSnapshot = Pick<WorkspaceServerState, "profile" | "preferences" | "nodes" | "trash">;
 
-type QuickSection = "recent" | "favorites";
+type QuickSection = "recent" | "favorites" | "documents";
 type DropTarget = { nodeId: string; mode: DropMode } | null;
 /** 一篇文档相对服务器的保存状态。conflict 与 error 不同：冲突要用户选，重试是没用的。 */
 type DocumentSaveState =
@@ -166,7 +166,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     query: string;
     requestId: number;
   } | null>(null);
-  const [expandedQuickSections, setExpandedQuickSections] = useState(() => new Set<QuickSection>());
+  const [expandedQuickSections, setExpandedQuickSections] = useState(() => new Set<QuickSection>(["documents"]));
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => loadSidebarCollapsed());
   const [sidebarPeeking, setSidebarPeeking] = useState(false);
@@ -1290,9 +1290,12 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               onSelect={(value) => setSearch(value)}
             />
           ) : (
-            <section className="workspace-files" aria-labelledby="workspace-files-title">
-              <div className="section-label" id="workspace-files-title">我的文档</div>
-              {serverReady ? renderTree(null) : null}
+            <section className="workspace-files quick-file-section" aria-labelledby="workspace-files-title">
+              <button type="button" className="sidebar-action expandable-action" id="workspace-files-title" aria-expanded={expandedQuickSections.has("documents")} onClick={() => toggleQuickSection("documents")}>
+                <span className="expandable-leading"><span className="leading-default-icon"><FolderOpen /></span>{expandedQuickSections.has("documents") ? <ChevronDown className="leading-state-icon" /> : <ChevronRight className="leading-state-icon" />}</span>
+                <span>我的文档</span>
+              </button>
+              {expandedQuickSections.has("documents") ? <div className="quick-file-list workspace-files-tree">{serverReady ? renderTree(null) : null}</div> : null}
             </section>
           )}
         </div>
