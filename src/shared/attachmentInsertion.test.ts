@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { BlockNoteSchema, defaultBlockSpecs } from "@blocknote/core";
 import { BlockNoteEditor } from "@blocknote/core";
-import { insertNodeAttachmentBlocks } from "./attachmentInsertion";
+import { insertNodeAttachmentBlocks, isAttachmentBlock } from "./attachmentInsertion";
 
 describe("attachmentInsertion", () => {
+  it("recognizes outline attachment block types", () => {
+    expect(isAttachmentBlock("quote")).toBe(true);
+    expect(isAttachmentBlock("image")).toBe(true);
+    expect(isAttachmentBlock("paragraph")).toBe(false);
+    expect(isAttachmentBlock("heading")).toBe(false);
+    expect(isAttachmentBlock("table")).toBe(false);
+  });
+
   it("inserts attachments as children of the owning node", () => {
     const schema = BlockNoteSchema.create({ blockSpecs: defaultBlockSpecs });
     const editor = BlockNoteEditor.create({ schema, initialContent: [{ id: "body", type: "paragraph", content: "正文" }] });

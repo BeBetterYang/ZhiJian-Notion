@@ -39,7 +39,11 @@ import { MindMapLinkToolbar } from "./MindMapLinkToolbar";
 import { ZhiJianFormattingToolbar } from "../shared/ZhiJianFormattingToolbar";
 import type { MindMapTextSelection } from "../mindmap/MindMapEditor";
 import { resolveMindMapTextRange } from "./mindMapTextSelection";
-import { insertImageBlocks, insertNodeAttachmentBlocks } from "../shared/attachmentInsertion";
+import {
+  insertImageBlocks,
+  insertNodeAttachmentBlocks,
+  isAttachmentBlock,
+} from "../shared/attachmentInsertion";
 import { saveImageAsset, useImageAssetRevision } from "../shared/imageAssetStore";
 import { zhijianDictionary } from "../shared/zhijianDictionary";
 import {
@@ -577,6 +581,9 @@ function RootProtectedSideMenu() {
     return null;
   }
   if (!state?.id) {
+    return null;
+  }
+  if (isAttachmentBlock(editor.getBlock(state.id)?.type)) {
     return null;
   }
 
