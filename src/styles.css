@@ -2449,6 +2449,18 @@ textarea {
   color: var(--bn-colors-editor-text) !important;
 }
 
+/* BlockNote's default heading/paragraph styles set an ink colour directly on
+   the editable element, so the editor shell's themed colour cannot inherit
+   into it. Keep the block text on the node theme while leaving inline marks
+   free to provide their own colour. */
+.mindmap-node-editor .bn-block-content > h1,
+.mindmap-node-editor .bn-block-content > h2,
+.mindmap-node-editor .bn-block-content > h3,
+.mindmap-node-editor .bn-block-content > p,
+.mindmap-node-editor .bn-block-content > div > p {
+  color: inherit;
+}
+
 /* A node holds one line box even with no text, so a freshly created node — or one
    whose last character was just deleted — does not grow by a whole line the moment
    the editor's empty paragraph takes over. `1lh` rather than a fixed height: the

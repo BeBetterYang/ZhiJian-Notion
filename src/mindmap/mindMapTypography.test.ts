@@ -103,6 +103,18 @@ describe("mind map display/editor typography", () => {
     );
   });
 
+  it("lets plain editable block text inherit the themed node ink", () => {
+    for (const selector of [
+      ".mindmap-node-editor .bn-block-content > h1",
+      ".mindmap-node-editor .bn-block-content > h2",
+      ".mindmap-node-editor .bn-block-content > h3",
+      ".mindmap-node-editor .bn-block-content > p",
+      ".mindmap-node-editor .bn-block-content > div > p",
+    ]) {
+      expect(declarationsFor(selector), selector).toContain("color: inherit");
+    }
+  });
+
   it("gives a checked todo the same ink and line in both layers", () => {
     for (const selector of [
       ".mindmap-node-todo.is-checked .mindmap-node-rich-text",
