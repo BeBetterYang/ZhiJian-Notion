@@ -42,6 +42,36 @@ test("桌面端侧栏默认收起，展开和收起都被浏览器记住", async
   await expect(shell).toHaveClass(/is-collapsed/);
 });
 
+test("侧栏搜索和账号固定，最近、星标与文档共用滚动区", async ({ page }) => {
+  await resetLocalTestWorkspace();
+  await signInAsLocalTestUser(page);
+  await keepSidebarExpanded(page);
+  await page.goto("/workspace.html");
+  await expect(page.locator(".zhijian-loading-screen")).toHaveCount(0);
+
+  const sidebar = page.locator(".workspace-sidebar");
+  const scroll = sidebar.locator(".sidebar-scroll");
+  const sections = scroll.locator(".quick-file-section");
+  await expect(sections).toHaveCount(3);
+  await expect(sections.nth(0).locator(".sidebar-section-toggle")).toContainText("最近打开");
+  await expect(sections.nth(1).locator(".sidebar-section-toggle")).toContainText("星标文件");
+  await expect(sections.nth(2).locator(".sidebar-section-toggle")).toContainText("我的文档");
+
+  const searchBox = await sidebar.locator(".sidebar-search").boundingBox();
+  const scrollBox = await scroll.boundingBox();
+  const footerBox = await sidebar.locator(".sidebar-footer").boundingBox();
+  expect(searchBox && scrollBox && footerBox).toBeTruthy();
+  expect(searchBox!.y + searchBox!.height).toBeLessThanOrEqual(scrollBox!.y);
+  expect(scrollBox!.y + scrollBox!.height).toBeLessThanOrEqual(footerBox!.y);
+
+  await sidebar.getByRole("button", { name: "新增" }).click();
+  await expect(sidebar.getByRole("button", { name: "新增文档" })).toBeVisible();
+  await expect(sidebar.getByRole("button", { name: "设置" })).toBeVisible();
+  await expect(sidebar.getByRole("button", { name: "回收站" })).toBeVisible();
+  await sidebar.locator(".workspace-switcher").click();
+  await expect(sidebar.getByRole("button", { name: "退出登录" })).toBeVisible();
+});
+
 /**
  * 文档内容的落地测试：这些用例只关心「刷新之后内容还在不在」，也就是每一个 fileId 在服务器上
  * 是否真的有自己的一行。用的是开发服务器里的本地假身份，不碰真实 Supabase 账号和真人数据。

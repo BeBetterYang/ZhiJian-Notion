@@ -731,6 +731,46 @@ describe("文档服务器记录的生命周期", () => {
     expect(menu).toHaveAttribute("aria-expanded", "true");
     expect(within(section).getByText("产品规划")).toBeInTheDocument();
   });
+
+  it("最近、星标和文档共用滚动区，账号固定在底部", async () => {
+    renderShell();
+    await screen.findByTestId("document-editor");
+
+    const sidebar = document.querySelector<HTMLElement>(".workspace-sidebar")!;
+    const scroll = sidebar.querySelector<HTMLElement>(".sidebar-scroll")!;
+    const sections = Array.from(scroll.querySelectorAll(".quick-file-section"));
+
+    expect(sections).toHaveLength(3);
+    expect(sections[0]).toHaveTextContent("最近打开");
+    expect(sections[1]).toHaveTextContent("星标文件");
+    expect(sections[2]).toHaveTextContent("我的文档");
+    expect(sidebar.querySelector(".sidebar-header .account-wrap")).toBeNull();
+    expect(sidebar.querySelector(".sidebar-footer .account-wrap")).not.toBeNull();
+    expect(sidebar.querySelector(".sidebar-header .create-wrap")).not.toBeNull();
+    expect(sidebar.querySelector(".sidebar-section-heading")).not.toBeNull();
+    expect(sections[2]?.querySelector<HTMLButtonElement>('[aria-label="在我的文档中新建文档"]')).not.toBeNull();
+
+    fireEvent.click(await screen.findByRole("button", { name: "新增" }));
+    expect(screen.getByRole("button", { name: "新增文档" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "新增文件夹" })).toBeInTheDocument();
+
+    expect(within(sidebar).getByRole("button", { name: "设置" })).toBeInTheDocument();
+    expect(within(sidebar).getByRole("button", { name: "回收站" })).toBeInTheDocument();
+    fireEvent.click(sidebar.querySelector<HTMLButtonElement>(".workspace-switcher")!);
+    expect(screen.getByRole("button", { name: "退出登录" })).toBeInTheDocument();
+  });
+
+  it("搜索时仍能通过快捷键打开新建菜单", async () => {
+    renderShell();
+    await screen.findByTestId("document-editor");
+
+    act(() => screen.getByPlaceholderText("全局搜索").focus());
+    fireEvent.keyDown(window, { key: "n", code: "KeyN", ctrlKey: true });
+
+    expect(await screen.findByRole("button", { name: "新增文档" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "新增文件夹" })).toBeInTheDocument();
+    expect(document.querySelector(".workspace-files")).not.toBeNull();
+  });
 });
 
 describe("Workspace Deep Link", () => {

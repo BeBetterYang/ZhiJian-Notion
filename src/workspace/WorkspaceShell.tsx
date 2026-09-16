@@ -4,9 +4,7 @@ import {
   Camera,
   ChevronDown,
   ChevronRight,
-  ChevronsLeft,
   ChevronsRight,
-  Clock,
   Copy,
   ExternalLink,
   FilePlus,
@@ -14,11 +12,13 @@ import {
   Folder,
   FolderOpen,
   FolderPlus,
+  FolderUp,
   Link,
   LogOut,
   Menu,
   MoreHorizontal,
   Move,
+  PanelLeft,
   Pencil,
   Plus,
   RotateCcw,
@@ -26,8 +26,8 @@ import {
   Settings,
   SlidersHorizontal,
   Star,
+  SquarePen,
   Trash2,
-  Upload,
   X,
 } from "lucide-react";
 import App, { type FocusBreadcrumbItem, type FocusBreadcrumbState } from "../App";
@@ -376,6 +376,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
 
   const enterSearchMode = useCallback(() => {
     setSearchMode(true);
+    setCreateMenuOpen(false);
     if (sidebarCollapsed) {
       setSidebarCollapsed(false);
       setSidebarPeeking(false);
@@ -389,6 +390,11 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     setSearchFilterOpen(false);
     setSearchMode(false);
   }, [search]);
+
+  const revealCreateMenu = useCallback(() => {
+    setCreateMenuOpen(true);
+    window.requestAnimationFrame(() => document.querySelector<HTMLElement>(".create-menu")?.scrollIntoView?.({ block: "nearest" }));
+  }, []);
 
   useEffect(() => {
     let canceled = false;
@@ -599,7 +605,11 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "n") {
         event.preventDefault();
-        setCreateMenuOpen(true);
+        if (searchMode) {
+          searchRef.current?.blur();
+          closeSearchMode();
+        }
+        revealCreateMenu();
       }
       if (event.key === "Escape") {
         setSettingsOpen(false);
@@ -614,7 +624,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [enterSearchMode]);
+  }, [enterSearchMode, closeSearchMode, searchMode, revealCreateMenu]);
 
   useEffect(() => {
     const onPointerDown = (event: globalThis.PointerEvent) => {
@@ -1068,6 +1078,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const applySidebarCollapsed = (collapsed: boolean) => {
     setSidebarCollapsed(collapsed);
     setSidebarPeeking(false);
+    setCreateMenuOpen(false);
     saveSidebarCollapsed(collapsed);
   };
 
@@ -1177,29 +1188,19 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       {sidebarOpen ? <button className="sidebar-backdrop" aria-label="关闭侧栏" onClick={() => setSidebarOpen(false)} /> : null}
       <aside className={`workspace-sidebar ${sidebarOpen ? "is-open" : ""} ${sidebarPeeking ? "is-peeking" : ""}`} onMouseEnter={() => sidebarCollapsed && showSidebarPeek()} onMouseLeave={scheduleSidebarPeekClose}>
         <header className="sidebar-header">
-          <div className="account-wrap">
-            <button className="workspace-switcher" type="button" aria-expanded={accountOpen} onClick={() => setAccountOpen((open) => !open)}>
-              <span className="workspace-avatar">{userProfile.avatarUrl ? <img src={userProfile.avatarUrl} alt="" /> : <img src={logoUrl} alt="枝间默认头像" />}</span>
-              <span className="workspace-name">{userProfile.name}</span>
-              <ChevronDown className="account-chevron" />
-            </button>
-            {accountOpen ? (
-              <div className="account-menu">
-                <div className="account-summary"><strong>{userProfile.name}</strong><span>{userProfile.email}</span></div>
-                <button type="button" onClick={() => { setAccountOpen(false); importInputRef.current?.click(); }}><Upload />导入文档</button>
-                <button type="button" onClick={() => openSettings()}><Settings />设置</button>
-                <button type="button" onClick={() => { setTrashOpen(true); setSelectedTrashIds(new Set()); setAccountOpen(false); }}><Trash2 />回收站</button>
-                <button type="button" onClick={onLogout}><LogOut />退出登录</button>
-              </div>
-            ) : null}
+          <button type="button" className="sidebar-collapse icon-button" onClick={() => applySidebarCollapsed(true)} aria-label="收起侧栏" title="收起侧栏"><PanelLeft /></button>
+          <div className="sidebar-header-actions">
+            <button type="button" className="sidebar-header-action icon-button" onClick={() => importInputRef.current?.click()} aria-label="导入文档" title="导入文档"><FolderUp /></button>
+            <div className="create-wrap">
+              <button type="button" className="sidebar-header-action icon-button" aria-label="新增" title="新增文档或文件夹" aria-expanded={createMenuOpen} onClick={() => createMenuOpen ? setCreateMenuOpen(false) : revealCreateMenu()}><SquarePen /></button>
+              {createMenuOpen ? <div className="create-menu"><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file")}><FilePlus />新增文档</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("folder")}><FolderPlus />新增文件夹</button></div> : null}
+            </div>
           </div>
-          <button type="button" className="sidebar-collapse icon-button" onClick={() => applySidebarCollapsed(true)} aria-label="收起侧栏" title="收起侧栏"><ChevronsLeft /></button>
           <button type="button" className="mobile-close icon-button" onClick={() => setSidebarOpen(false)} aria-label="关闭侧栏" title="关闭侧栏"><X /></button>
         </header>
         <nav className="sidebar-actions" aria-label="工作区操作">
           <div className="sidebar-search-wrap">
             <label className="sidebar-search">
-              <Search />
               <input
                 ref={searchRef}
                 value={search}
@@ -1208,7 +1209,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                 onKeyDown={(event) => {
                   if (event.key === "Enter") rememberSearch(search, setRecentSearches);
                 }}
-                placeholder="搜索"
+                placeholder="全局搜索"
               />
               {search ? (
                 <button
@@ -1222,7 +1223,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                 >
                   <X />
                 </button>
-              ) : searchMode ? <button className="icon-button" type="button" onClick={closeSearchMode} aria-label="关闭搜索"><X /></button> : null}
+              ) : searchMode ? <button className="icon-button" type="button" onClick={closeSearchMode} aria-label="关闭搜索"><X /></button> : <kbd>Ctrl+Shift+F</kbd>}
               {searchMode ? (
                 <button className="icon-button search-filter-button" type="button" aria-label="筛选搜索范围" aria-expanded={searchFilterOpen} onClick={(event) => { event.preventDefault(); setSearchFilterOpen((open) => !open); }}><SlidersHorizontal /></button>
               ) : null}
@@ -1244,12 +1245,6 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               />
             ) : null}
           </div>
-          {searchMode ? null : (
-            <>
-              <QuickFileSection title="最近打开" source="recent" icon={<Clock />} expanded={expandedQuickSections.has("recent")} files={recentFiles} selectedMenuKey={selectedMenuKey} onToggle={() => toggleQuickSection("recent")} onSelect={selectFile} />
-              <QuickFileSection title="星标文件" source="favorites" icon={<Star />} expanded={expandedQuickSections.has("favorites")} files={favoriteFiles} selectedMenuKey={selectedMenuKey} onToggle={() => toggleQuickSection("favorites")} onSelect={selectFile} />
-            </>
-          )}
         </nav>
 
         <div className="sidebar-scroll">
@@ -1290,19 +1285,40 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               onSelect={(value) => setSearch(value)}
             />
           ) : (
-            <section className="workspace-files quick-file-section" aria-labelledby="workspace-files-title">
-              <button type="button" className="sidebar-action expandable-action" id="workspace-files-title" aria-expanded={expandedQuickSections.has("documents")} onClick={() => toggleQuickSection("documents")}>
-                <span className="expandable-leading"><span className="leading-default-icon"><FolderOpen /></span>{expandedQuickSections.has("documents") ? <ChevronDown className="leading-state-icon" /> : <ChevronRight className="leading-state-icon" />}</span>
-                <span>我的文档</span>
-              </button>
-              {expandedQuickSections.has("documents") ? <div className="quick-file-list workspace-files-tree">{serverReady ? renderTree(null) : null}</div> : null}
-            </section>
+            <>
+              <QuickFileSection title="最近打开" source="recent" expanded={expandedQuickSections.has("recent")} files={recentFiles} selectedMenuKey={selectedMenuKey} onToggle={() => toggleQuickSection("recent")} onSelect={selectFile} />
+              <QuickFileSection title="星标文件" source="favorites" expanded={expandedQuickSections.has("favorites")} files={favoriteFiles} selectedMenuKey={selectedMenuKey} onToggle={() => toggleQuickSection("favorites")} onSelect={selectFile} />
+              <section className="workspace-files quick-file-section" aria-labelledby="workspace-files-title">
+                <div className="sidebar-section-heading">
+                  <button type="button" className="sidebar-section-toggle" id="workspace-files-title" aria-expanded={expandedQuickSections.has("documents")} onClick={() => toggleQuickSection("documents")}>
+                    <span>我的文档</span>{expandedQuickSections.has("documents") ? <ChevronDown /> : <ChevronRight />}
+                  </button>
+                  <span className="sidebar-section-actions">
+                    <button className="tree-action icon-button" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file")} aria-label="在我的文档中新建文档" title="新增文档"><Plus /></button>
+                  </span>
+                </div>
+                {expandedQuickSections.has("documents") ? <div className="quick-file-list workspace-files-tree">{serverReady ? renderTree(null) : null}</div> : null}
+              </section>
+            </>
           )}
         </div>
-        <div className="sidebar-bottom-action">
-          <div className="create-wrap">
-            <button type="button" className="sidebar-new-button" aria-expanded={createMenuOpen} onClick={() => setCreateMenuOpen((open) => !open)}><Plus /><span>新增</span></button>
-            {createMenuOpen ? <div className="create-menu"><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file")}><FilePlus />新增文档</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("folder")}><FolderPlus />新增文件夹</button></div> : null}
+        <div className="sidebar-footer">
+          <div className="sidebar-user-bar">
+            <div className="account-wrap">
+            <button className="workspace-switcher" type="button" aria-expanded={accountOpen} onClick={() => setAccountOpen((open) => !open)}>
+              <span className="workspace-avatar">{userProfile.avatarUrl ? <img src={userProfile.avatarUrl} alt="" /> : <img src={logoUrl} alt="枝间默认头像" />}</span>
+              <span className="workspace-name">{userProfile.name}</span>
+              <ChevronDown className="account-chevron" />
+            </button>
+            {accountOpen ? (
+              <div className="account-menu">
+                <div className="account-summary"><strong>{userProfile.name}</strong><span>{userProfile.email}</span></div>
+                <button type="button" onClick={onLogout}><LogOut />退出登录</button>
+              </div>
+            ) : null}
+            </div>
+            <button type="button" className="sidebar-user-action icon-button" onClick={() => openSettings()} aria-label="设置" title="设置"><Settings /></button>
+            <button type="button" className="sidebar-user-action icon-button" onClick={() => { setTrashOpen(true); setSelectedTrashIds(new Set()); setAccountOpen(false); }} aria-label="回收站" title="回收站"><Trash2 /></button>
           </div>
           <input
             ref={importInputRef}
@@ -1890,10 +1906,9 @@ function SearchFilterPopover({ folders, nodes, query, selectedFolderIds, onQuery
   );
 }
 
-function QuickFileSection({ title, source, icon, expanded, files, selectedMenuKey, onToggle, onSelect }: {
+function QuickFileSection({ title, source, expanded, files, selectedMenuKey, onToggle, onSelect }: {
   title: string;
   source: QuickSection;
-  icon: React.ReactNode;
   expanded: boolean;
   files: WorkspaceFile[];
   selectedMenuKey: string;
@@ -1902,9 +1917,8 @@ function QuickFileSection({ title, source, icon, expanded, files, selectedMenuKe
 }) {
   return (
     <section className="quick-file-section">
-      <button type="button" className="sidebar-action expandable-action" aria-expanded={expanded} onClick={onToggle}>
-        <span className="expandable-leading"><span className="leading-default-icon">{icon}</span>{expanded ? <ChevronDown className="leading-state-icon" /> : <ChevronRight className="leading-state-icon" />}</span>
-        <span>{title}</span>
+      <button type="button" className="sidebar-section-toggle" aria-expanded={expanded} onClick={onToggle}>
+        <span>{title}</span>{expanded ? <ChevronDown /> : <ChevronRight />}
       </button>
       {expanded ? <div className="quick-file-list">{files.map((file) => <SimpleFileRow key={file.id} file={file} active={selectedMenuKey === `${source}:${file.id}`} onSelect={(selected) => onSelect(selected, source)} />)}{!files.length ? <div className="empty-section">暂无文件</div> : null}</div> : null}
     </section>
