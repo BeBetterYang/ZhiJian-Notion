@@ -12,15 +12,13 @@ import {
   FormattingToolbar,
   blockTypeSelectItems,
   getFormattingToolbarItems,
-  NestBlockButton,
-  UnnestBlockButton,
   useActiveStyles,
   useBlockNoteEditor,
   useComponentsContext,
   useEditorState,
 } from "@blocknote/react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bold, Eye, EyeOff, Image, Italic, ListChecks, Quote, Strikethrough, Table2, Underline } from "lucide-react";
+import { ArrowLeftToLine, ArrowRightToLine, Bold, Eye, EyeOff, Image, Italic, SquareCheck, Strikethrough, Table2, TextQuote, Underline } from "lucide-react";
 import { everySpanHasMark } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
 import {
@@ -175,10 +173,76 @@ function EditorFormattingToolbar({
       {showClozeControl && !isImageBlock ? <ClozeButton /> : null}
       <ViewImageButton />
       <CreateLinkButton />
+      <PromoteBlockButton />
       <NestBlockButton />
-      <UnnestBlockButton />
       {extraDefaultItems}
     </FormattingToolbar>
+  );
+}
+
+function PromoteBlockButton() {
+  const editor = useBlockNoteEditor<BlockSchema, InlineContentSchema, StyleSchema>();
+  const Components = useComponentsContext()!;
+  const state = useEditorState({
+    editor,
+    selector: ({ editor }) => {
+      const blocks = editor.getSelection()?.blocks ?? [editor.getTextCursorPosition().block];
+      if (!editor.isEditable || !blocks.find((block) => block.content !== undefined)) {
+        return undefined;
+      }
+      return { canPromote: editor.canUnnestBlock() };
+    },
+  });
+
+  if (state === undefined) return null;
+
+  return (
+    <Components.FormattingToolbar.Button
+      className="bn-button"
+      data-test="promoteBlock"
+      label="提升一级"
+      mainTooltip="提升一级"
+      isDisabled={!state.canPromote}
+      icon={<ArrowLeftToLine />}
+      onClick={() => {
+        if (!state.canPromote) return;
+        editor.focus();
+        editor.unnestBlock();
+      }}
+    />
+  );
+}
+
+function NestBlockButton() {
+  const editor = useBlockNoteEditor<BlockSchema, InlineContentSchema, StyleSchema>();
+  const Components = useComponentsContext()!;
+  const state = useEditorState({
+    editor,
+    selector: ({ editor }) => {
+      const blocks = editor.getSelection()?.blocks ?? [editor.getTextCursorPosition().block];
+      if (!editor.isEditable || !blocks.find((block) => block.content !== undefined)) {
+        return undefined;
+      }
+      return { canNest: editor.canNestBlock() };
+    },
+  });
+
+  if (state === undefined) return null;
+
+  return (
+    <Components.FormattingToolbar.Button
+      className="bn-button"
+      data-test="nestBlock"
+      label="设为子级"
+      mainTooltip="设为子级"
+      isDisabled={!state.canNest}
+      icon={<ArrowRightToLine />}
+      onClick={() => {
+        if (!state.canNest) return;
+        editor.focus();
+        editor.nestBlock();
+      }}
+    />
   );
 }
 
@@ -270,7 +334,7 @@ function MindMapBatchFormattingToolbar({ selection }: { selection: MindMapBatchS
       <Components.FormattingToolbar.Button
         label="检查清单"
         mainTooltip="检查清单"
-        icon={<ListChecks />}
+        icon={<SquareCheck />}
         isSelected={nodeIds.every((id) => tree.nodes[id]!.type === "todo")}
         onClick={() => toggleMindMapBatchTodo(selection.store, nodeIds)}
       />
@@ -302,7 +366,7 @@ function ChecklistButton() {
     <Components.FormattingToolbar.Button
       label="检查清单"
       mainTooltip="检查清单"
-      icon={<ListChecks />}
+      icon={<SquareCheck />}
       isSelected={isChecklist}
       isDisabled={disabled}
       onClick={() => {
@@ -389,7 +453,7 @@ function InsertQuoteButton({
     <Components.FormattingToolbar.Button
       label="引用"
       mainTooltip="在正文后插入引用"
-      icon={<Quote />}
+      icon={<TextQuote />}
       onClick={() => {
         const block = editor.getTextCursorPosition().block;
         const [quote] = insertNodeAttachmentBlocks(editor, block.id, [
