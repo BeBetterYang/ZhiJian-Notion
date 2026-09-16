@@ -96,30 +96,30 @@
   stroke-width: 2.1;
 }
 
-:is(.zhijian-shortcut-sections, .outline-panel, .mindmap-theme-panel, .mindmap-toolbar-host .bn-color-picker-dropdown) {
+:is(.zhijian-shortcut-sections, .outline-panel, .mindmap-theme-panel, .mindmap-toolbar-host .bn-color-picker-dropdown, .mindmap-toolbar-host .zhijian-color-dropdown) {
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
-:is(.zhijian-shortcut-sections, .outline-panel, .mindmap-theme-panel, .mindmap-toolbar-host .bn-color-picker-dropdown)::-webkit-scrollbar {
+:is(.zhijian-shortcut-sections, .outline-panel, .mindmap-theme-panel, .mindmap-toolbar-host .bn-color-picker-dropdown, .mindmap-toolbar-host .zhijian-color-dropdown)::-webkit-scrollbar {
   width: var(--scrollbar-size);
   height: var(--scrollbar-size);
 }
 
-:is(.zhijian-shortcut-sections, .outline-panel, .mindmap-theme-panel, .mindmap-toolbar-host .bn-color-picker-dropdown)::-webkit-scrollbar-track {
+:is(.zhijian-shortcut-sections, .outline-panel, .mindmap-theme-panel, .mindmap-toolbar-host .bn-color-picker-dropdown, .mindmap-toolbar-host .zhijian-color-dropdown)::-webkit-scrollbar-track {
   background: transparent;
 }
 
-:is(.zhijian-shortcut-sections, .outline-panel, .mindmap-theme-panel, .mindmap-toolbar-host .bn-color-picker-dropdown)::-webkit-scrollbar-thumb {
+:is(.zhijian-shortcut-sections, .outline-panel, .mindmap-theme-panel, .mindmap-toolbar-host .bn-color-picker-dropdown, .mindmap-toolbar-host .zhijian-color-dropdown)::-webkit-scrollbar-thumb {
   border-radius: 4px;
   background: var(--scrollbar-thumb);
 }
 
-:is(.zhijian-shortcut-sections, .outline-panel, .mindmap-theme-panel, .mindmap-toolbar-host .bn-color-picker-dropdown):hover {
+:is(.zhijian-shortcut-sections, .outline-panel, .mindmap-theme-panel, .mindmap-toolbar-host .bn-color-picker-dropdown, .mindmap-toolbar-host .zhijian-color-dropdown):hover {
   scrollbar-color: var(--scrollbar-thumb-hover) transparent;
 }
 
-:is(.zhijian-shortcut-sections, .outline-panel, .mindmap-theme-panel, .mindmap-toolbar-host .bn-color-picker-dropdown):hover::-webkit-scrollbar-thumb {
+:is(.zhijian-shortcut-sections, .outline-panel, .mindmap-theme-panel, .mindmap-toolbar-host .bn-color-picker-dropdown, .mindmap-toolbar-host .zhijian-color-dropdown):hover::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb-hover);
 }
 
@@ -1889,20 +1889,32 @@ textarea {
   max-width: calc(100% - 32px);
 }
 
-.mindmap-toolbar-host:has(.bn-color-picker-dropdown) {
+.mindmap-toolbar-host:has(.bn-color-picker-dropdown),
+.mindmap-toolbar-host:has(.zhijian-color-dropdown) {
   z-index: 40;
 }
 
-.mindmap-toolbar-host:has(.bn-color-picker-dropdown) .bn-formatting-toolbar {
+.mindmap-toolbar-host:has(.bn-color-picker-dropdown) .bn-formatting-toolbar,
+.mindmap-toolbar-host:has(.zhijian-color-dropdown) .bn-formatting-toolbar {
   overflow: visible;
 }
 
-.mindmap-toolbar-host .bn-color-picker-dropdown {
+.mindmap-toolbar-host .bn-color-picker-dropdown,
+.mindmap-toolbar-host .zhijian-color-dropdown {
   top: auto !important;
   bottom: calc(100% + 8px) !important;
   max-height: min(520px, calc(100vh - 32px)) !important;
   max-height: min(520px, calc(100dvh - 32px)) !important;
   overflow-y: auto;
+}
+
+.zhijian-color-dropdown {
+  width: 128px !important;
+  padding: 6px !important;
+}
+
+.zhijian-color-dropdown .mantine-Menu-itemSection[data-position="left"] {
+  margin-inline-end: 0;
 }
 
 .mindmap-node-shell,

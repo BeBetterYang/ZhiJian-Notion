@@ -801,7 +801,7 @@ function OutlineRowMenuPortal() {
           </div>
           <button className="outline-row-menu-action" type="button" onClick={() => setPalette(palette === "text" ? null : "text")}>
             <Baseline />
-            <span>字体颜色</span>
+            <span>文本颜色</span>
             <ChevronRight className="outline-row-menu-arrow" />
           </button>
           <button className="outline-row-menu-action" type="button" onClick={() => setPalette(palette === "background" ? null : "background")}>

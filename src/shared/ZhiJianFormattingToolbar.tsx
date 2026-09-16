@@ -1,5 +1,6 @@
 import {
   blockHasType,
+  type BlockNoteEditor,
   type BlockSchema,
   type InlineContentSchema,
   type StyleSchema,
@@ -7,7 +8,6 @@ import {
 import {
   BasicTextStyleButton,
   BlockTypeSelect,
-  ColorStyleButton,
   CreateLinkButton,
   FormattingToolbar,
   blockTypeSelectItems,
@@ -18,7 +18,7 @@ import {
   useEditorState,
 } from "@blocknote/react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeftToLine, ArrowRightToLine, Bold, Eye, EyeOff, Image, Italic, SquareCheck, Strikethrough, Table2, TextQuote, Underline } from "lucide-react";
+import { ArrowLeftToLine, ArrowRightToLine, Baseline, Bold, Eye, EyeOff, Highlighter, Image, Italic, SquareCheck, Strikethrough, Table2, TextQuote, Underline } from "lucide-react";
 import { everySpanHasMark } from "../core/tree";
 import type { TreeStore } from "../core/treeStore";
 import {
@@ -158,7 +158,8 @@ function EditorFormattingToolbar({
       <BasicTextStyleButton basicTextStyle="italic" />
       <BasicTextStyleButton basicTextStyle="underline" />
       <BasicTextStyleButton basicTextStyle="strike" />
-      <ColorStyleButton />
+      <EditorColorButton kind="text" label="文本颜色" icon={<Baseline />} />
+      <EditorColorButton kind="background" label="荧光笔" icon={<Highlighter />} />
       {showStructuralControls ? <ChecklistButton /> : null}
       {showStructuralControls && !isImageBlock ? (
         <InsertQuoteButton
@@ -177,6 +178,98 @@ function EditorFormattingToolbar({
       <NestBlockButton />
       {extraDefaultItems}
     </FormattingToolbar>
+  );
+}
+
+type ColorMenuKind = "text" | "background";
+
+function EditorColorButton({
+  kind,
+  label,
+  icon,
+}: {
+  kind: ColorMenuKind;
+  label: string;
+  icon: ReactNode;
+}) {
+  const editor = useBlockNoteEditor<BlockSchema, InlineContentSchema, StyleSchema>();
+  const styleKey = kind === "text" ? "textColor" : "backgroundColor";
+  const state = useEditorState({
+    editor,
+    selector: ({ editor }) => {
+      const blocks = editor.getSelection()?.blocks ?? [editor.getTextCursorPosition().block];
+      if (
+        !editor.isEditable ||
+        !blocks.find((block) => block.content !== undefined) ||
+        !(styleKey in editor.schema.styleSchema)
+      ) {
+        return undefined;
+      }
+      const activeStyles = editor.getActiveStyles() as Record<string, string | undefined>;
+      return activeStyles[styleKey] ?? "default";
+    },
+  });
+
+  if (state === undefined) return null;
+
+  return (
+    <ColorMenuButton
+      kind={kind}
+      label={label}
+      icon={icon}
+      color={state}
+      onSelect={(color) => {
+        if (color === "default") {
+          editor.removeStyles({ [styleKey]: color } as Parameters<BlockNoteEditor["removeStyles"]>[0]);
+        } else {
+          editor.addStyles({ [styleKey]: color } as Parameters<BlockNoteEditor["addStyles"]>[0]);
+        }
+        setTimeout(() => editor.focus());
+      }}
+    />
+  );
+}
+
+function ColorMenuButton({
+  kind,
+  label,
+  icon,
+  color,
+  onSelect,
+}: {
+  kind: ColorMenuKind;
+  label: string;
+  icon: ReactNode;
+  color: string;
+  onSelect: (color: string) => void;
+}) {
+  const Components = useComponentsContext()!;
+
+  return (
+    <Components.Generic.Menu.Root>
+      <Components.Generic.Menu.Trigger>
+        <Components.FormattingToolbar.Button
+          className="bn-button"
+          data-test={`${kind}Color`}
+          label={label}
+          mainTooltip={label}
+          icon={icon}
+        />
+      </Components.Generic.Menu.Trigger>
+      <Components.Generic.Menu.Dropdown className="bn-menu-dropdown zhijian-color-dropdown">
+        {batchColors.map(([value, colorLabel]) => (
+          <Components.Generic.Menu.Item
+            className={`outline-row-palette-item ${color === value ? "is-active" : ""}`}
+            key={`${kind}-${value}`}
+            data-test={`${kind}-color-${value}`}
+            icon={<span className="outline-row-color-swatch" data-kind={kind} data-color={value} />}
+            onClick={() => onSelect(value)}
+          >
+            {colorLabel}
+          </Components.Generic.Menu.Item>
+        ))}
+      </Components.Generic.Menu.Dropdown>
+    </Components.Generic.Menu.Root>
   );
 }
 
@@ -295,42 +388,20 @@ function MindMapBatchFormattingToolbar({ selection }: { selection: MindMapBatchS
           onClick={() => toggleMindMapBatchTextStyle(selection.store, nodeIds, style)}
         />
       ))}
-      <Components.Generic.Menu.Root>
-        <Components.Generic.Menu.Trigger>
-          <Components.FormattingToolbar.Button
-            className="bn-button"
-            label="颜色"
-            mainTooltip="颜色"
-            icon={<BatchColorIcon textColor={textColor} backgroundColor={backgroundColor} />}
-          />
-        </Components.Generic.Menu.Trigger>
-        <Components.Generic.Menu.Dropdown className="bn-menu-dropdown bn-color-picker-dropdown">
-          <Components.Generic.Menu.Label>字体颜色</Components.Generic.Menu.Label>
-          {batchColors.map(([color, label]) => (
-            <Components.Generic.Menu.Item
-              key={`text-${color}`}
-              checked={textColor === color}
-              data-test={`text-color-${color}`}
-              icon={<BatchColorIcon textColor={color} />}
-              onClick={() => applyMindMapBatchColor(selection.store, nodeIds, "textColor", color === "default" ? null : color)}
-            >
-              {label}
-            </Components.Generic.Menu.Item>
-          ))}
-          <Components.Generic.Menu.Label>背景颜色</Components.Generic.Menu.Label>
-          {batchColors.map(([color, label]) => (
-            <Components.Generic.Menu.Item
-              key={`background-${color}`}
-              checked={backgroundColor === color}
-              data-test={`background-color-${color}`}
-              icon={<BatchColorIcon backgroundColor={color} />}
-              onClick={() => applyMindMapBatchColor(selection.store, nodeIds, "backgroundColor", color === "default" ? null : color)}
-            >
-              {label}
-            </Components.Generic.Menu.Item>
-          ))}
-        </Components.Generic.Menu.Dropdown>
-      </Components.Generic.Menu.Root>
+      <ColorMenuButton
+        kind="text"
+        label="文本颜色"
+        icon={<Baseline />}
+        color={textColor}
+        onSelect={(color) => applyMindMapBatchColor(selection.store, nodeIds, "textColor", color === "default" ? null : color)}
+      />
+      <ColorMenuButton
+        kind="background"
+        label="荧光笔"
+        icon={<Highlighter />}
+        color={backgroundColor}
+        onSelect={(color) => applyMindMapBatchColor(selection.store, nodeIds, "backgroundColor", color === "default" ? null : color)}
+      />
       <Components.FormattingToolbar.Button
         label="检查清单"
         mainTooltip="检查清单"
@@ -339,19 +410,6 @@ function MindMapBatchFormattingToolbar({ selection }: { selection: MindMapBatchS
         onClick={() => toggleMindMapBatchTodo(selection.store, nodeIds)}
       />
     </FormattingToolbar>
-  );
-}
-
-function BatchColorIcon({ textColor = "default", backgroundColor = "default" }: { textColor?: string; backgroundColor?: string }) {
-  return (
-    <span
-      className="bn-color-icon"
-      data-background-color={backgroundColor}
-      data-text-color={textColor}
-      style={{ pointerEvents: "none", fontSize: "15px", height: "20px", lineHeight: "20px", textAlign: "center", width: "20px" }}
-    >
-      A
-    </span>
   );
 }
 
