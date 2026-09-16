@@ -170,7 +170,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => loadSidebarCollapsed());
   const [sidebarPeeking, setSidebarPeeking] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(252);
+  const [sidebarWidth, setSidebarWidth] = useState(240);
   const [accountOpen, setAccountOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [menuNodeId, setMenuNodeId] = useState<string | null>(null);
