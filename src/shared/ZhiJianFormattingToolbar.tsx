@@ -5,10 +5,15 @@ import {
   type StyleSchema,
 } from "@blocknote/core";
 import {
+  BasicTextStyleButton,
   BlockTypeSelect,
+  ColorStyleButton,
+  CreateLinkButton,
   FormattingToolbar,
   blockTypeSelectItems,
   getFormattingToolbarItems,
+  NestBlockButton,
+  UnnestBlockButton,
   useActiveStyles,
   useBlockNoteEditor,
   useComponentsContext,
@@ -117,6 +122,20 @@ function EditorFormattingToolbar({
   const defaultItems = getFormattingToolbarItems(blockTypes).filter(
     (item) => item.key !== "blockTypeSelect" && !hiddenFormattingToolbarItems.has(String(item.key)),
   );
+  const extraDefaultItems = defaultItems.filter(
+    (item) =>
+      ![
+        "tableCellMergeButton",
+        "boldStyleButton",
+        "italicStyleButton",
+        "underlineStyleButton",
+        "strikeStyleButton",
+        "colorStyleButton",
+        "nestBlockButton",
+        "unnestBlockButton",
+        "createLinkButton",
+      ].includes(String(item.key)),
+  );
 
   // The root block is the fixed document title. It remains editable as text,
   // but cannot be changed into another block type or receive formatting.
@@ -137,6 +156,11 @@ function EditorFormattingToolbar({
       {/* Every type on offer is a kind of text row, and a table is none of them:
           picking one would replace the table with an empty paragraph. */}
       {isTableBlock ? null : <BlockTypeSelect items={blockTypes} />}
+      <BasicTextStyleButton basicTextStyle="bold" />
+      <BasicTextStyleButton basicTextStyle="italic" />
+      <BasicTextStyleButton basicTextStyle="underline" />
+      <BasicTextStyleButton basicTextStyle="strike" />
+      <ColorStyleButton />
       {showStructuralControls ? <ChecklistButton /> : null}
       {showStructuralControls && !isImageBlock ? (
         <InsertQuoteButton
@@ -144,12 +168,16 @@ function EditorFormattingToolbar({
         />
       ) : null}
       {showStructuralControls && !isImageBlock ? <InsertTableButton onInsertTable={onInsertTable} /> : null}
+      {defaultItems.find((item) => String(item.key) === "tableCellMergeButton")}
       {showStructuralControls ? (
         <InsertImageButton />
       ) : null}
       {showClozeControl && !isImageBlock ? <ClozeButton /> : null}
       <ViewImageButton />
-      {defaultItems}
+      <CreateLinkButton />
+      <NestBlockButton />
+      <UnnestBlockButton />
+      {extraDefaultItems}
     </FormattingToolbar>
   );
 }
@@ -193,13 +221,6 @@ function MindMapBatchFormattingToolbar({ selection }: { selection: MindMapBatchS
 
   return (
     <FormattingToolbar>
-      <Components.FormattingToolbar.Button
-        label="检查清单"
-        mainTooltip="检查清单"
-        icon={<ListChecks />}
-        isSelected={nodeIds.every((id) => tree.nodes[id]!.type === "todo")}
-        onClick={() => toggleMindMapBatchTodo(selection.store, nodeIds)}
-      />
       {batchTextStyles.map(({ style, label, icon }) => (
         <Components.FormattingToolbar.Button
           key={style}
@@ -246,6 +267,13 @@ function MindMapBatchFormattingToolbar({ selection }: { selection: MindMapBatchS
           ))}
         </Components.Generic.Menu.Dropdown>
       </Components.Generic.Menu.Root>
+      <Components.FormattingToolbar.Button
+        label="检查清单"
+        mainTooltip="检查清单"
+        icon={<ListChecks />}
+        isSelected={nodeIds.every((id) => tree.nodes[id]!.type === "todo")}
+        onClick={() => toggleMindMapBatchTodo(selection.store, nodeIds)}
+      />
     </FormattingToolbar>
   );
 }
