@@ -5,7 +5,11 @@ import { TreeStore } from "./core/treeStore";
 import { SHORTCUTS, formatShortcutHint } from "./shared/shortcuts/shortcutRegistry";
 
 // 两个编辑器都是懒加载的重依赖（BlockNote / MindElixir），这里只看标题栏的菜单，换成占位。
-vi.mock("./outline/OutlineEditor", () => ({ OutlineEditor: () => <div data-testid="outline-editor" /> }));
+vi.mock("./outline/OutlineEditor", () => ({
+  OutlineEditor: ({ fullWidth }: { fullWidth?: boolean }) => (
+    <div data-testid="outline-editor" data-full-width={fullWidth ? "true" : "false"} />
+  ),
+}));
 vi.mock("./mindmap/MindMapEditor", () => ({
   // 「聚焦到某个节点」是 App 递给导图的一次性请求，占位把它摊在属性上，好断言。
   MindMapEditor: ({ focusNodeRequest }: { focusNodeRequest?: { nodeId: string; requestId: number } | null }) => (
@@ -47,6 +51,7 @@ describe("标题栏「更多」菜单", () => {
       "重做Ctrl Shift Z",
       "导入",
       "导出",
+      "全宽",
       "添加星标",
       "删除",
       `快捷键列表${registryHint("shortcut-help")}`,
@@ -60,6 +65,20 @@ describe("标题栏「更多」菜单", () => {
     // 断言值从 registry 算出来：改了 registry 这里跟着变，菜单里没有第二份配置。
     expect(within(help).getByText(registryHint("shortcut-help"), { selector: "kbd" })).toBeInTheDocument();
     expect(within(menu).getByRole("menuitem", { name: /撤销/ }).querySelector("kbd")).toHaveTextContent("Ctrl Z");
+  });
+
+  it("大纲全宽开关保存到当前文档视图状态", async () => {
+    const viewStateStorageKey = "zhijian.test.document.full-width.v1";
+    const menu = await renderApp({ viewStateStorageKey });
+    const fullWidth = within(menu).getByRole("menuitem", { name: "全宽" });
+
+    expect(fullWidth).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByTestId("outline-editor")).toHaveAttribute("data-full-width", "false");
+
+    fireEvent.click(fullWidth);
+
+    expect(screen.getByTestId("outline-editor")).toHaveAttribute("data-full-width", "true");
+    expect(JSON.parse(window.localStorage.getItem(viewStateStorageKey) ?? "{}")).toMatchObject({ outlineFullWidth: true });
   });
 
   it("可创建副本，并在菜单底部显示最后编辑时间", async () => {
@@ -133,6 +152,7 @@ describe("标题栏「更多」菜单", () => {
 
     expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
       "导出",
+      "全宽",
       "添加星标",
       `快捷键列表${registryHint("shortcut-help")}`,
     ]);

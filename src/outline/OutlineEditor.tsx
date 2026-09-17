@@ -57,6 +57,7 @@ import { handleOutlineNodeKeyDown } from "./outlineNodeKeymap";
 import { collapsedOutlineCss } from "./outlineCollapse";
 import { isProtectedOutlineRoot, zoomedOutlineCss } from "./outlineZoom";
 import { outlineRowMenuPosition } from "./outlineRowMenuPosition";
+import { outlineEmojiPickerPosition } from "./outlineEmojiPickerPosition";
 import { LinkDialog } from "../shared/LinkDialog";
 import { EmojiPickerPopover } from "../shared/emoji/EmojiPickerPopover";
 import { DocumentIconControl } from "../shared/documentIcon/DocumentIcon";
@@ -86,6 +87,9 @@ interface OutlineEditorProps {
   initialScrollTop?: number;
   onScrollPositionChange?: (scrollTop: number) => void;
   onFocusNode?: (nodeId: string) => void;
+  fullWidth?: boolean;
+  initialTitleFocusRequestId?: number | null;
+  onInitialTitleFocusHandled?: (requestId: number) => void;
 }
 
 interface OutlineTextGesture {
@@ -115,6 +119,9 @@ export function OutlineEditor({
   initialScrollTop,
   onScrollPositionChange,
   onFocusNode,
+  fullWidth = false,
+  initialTitleFocusRequestId = null,
+  onInitialTitleFocusHandled,
 }: OutlineEditorProps) {
   const tree = useTree(store);
   const imageAssetRevision = useImageAssetRevision();
@@ -182,6 +189,22 @@ export function OutlineEditor({
     },
     [],
   );
+
+  useEffect(() => {
+    if (readOnly || initialTitleFocusRequestId === null) return;
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        const root = editor.document[0];
+        if (!root) return;
+        selectBlockContent(editor, root.id, null);
+        editor.focus();
+        onInitialTitleFocusHandled?.(initialTitleFocusRequestId);
+      } catch {
+        // The editor may still be projecting the newly created document.
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [editor, initialTitleFocusRequestId, onInitialTitleFocusHandled, readOnly]);
 
   useEffect(() => {
     if (rowMenu && isProtectedOutlineRoot(rowMenu.nodeId, tree.rootId, zoomedNodeId)) {
@@ -367,7 +390,7 @@ export function OutlineEditor({
   return (
     <section
       ref={panelRef}
-      className="outline-panel"
+      className={`outline-panel${fullWidth ? " is-full-width" : ""}`}
       data-document-theme={tree.mindMap?.theme?.id ?? "paper"}
       onMouseMoveCapture={(event) => updateDocumentIconVisibility(event.target)}
       onMouseLeave={() => updateDocumentIconVisibility(null)}
@@ -692,6 +715,8 @@ function OutlineRowMenuPortal() {
   const [palette, setPalette] = useState<PaletteKind | null>(null);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [position, setPosition] = useState({ top: 8, left: 8 });
+  const [emojiPickerPosition, setEmojiPickerPosition] = useState({ top: 8, left: 8 });
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
   const menu = context?.rowMenu ?? null;
   const nodeId = menu?.nodeId ?? "";
   const rootId = menu?.rootId ?? null;
@@ -724,6 +749,38 @@ function OutlineRowMenuPortal() {
       window.removeEventListener("scroll", reposition, true);
     };
   }, [menu, palette, updatePosition]);
+
+  const updateEmojiPickerPosition = useCallback(() => {
+    const menuElement = menuRef.current;
+    const pickerElement = emojiPickerRef.current;
+    if (!emojiPickerOpen || !menuElement || !pickerElement) return;
+    const menuRect = menuElement.getBoundingClientRect();
+    const pickerRect = pickerElement.getBoundingClientRect();
+    setEmojiPickerPosition(outlineEmojiPickerPosition(
+      menuRect,
+      pickerRect,
+      { width: window.innerWidth, height: window.innerHeight },
+    ));
+  }, [emojiPickerOpen]);
+
+  useLayoutEffect(() => {
+    if (!emojiPickerOpen) return undefined;
+    updateEmojiPickerPosition();
+    const reposition = () => updateEmojiPickerPosition();
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    const pickerElement = emojiPickerRef.current;
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined" && pickerElement) {
+      resizeObserver = new ResizeObserver(reposition);
+      resizeObserver.observe(pickerElement);
+    }
+    return () => {
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+      resizeObserver?.disconnect();
+    };
+  }, [emojiPickerOpen, updateEmojiPickerPosition]);
 
   useEffect(() => {
     if (!menu) return;
@@ -885,7 +942,7 @@ function OutlineRowMenuPortal() {
               ))}
             </div>
           ) : null}
-          {emojiPickerOpen ? <div className="outline-emoji-picker"><EmojiPickerPopover onEmojiSelect={insertEmoji} /></div> : null}
+          {emojiPickerOpen ? <div className="outline-emoji-picker" ref={emojiPickerRef} style={{ top: emojiPickerPosition.top, left: emojiPickerPosition.left }}><EmojiPickerPopover onEmojiSelect={insertEmoji} /></div> : null}
       </div>
     </div>
     ,

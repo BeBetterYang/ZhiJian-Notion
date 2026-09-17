@@ -6,6 +6,7 @@ export interface MindMapViewportState {
 
 export interface DocumentViewState {
   activeView?: "outline" | "mindmap";
+  outlineFullWidth?: boolean;
   outlineScrollTop?: number;
   mindMapViewport?: MindMapViewportState;
   mindMapDirection?: 0 | 1 | 2;

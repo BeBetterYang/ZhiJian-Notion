@@ -90,6 +90,7 @@ describe("zoomedOutlineCss", () => {
     expect(css).toContain('[data-id="a1"] > .bn-block > .bn-block-content { font-size: 34px; font-weight: 400; line-height: 1.2; }');
     expect(css).toContain('[data-id="a1"] > .bn-block > .bn-block-content::before { content: none !important; }');
     expect(css).toContain('[data-id="a1"] > .bn-block > .bn-block-content { background-image: none !important; }');
+    expect(css).toContain('::after { content: "无标题" !important; color: var(--zhijian-hint) !important; font-style: italic; font-weight: 700; }');
     expect(css).toContain('[data-id="a1"] > .bn-block > .bn-block-group { margin-left: 0; margin-top: 16px; }');
     expect(css).toContain('[data-id="a1"] > .bn-block > .bn-block-group > .bn-block-outer::before { display: none; }');
   });
@@ -98,7 +99,7 @@ describe("zoomedOutlineCss", () => {
     // 700 会把「用户自己加没加粗」这件事盖掉；heading 自带的粗细不继承的话，同样绕过上面那条。
     const css = zoomedOutlineCss(sampleTree(), "a1");
 
-    expect(css).not.toContain("font-weight: 700");
+    expect(css).not.toContain('.bn-block-outer[data-id="a1"] > .bn-block > .bn-block-content { font-size: 34px; font-weight: 700;');
     expect(css).toContain(
       '[data-id="a1"] > .bn-block > .bn-block-content[data-content-type="heading"] > :is(h1, h2, h3) { font-size: inherit; font-weight: inherit; line-height: inherit; }',
     );

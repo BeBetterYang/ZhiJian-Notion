@@ -118,6 +118,22 @@ describe("TreeStore", () => {
     expect(store.getNode("app")?.children).toContain(copyId);
   });
 
+  it("deletes only the selected node and promotes its children in order", () => {
+    const store = new TreeStore(createInitialTree());
+    const firstChildId = store.createNode({ parentId: "web", content: "第一层" });
+    const grandchildId = store.createNode({ parentId: firstChildId, content: "第二层" });
+    const secondChildId = store.createNode({ parentId: "web", content: "并列节点" });
+
+    store.deleteNodeOnly("web");
+
+    expect(store.getNode("web")).toBeNull();
+    expect(store.getNode("root")?.children).toEqual([firstChildId, secondChildId, "app"]);
+    expect(store.getNode(firstChildId)?.parentId).toBe("root");
+    expect(store.getNode(firstChildId)?.children).toEqual([grandchildId]);
+    expect(store.getNode(grandchildId)?.parentId).toBe(firstChildId);
+    expect(store.getNode(secondChildId)?.parentId).toBe("root");
+  });
+
   it("keeps one IME composition to a single undo step", () => {
     const store = new TreeStore(createInitialTree());
     store.beginHistoryCoalescing();

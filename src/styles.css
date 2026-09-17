@@ -330,6 +330,37 @@ textarea {
   color: #d89b26;
 }
 
+.toolbar-menu-switch {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  width: 30px;
+  height: 18px;
+  margin-left: auto;
+  padding: 2px;
+  border-radius: 999px;
+  background: rgba(55, 53, 47, 0.18);
+  transition: background-color var(--motion-fast, 120ms) ease;
+}
+
+.toolbar-menu-switch > span {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15, 15, 15, 0.18);
+  transition: transform var(--motion-fast, 120ms) ease;
+}
+
+.toolbar-menu-switch.is-active {
+  background: var(--color-accent);
+}
+
+.toolbar-menu-switch.is-active > span {
+  transform: translateX(12px);
+}
+
 /*
  * 分隔线的样子和 workspace.css 里的 .menu-divider 一致，但这是编辑器自己菜单里的元素，
  * 样式就写在编辑器自己这张表里，免得哪天换个不加载 workspace.css 的页面渲染 App 就没了线。
@@ -897,6 +928,10 @@ textarea {
   --bn-colors-editor-background: var(--zhijian-canvas);
 }
 
+.outline-panel.is-full-width .bn-container {
+  max-width: none;
+}
+
 /* BlockNote 0.54 declares `Inter` on `.bn-default-styles`; state the same
    family on the outline's display and editing surfaces so neither layer falls
    back to BlockNote's default. */
@@ -915,6 +950,99 @@ textarea {
   font-style: inherit;
   font-weight: inherit;
   line-height: inherit;
+}
+
+/* The slash menu is a command palette rather than a block preview. Keep it close
+   to the compact menus used elsewhere in the workspace: one readable label, one
+   icon column and one optional shortcut column. BlockNote's Mantine selectors are
+   more specific and are loaded after the base editor styles, so the `.bn-mantine`
+   segment is intentional here. */
+.outline-panel .bn-mantine .bn-suggestion-menu {
+  width: 326px;
+  max-width: min(350px, calc(100vw - 24px));
+  max-height: inherit;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border: 1px solid rgba(55, 53, 47, 0.12);
+  border-radius: 8px;
+  background: #fff;
+  color: rgba(55, 53, 47, 0.86);
+  box-shadow: 0 8px 24px rgba(15, 15, 15, 0.12), 0 2px 5px rgba(15, 15, 15, 0.08);
+}
+
+.outline-panel .bn-mantine .bn-suggestion-menu-label {
+  min-height: 25px;
+  padding: 4px 8px 3px;
+  color: #8b8a85;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.outline-panel .bn-mantine .bn-suggestion-menu-item {
+  min-height: 32px;
+  height: 32px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  color: rgba(55, 53, 47, 0.86);
+  cursor: pointer;
+}
+
+.outline-panel .bn-mantine .bn-suggestion-menu-item[aria-selected="true"],
+.outline-panel .bn-mantine .bn-suggestion-menu-item:hover {
+  background: rgba(55, 53, 47, 0.08);
+}
+
+.outline-panel .bn-mantine .bn-mt-suggestion-menu-item-section[data-position="left"] {
+  width: 24px;
+  height: 24px;
+  margin-inline-end: 8px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(55, 53, 47, 0.72);
+}
+
+.outline-panel .bn-mantine .bn-mt-suggestion-menu-item-section[data-position="left"] svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.1;
+}
+
+.outline-panel .bn-mantine .bn-mt-suggestion-menu-item-body {
+  min-width: 0;
+  padding-right: 0;
+}
+
+.outline-panel .bn-mantine .bn-mt-suggestion-menu-item-title {
+  overflow: hidden;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outline-panel .bn-mantine .bn-mt-suggestion-menu-item-subtitle {
+  display: none;
+}
+
+.outline-panel .bn-mantine .bn-mt-suggestion-menu-item-section[data-position="right"] {
+  margin-inline-start: 8px;
+  color: #aaa9a5;
+}
+
+.outline-panel .bn-mantine .bn-mt-suggestion-menu-item-section[data-position="right"] .mantine-Badge-root {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 18px;
 }
 
 .outline-panel:is(
@@ -1039,8 +1167,8 @@ textarea {
   display: block;
 }
 
-/* Keep the root title visually distinct while restoring BlockNote's normal
-   placeholders for every other block. */
+/* Keep the root title visually distinct while showing a quiet placeholder when it
+   is empty. The placeholder is not document content, so typing replaces nothing. */
 .outline-panel
   .bn-editor
   > .bn-block-group
@@ -1048,6 +1176,9 @@ textarea {
   > .bn-block
   > .bn-block-content:has(.ProseMirror-trailingBreak:only-child)::after {
   content: "无标题" !important;
+  color: var(--zhijian-hint) !important;
+  font-style: italic;
+  font-weight: 700;
 }
 
 /* One grey for every hint, in both views: BlockNote colours its placeholders from
@@ -1168,7 +1299,8 @@ textarea {
   /* x of the line, read from the left edge of the row it guides: 2.5px in from the
      row's own edge, one 24px indent to the left. Both halves and the eraser below
      share it, so the whole line stands in one column. */
-  --zhijian-guide-indent: 24px;
+  --zhijian-guide-step: 24px;
+  --zhijian-guide-indent: var(--zhijian-guide-step);
   --zhijian-guide-x: calc(2.5px - var(--zhijian-guide-indent));
 }
 
@@ -1255,7 +1387,7 @@ textarea {
   position: relative;
   min-width: 48px;
   padding-right: 10px;
-  gap: calc(var(--zhijian-guide-indent) - 20px);
+  gap: calc(var(--zhijian-guide-step) - 20px);
   justify-content: flex-end;
 }
 
@@ -1289,6 +1421,9 @@ textarea {
   border-radius: 50%;
   background: transparent;
   color: var(--zhijian-gutter-icon);
+  /* The guide line is positioned from the content edge's half-pixel origin;
+     align the two 20px controls to that same column instead of the flex edge. */
+  transform: translateX(-1px);
 }
 
 /* The indent guide runs straight through the chevron's slot, so each gutter control
@@ -1331,7 +1466,9 @@ textarea {
 .outline-panel .bn-side-menu [draggable="true"] {
   position: absolute;
   top: 3px;
-  left: calc(100% - 8px);
+  /* The persistent marker is 6px wide, so its centre is one pixel left of the
+     old 8px drag-dot position. Keep the hit area centred on that marker. */
+  left: calc(100% - 9px);
   box-sizing: border-box;
   width: 24px;
   min-width: 24px;
@@ -1354,13 +1491,22 @@ textarea {
 }
 
 .outline-panel .bn-side-menu .outline-focus-dot {
-  display: block;
-  flex: none;
+  display: none;
+}
+
+/* The content marker is the only resting dot. Keep the draggable button's
+   transparent hit area and put its hover halo on a pseudo-element so showing
+   the side menu cannot introduce a second visible dot in the same row. */
+.outline-panel .bn-side-menu .outline-focus-drag-handle::before {
+  content: "";
+  position: absolute;
+  top: 9px;
+  left: 9px;
   width: 6px;
   height: 6px;
-  margin: 0;
   border-radius: 50%;
-  background: #686970;
+  background: transparent;
+  transition: box-shadow 120ms ease;
 }
 
 /* The collapse toggle sits in the gutter's second slot, between the add button and
@@ -1571,20 +1717,26 @@ textarea {
 }
 
 .outline-emoji-picker {
-  position: absolute;
-  top: 76px;
-  left: calc(100% + 6px);
-  z-index: 1;
+  position: fixed;
+  z-index: 70;
 }
 
 .emoji-picker-popover {
   width: min(352px, calc(100vw - 32px));
-  min-height: 435px;
+  min-height: 0;
+  height: min(435px, calc(100vh - 16px));
   overflow: hidden;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
   box-shadow: var(--shadow-popover);
+}
+
+.outline-emoji-picker .emoji-picker-popover em-emoji-picker {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 .emoji-picker-loading {
@@ -1856,9 +2008,9 @@ textarea {
 
 /* Keep the original round halo on the 6px marker rather than on the 24px hit area.
    The button stays transparent, so the shadow keeps its previous size and shape. */
-.outline-panel .bn-side-menu .outline-focus-drag-handle:hover .outline-focus-dot,
-.outline-panel .bn-side-menu .outline-focus-drag-handle:focus-visible .outline-focus-dot,
-.outline-panel .bn-side-menu .outline-focus-drag-handle:active .outline-focus-dot {
+.outline-panel .bn-side-menu .outline-focus-drag-handle:hover::before,
+.outline-panel .bn-side-menu .outline-focus-drag-handle:focus-visible::before,
+.outline-panel .bn-side-menu .outline-focus-drag-handle:active::before {
   box-shadow:
     0 0 0 7px rgba(104, 105, 112, 0.2),
     0 0 14px 4px rgba(66, 68, 75, 0.32);

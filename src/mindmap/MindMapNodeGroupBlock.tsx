@@ -54,6 +54,8 @@ interface MindMapNodeContentProps {
   onGeometryChange: (nodeId: string) => void;
   focusRequest: { nodeId: string; focusBlockId: string; requestId: number } | null;
   onFocusRequestHandled: (requestId: number) => void;
+  initialTitleFocusRequestId?: number | null;
+  onInitialTitleFocusHandled?: (requestId: number) => void;
 }
 
 export function MindMapNodeContent(props: MindMapNodeContentProps) {
@@ -84,6 +86,8 @@ function MindMapNodeEditor({
   onTextSelectionChange,
   focusRequest,
   onFocusRequestHandled,
+  initialTitleFocusRequestId = null,
+  onInitialTitleFocusHandled,
 }: MindMapNodeContentProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -153,7 +157,7 @@ function MindMapNodeEditor({
     // when the block list changes — deleting a quote, say — and refocusing then
     // would yank the caret away from wherever the user is actually typing, back
     // to the coordinates of the click that opened the editor in the first place.
-    const intent = [activeRequest?.requestId ?? "", focusBlockId ?? "", focusPoint ? `${focusPoint.x},${focusPoint.y}` : "", focusTableCell ? `${focusTableCell.row},${focusTableCell.column}` : ""].join("|");
+    const intent = [activeRequest?.requestId ?? "", focusBlockId ?? "", focusPoint ? `${focusPoint.x},${focusPoint.y}` : "", focusTableCell ? `${focusTableCell.row},${focusTableCell.column}` : "", initialTitleFocusRequestId ?? ""].join("|");
     if (appliedFocusIntent.current === intent) return;
     const requestedBlockId = resolveMindMapFocusBlockId(
       node.id,
@@ -167,8 +171,21 @@ function MindMapNodeEditor({
       // hands this component a fresh `onFocusRequestHandled` and re-runs the
       // effect — latching early left the intent marked as done and the caret
       // never placed at all.
-      appliedFocusIntent.current = intent;
       try {
+        if (initialTitleFocusRequestId !== null) {
+          editor.setTextCursorPosition(node.id, "start");
+          const from = editor.prosemirrorState.selection.from;
+          editor.setTextCursorPosition(node.id, "end");
+          const to = editor.prosemirrorState.selection.from;
+          if (from !== to) {
+            editor._tiptapEditor.commands.setTextSelection({ from, to });
+          }
+          editor.focus();
+          appliedFocusIntent.current = intent;
+          onInitialTitleFocusHandled?.(initialTitleFocusRequestId);
+          return;
+        }
+        appliedFocusIntent.current = intent;
         // A click or a double click already told us where the caret belongs — in
         // the body text or inside a quote — and the editor did not exist yet when
         // that event fired, so the coordinates are resolved here rather than at the
@@ -207,7 +224,7 @@ function MindMapNodeEditor({
     };
     frame = window.requestAnimationFrame(() => place(0));
     return () => window.cancelAnimationFrame(frame);
-  }, [blockIds, editor, focusBlockId, focusPoint, focusRequest, focusTableCell, node.id, onFocusRequestHandled]);
+  }, [blockIds, editor, focusBlockId, focusPoint, focusRequest, focusTableCell, initialTitleFocusRequestId, node.id, onFocusRequestHandled, onInitialTitleFocusHandled]);
 
   useEffect(() => {
     if (!focusPrimaryAfterBlockDelete.current) return;

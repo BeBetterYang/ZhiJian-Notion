@@ -65,6 +65,8 @@ interface MindMapEditorProps {
    */
   insertTableRequest?: { nodeId: string; requestId: number } | null;
   onFocusRequestHandled: (requestId: number) => void;
+  initialTitleFocusRequestId?: number | null;
+  onInitialTitleFocusHandled?: (requestId: number) => void;
   searchQuery?: string;
   visibleNodeIds?: Set<string> | null;
   /** 进入当前主题: the node the map is drawn from, standing in as its root. */
@@ -90,7 +92,7 @@ export interface MindMapTextSelection {
   to: number;
 }
 
-export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelectedNodeIdsChange, onSelectionActiveChange, onTextSelectionChange, onNodeToolbarActiveChange, onFocusNode, onExitFocus, selectedNodeId, toolbarTarget, focusRequest, focusNodeRequest = null, insertTableRequest = null, onFocusRequestHandled, searchQuery = "", visibleNodeIds = null, zoomedNodeId = null, initialViewport, onViewportChange, initialDirection = MindElixir.RIGHT, onDirectionChange, onExportImageReady, mindMapDefaults, onMindMapDefaultsChange }: MindMapEditorProps) {
+export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelectedNodeIdsChange, onSelectionActiveChange, onTextSelectionChange, onNodeToolbarActiveChange, onFocusNode, onExitFocus, selectedNodeId, toolbarTarget, focusRequest, focusNodeRequest = null, insertTableRequest = null, onFocusRequestHandled, initialTitleFocusRequestId = null, onInitialTitleFocusHandled, searchQuery = "", visibleNodeIds = null, zoomedNodeId = null, initialViewport, onViewportChange, initialDirection = MindElixir.RIGHT, onDirectionChange, onExportImageReady, mindMapDefaults, onMindMapDefaultsChange }: MindMapEditorProps) {
   const tree = useTree(store);
   const imageAssetRevision = useImageAssetRevision();
   const activeTheme = resolveMindMapTheme(tree.mindMap?.theme, tree.mindMap?.canvas?.background);
@@ -146,6 +148,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
   const layoutCenterFrame = useRef(0);
   const centerRootAfterLayout = useRef(false);
   const editingShellRef = useRef<string | null>(null);
+  const startedInitialTitleFocusRequestId = useRef<number | null>(null);
   const floatingFrame = useRef<HTMLElement | null>(null);
   const floatingNodeId = useRef<string | null>(null);
   const floatingFrameSize = useRef<MindMapMeasuredSize | null>(null);
@@ -604,6 +607,22 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
               if (projectionOptionsRef.current.rootNodeId) onExitFocusRef.current?.();
             },
           },
+          {
+            name: "删除当前节点",
+            onclick: (event) => {
+              dismissContextMenu(event);
+              const nodeId = mindRef.current?.currentNode?.nodeObj.id ?? selectedNodeRef.current;
+              if (!nodeId || nodeId === treeRef.current.rootId || readOnlyRef.current) return;
+              storeRef.current.deleteNodeOnly(nodeId);
+              mindRef.current?.clearSelection();
+              setSelectedNodeIds([]);
+              onSelectedNodeIdsRef.current([]);
+              lastSelectedNodeId.current = null;
+              selectedNodeRef.current = null;
+              onSelectRef.current(null);
+              onActiveRef.current(false);
+            },
+          },
         ],
       },
       toolBar: false,
@@ -633,13 +652,28 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
       const item = containerRef.current?.querySelector<HTMLElement>(
         '.context-menu .menu-list li[id="专注此节点"]',
       );
-      if (!item) return;
+      const deleteItem = containerRef.current?.querySelector<HTMLElement>(
+        '.context-menu .menu-list li[id="删除当前节点"]',
+      );
+      const removeItem = containerRef.current?.querySelector<HTMLElement>(
+        '.context-menu .menu-list li[id="cm-remove_child"]',
+      );
+      if (deleteItem && removeItem) {
+        removeItem.parentElement?.insertBefore(deleteItem, removeItem);
+      }
+      if (removeItem) {
+        const label = removeItem.querySelector("span");
+        if (label) label.textContent = "删除当前及子节点";
+      }
       const nodeId = mind.currentNode?.nodeObj.id ?? selectedNodeRef.current;
-      item.hidden = !canFocusMindMapNode(
+      if (item) item.hidden = !canFocusMindMapNode(
         nodeId,
         projectionOptionsRef.current.rootNodeId,
         treeRef.current.rootId,
       );
+      if (deleteItem) {
+        deleteItem.hidden = nodeId === treeRef.current.rootId || readOnlyRef.current;
+      }
     });
     correctMindMapSummaryOffsets(mind, initialTree.current);
     if (initialViewportRef.current && !projectionOptionsRef.current.rootNodeId) {
@@ -873,6 +907,18 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
     applyEditingTarget({ nodeId, focusBlockId, focusPoint, focusTableCell });
   }, [applyEditingTarget, readOnly, selectMindElixirNode]);
   beginNodeEditRef.current = beginNodeEdit;
+
+  useEffect(() => {
+    if (
+      readOnly ||
+      initialTitleFocusRequestId === null ||
+      startedInitialTitleFocusRequestId.current === initialTitleFocusRequestId ||
+      !mindRef.current ||
+      !contentTargets.some(({ id }) => id === tree.rootId)
+    ) return;
+    startedInitialTitleFocusRequestId.current = initialTitleFocusRequestId;
+    beginNodeEdit(tree.rootId);
+  }, [beginNodeEdit, contentTargets, initialTitleFocusRequestId, readOnly, tree.rootId]);
 
   /**
    * The press behind an edit mind-elixir is asking for, when there is one.
@@ -1704,7 +1750,7 @@ export function MindMapEditor({ readOnly = false, store, onSelectNode, onSelecte
           roundedFrames,
         });
         return createPortal(
-          <MindMapNodeContent node={node} editorTextColor={nodeVisual.color ?? activeTheme.child.text} store={store} selected={selectedNodeIds.includes(id)} editing={editingTarget?.nodeId === id} toolbarTarget={toolbarTarget} onSelect={selectTreeNode} onFocusNode={selectMindElixirNode} onFinishEdit={finishNodeEdit} onToolbarActiveChange={reportNodeToolbar} onTextSelectionChange={reportTextSelection} focusBlockId={editingTarget?.nodeId === id ? editingTarget.focusBlockId : undefined} focusPoint={editingTarget?.nodeId === id ? editingTarget.focusPoint : undefined} focusTableCell={editingTarget?.nodeId === id ? editingTarget.focusTableCell : undefined} onGeometryChange={scheduleGeometryMeasure} focusRequest={focusRequest} onFocusRequestHandled={onFocusRequestHandled} />,
+          <MindMapNodeContent node={node} editorTextColor={nodeVisual.color ?? activeTheme.child.text} store={store} selected={selectedNodeIds.includes(id)} editing={editingTarget?.nodeId === id} toolbarTarget={toolbarTarget} onSelect={selectTreeNode} onFocusNode={selectMindElixirNode} onFinishEdit={finishNodeEdit} onToolbarActiveChange={reportNodeToolbar} onTextSelectionChange={reportTextSelection} focusBlockId={editingTarget?.nodeId === id ? editingTarget.focusBlockId : undefined} focusPoint={editingTarget?.nodeId === id ? editingTarget.focusPoint : undefined} focusTableCell={editingTarget?.nodeId === id ? editingTarget.focusTableCell : undefined} onGeometryChange={scheduleGeometryMeasure} focusRequest={focusRequest} onFocusRequestHandled={onFocusRequestHandled} initialTitleFocusRequestId={id === tree.rootId && editingTarget?.nodeId === id ? initialTitleFocusRequestId : null} onInitialTitleFocusHandled={onInitialTitleFocusHandled} />,
           host,
           id,
         );

@@ -29,9 +29,10 @@ const focusBreadcrumbMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../App", () => ({
-  default: ({ store, defaultView, onShare, onSharePrefetch, favorite, onToggleFavorite, onDeleteDocument, onFocusBreadcrumbChange }: {
+  default: ({ store, defaultView, initialTitleFocusRequestId, onShare, onSharePrefetch, favorite, onToggleFavorite, onDeleteDocument, onFocusBreadcrumbChange }: {
     store: TreeStore;
     defaultView?: "outline" | "mindmap";
+    initialTitleFocusRequestId?: number | null;
     onShare?: () => void;
     onSharePrefetch?: () => void;
     favorite?: boolean;
@@ -49,6 +50,7 @@ vi.mock("../App", () => ({
         data-theme={tree.mindMap?.theme?.id ?? ""}
         data-layout={tree.mindMap?.layout?.type ?? ""}
         data-default-view={defaultView ?? ""}
+        data-initial-title-focus-request={initialTitleFocusRequestId ?? ""}
       >
         {tree.nodes[tree.rootId]?.content.text}
         {onShare ? <button type="button" onPointerEnter={onSharePrefetch} onFocus={onSharePrefetch} onClick={onShare}>分享</button> : null}
@@ -669,8 +671,11 @@ describe("文档服务器记录的生命周期", () => {
     fireEvent.click(screen.getByRole("button", { name: "新增文档" }));
 
     await waitFor(() => expect(serverMocks.saveWorkspaceDocument).toHaveBeenCalledTimes(1));
-    const [, fileId, , revision] = serverMocks.saveWorkspaceDocument.mock.calls[0]!;
+    await waitFor(() => expect(screen.getByTestId("document-editor")).toHaveAttribute("data-initial-title-focus-request"));
+    expect(sidebar().querySelector(".tree-rename-input")).not.toBeInTheDocument();
+    const [, fileId, createdTree, revision] = serverMocks.saveWorkspaceDocument.mock.calls[0]!;
     expect(fileId).not.toBe("file-1");
+    expect(createdTree.nodes[createdTree.rootId].content.text).toBe("");
     expect(revision).toBe(0);
   });
 

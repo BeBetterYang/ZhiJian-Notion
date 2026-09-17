@@ -411,6 +411,32 @@ export class TreeStore {
     });
   }
 
+  deleteNodeOnly(id: string) {
+    if (id === this.tree.rootId) {
+      return;
+    }
+    this.commit((draft) => {
+      const target = this.requireDraftNode(draft, id);
+      if (!target.parentId) {
+        return;
+      }
+      const parent = this.requireDraftNode(draft, target.parentId);
+      const index = parent.children.indexOf(id);
+      if (index < 0) {
+        return;
+      }
+      const childIds = [...target.children];
+      parent.children.splice(index, 1, ...childIds);
+      childIds.forEach((childId) => {
+        const child = this.requireDraftNode(draft, childId);
+        child.parentId = parent.id;
+        draft.nodes[childId] = touchNode(child);
+      });
+      draft.nodes[parent.id] = touchNode(parent);
+      delete draft.nodes[id];
+    });
+  }
+
   moveNode(id: string, newParentId: string, index?: number) {
     if (id === this.tree.rootId || id === newParentId) {
       return;

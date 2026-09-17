@@ -62,7 +62,7 @@ export function zoomedOutlineCss(tree: ZhiJianTree, zoomedNodeId: string | null)
     // `!important` 是因为画那条线的规则（`styles.css` 里 `:has(> .bn-block >
     // .bn-block-group)` 那条）选择器更长，光靠后加载压不过它。
     `.outline-panel ${zoomed} > .bn-block > .bn-block-content { background-image: none !important; }`,
-    `.outline-panel ${zoomed} > .bn-block > .bn-block-content:has(.ProseMirror-trailingBreak:only-child)::after { content: "无标题" !important; }`,
+    `.outline-panel ${zoomed} > .bn-block > .bn-block-content:has(.ProseMirror-trailingBreak:only-child)::after { content: "无标题" !important; color: var(--zhijian-hint) !important; font-style: italic; font-weight: 700; }`,
     `.outline-panel ${zoomed} > .bn-block > .bn-block-group { margin-left: 0; margin-top: 16px; }`,
     `.outline-panel ${zoomed} > .bn-block > .bn-block-group > .bn-block-outer::before { display: none; }`,
   );

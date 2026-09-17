@@ -1,7 +1,7 @@
 // ZhiJianTree only knows text / heading / todo / table nodes plus quote and image
 // attachments, so anything else the default slash menu offers cannot survive a round
-// trip: a video, audio or file block comes back as an empty node, a code block loses
-// its code, and 表情符号 opens a ":" picker this editor never mounts.
+// trip: a video, audio or file block comes back as an empty node and a code block loses
+// its code. The built-in emoji picker remains available through the slash menu.
 const removedItems = new Set([
   "heading_4",
   "heading_5",
@@ -17,7 +17,6 @@ const removedItems = new Set([
   "video",
   "audio",
   "file",
-  "emoji",
 ]);
 
 export function isSupportedSlashItemKey(key: string) {

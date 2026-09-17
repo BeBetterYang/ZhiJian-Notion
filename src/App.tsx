@@ -13,6 +13,7 @@ import {
   FileText,
   Image,
   ListTree,
+  MoveHorizontal,
   Network,
   RotateCcw,
   RotateCw,
@@ -67,6 +68,8 @@ interface AppProps {
     query: string;
     requestId: number;
   } | null;
+  initialTitleFocusRequestId?: number | null;
+  onInitialTitleFocusHandled?: (requestId: number) => void;
   onShare?: () => void;
   onSharePrefetch?: () => void;
   /**
@@ -112,6 +115,8 @@ export default function App({
   viewStateStorageKey,
   defaultView = "outline",
   focusNodeRequest = null,
+  initialTitleFocusRequestId = null,
+  onInitialTitleFocusHandled,
   onShare,
   onSharePrefetch,
   onImportDocuments,
@@ -142,12 +147,14 @@ export default function App({
   const [mindMapSelectedNodeIds, setMindMapSelectedNodeIds] = useState<string[]>([]);
   const [selectionActive, setSelectionActive] = useState(false);
   const [activeView, setActiveView] = useState<"outline" | "mindmap">(initialViewState?.activeView ?? defaultView);
+  const [outlineFullWidth, setOutlineFullWidth] = useState(initialViewState?.outlineFullWidth ?? false);
   // Set while the node being edited in the map is formatting one of its own quote or
   // picture blocks, which it does through its own toolbar in the shared host.
   const [mindMapNodeToolbarActive, setMindMapNodeToolbarActive] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
   const mindMapExportImageRef = useRef<(() => Promise<CapturedImage | null>) | null>(null);
   const handledFocusRequestIdRef = useRef<number | null>(null);
+  const handledInitialTitleFocusRequestIdRef = useRef<number | null>(null);
   const mindMapFocusNodeRequestIdRef = useRef(0);
   const searchResultHighlightTimerRef = useRef<number | null>(null);
   const toolbarMoreRef = useRef<HTMLDivElement>(null);
@@ -227,6 +234,24 @@ export default function App({
     setMindMapTextSelection(null);
     persistViewStatePatch({ activeView: view });
   }, [persistViewStatePatch]);
+
+  const toggleOutlineFullWidth = useCallback(() => {
+    setOutlineFullWidth((current) => {
+      const next = !current;
+      persistViewStatePatch({ outlineFullWidth: next });
+      return next;
+    });
+    setToolbarMoreOpen(false);
+  }, [persistViewStatePatch]);
+
+  const handleInitialTitleFocusHandled = useCallback((requestId: number) => {
+    if (handledInitialTitleFocusRequestIdRef.current === requestId) return;
+    handledInitialTitleFocusRequestIdRef.current = requestId;
+    onInitialTitleFocusHandled?.(requestId);
+  }, [onInitialTitleFocusHandled]);
+  const shouldFocusInitialTitle =
+    initialTitleFocusRequestId !== null &&
+    handledInitialTitleFocusRequestIdRef.current !== initialTitleFocusRequestId;
 
   const preloadAlternateView = useCallback(() => {
     void preloadEditorView(activeView === "outline" ? "mindmap" : "outline").catch(() => undefined);
@@ -660,6 +685,18 @@ export default function App({
                 </div>
               ) : null}
             </div>
+            {activeView === "outline" ? (
+              <button
+                type="button"
+                role="menuitem"
+                aria-pressed={outlineFullWidth}
+                onClick={toggleOutlineFullWidth}
+              >
+                <MoveHorizontal />
+                <span>全宽</span>
+                <span className={`toolbar-menu-switch${outlineFullWidth ? " is-active" : ""}`} aria-hidden="true"><span /></span>
+              </button>
+            ) : null}
             {onToggleFavorite || onDeleteDocument ? <div className="menu-divider" /> : null}
             {!readOnly && onDuplicateDocument ? (
               <button type="button" role="menuitem" onClick={() => runFromMenu(onDuplicateDocument)}>
@@ -752,6 +789,9 @@ export default function App({
               zoomedNodeId={zoomedNodeId}
               initialScrollTop={initialViewState?.outlineScrollTop}
               onScrollPositionChange={updateOutlineScroll}
+              fullWidth={outlineFullWidth}
+              initialTitleFocusRequestId={activeView === "outline" && shouldFocusInitialTitle ? initialTitleFocusRequestId : null}
+              onInitialTitleFocusHandled={handleInitialTitleFocusHandled}
               onFocusNode={(nodeId) => {
                 if (nodeId !== tree.rootId) {
                   setZoomedNodeId(nodeId);
@@ -810,6 +850,8 @@ export default function App({
                   zoomedNodeId={zoomedNodeId}
                   initialViewport={mindMapViewportRef.current}
                   onViewportChange={updateMindMapViewport}
+                  initialTitleFocusRequestId={activeView === "mindmap" && shouldFocusInitialTitle ? initialTitleFocusRequestId : null}
+                  onInitialTitleFocusHandled={handleInitialTitleFocusHandled}
                   initialDirection={initialViewState?.mindMapDirection}
                   onDirectionChange={(mindMapDirection) => persistViewStatePatch({ mindMapDirection })}
                   onExportImageReady={(exportImage) => {

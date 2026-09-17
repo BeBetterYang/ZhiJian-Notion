@@ -7,6 +7,21 @@ import {
   useBlockNoteEditor,
   type DefaultReactSuggestionItem,
 } from "@blocknote/react";
+import {
+  FileText,
+  Heading1,
+  Heading2,
+  Heading3,
+  Image,
+  List,
+  ListOrdered,
+  Smile,
+  SquareCheck,
+  Table2,
+  Text,
+  TextQuote,
+  type LucideIcon,
+} from "lucide-react";
 import { insertNodeAttachmentBlocks } from "../shared/attachmentInsertion";
 import { isSupportedSlashItemKey } from "./slashMenuItems";
 
@@ -20,12 +35,38 @@ export function ZhiJianSlashMenu() {
         filterSuggestionItems(
           getDefaultReactSlashMenuItems(editor)
             .filter((item) => isSupportedSlashItemKey((item as typeof item & { key: string }).key))
-            .map((item) => withAttachmentBodyGuard(editor, item)),
+            .map((item) => withZhiJianMenuPresentation(withAttachmentBodyGuard(editor, item))),
           query,
         )
       }
     />
   );
+}
+
+const slashMenuIcons: Record<string, LucideIcon> = {
+  paragraph: Text,
+  heading: Heading1,
+  heading_2: Heading2,
+  heading_3: Heading3,
+  quote: TextQuote,
+  check_list: SquareCheck,
+  numbered_list: ListOrdered,
+  bullet_list: List,
+  table: Table2,
+  image: Image,
+  emoji: Smile,
+};
+
+function withZhiJianMenuPresentation(item: DefaultReactSuggestionItem): DefaultReactSuggestionItem {
+  const key = (item as typeof item & { key?: string }).key;
+  const Icon = key ? slashMenuIcons[key] : undefined;
+
+  return {
+    ...item,
+    group: undefined,
+    size: "small",
+    icon: Icon ? <Icon aria-hidden="true" /> : <FileText aria-hidden="true" />,
+  };
 }
 
 // The built-in image/quote slash items call insertOrUpdateBlock, which *replaces*

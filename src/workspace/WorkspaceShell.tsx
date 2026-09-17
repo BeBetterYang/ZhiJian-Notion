@@ -170,6 +170,10 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     query: string;
     requestId: number;
   } | null>(null);
+  const [documentTitleFocusRequest, setDocumentTitleFocusRequest] = useState<{
+    fileId: string;
+    requestId: number;
+  } | null>(null);
   const [expandedQuickSections, setExpandedQuickSections] = useState(() => new Set<QuickSection>(["documents"]));
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => loadSidebarCollapsed());
@@ -188,6 +192,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const searchRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const selectCreatedNameOnFocus = useRef(false);
+  const documentTitleFocusRequestId = useRef(0);
   const peekCloseTimer = useRef<number | null>(null);
   const documentStores = useRef(new Map<string, TreeStore>());
   const documentRevisions = useRef(new Map<string, number>());
@@ -904,17 +909,22 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     setNodes(result.nodes);
     if (created.parentId) applyExpandedFolders(new Set(expandedFolders).add(created.parentId));
     if (created.type === "file") {
-      createAndPersistDocument(created.id, createWorkspaceDocument(created.title, workspacePreferences.mindMapDefaults));
+      createAndPersistDocument(created.id, createWorkspaceDocument("", workspacePreferences.mindMapDefaults));
       setActiveFileId(created.id);
       setSelectedMenuKey(`tree:${created.id}`);
       setSelectedFolderId(null);
+      setRenamingId(null);
+      setRenameValue("");
+      selectCreatedNameOnFocus.current = false;
+      documentTitleFocusRequestId.current += 1;
+      setDocumentTitleFocusRequest({ fileId: created.id, requestId: documentTitleFocusRequestId.current });
     } else {
       setSelectedMenuKey(`tree:${created.id}`);
       setSelectedFolderId(created.id);
+      setRenamingId(created.id);
+      setRenameValue(created.title);
+      selectCreatedNameOnFocus.current = true;
     }
-    setRenamingId(created.id);
-    setRenameValue(created.title);
-    selectCreatedNameOnFocus.current = true;
   };
 
   /**
@@ -1442,6 +1452,16 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               mindMapDefaults={workspacePreferences.mindMapDefaults}
               onMindMapDefaultsChange={updateMindMapDefaults}
               defaultView={workspacePreferences.defaultDocumentView}
+              initialTitleFocusRequestId={
+                documentTitleFocusRequest?.fileId === activeFile.id
+                  ? documentTitleFocusRequest.requestId
+                  : null
+              }
+              onInitialTitleFocusHandled={(requestId) => {
+                setDocumentTitleFocusRequest((current) =>
+                  current?.fileId === activeFile.id && current.requestId === requestId ? null : current,
+                );
+              }}
               focusNodeRequest={
                 documentFocusRequest?.fileId === activeFile.id
                   ? documentFocusRequest
