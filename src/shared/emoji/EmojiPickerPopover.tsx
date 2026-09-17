@@ -1,10 +1,14 @@
 import { lazy, Suspense, useEffect, useRef } from "react";
+import zhI18n from "@emoji-mart/data/i18n/zh.json";
+import type { EmojiMartData } from "@emoji-mart/data";
+import { withChineseEmojiSearch } from "./emojiSearchData";
 
 const loadEmojiPicker = async () => {
   const [{ Picker }, { default: data }] = await Promise.all([
     import("emoji-mart"),
     import("@emoji-mart/data"),
   ]);
+  const localizedData = withChineseEmojiSearch(data as unknown as EmojiMartData);
   return function LoadedEmojiPicker({ onEmojiSelect }: { onEmojiSelect: (emoji: { native?: string }) => void }) {
     const pickerRootRef = useRef<HTMLDivElement>(null);
     const onEmojiSelectRef = useRef(onEmojiSelect);
@@ -13,7 +17,9 @@ const loadEmojiPicker = async () => {
     useEffect(() => {
       if (!pickerRootRef.current) return;
       const picker = new Picker({
-        data,
+        data: localizedData,
+        i18n: zhI18n,
+        locale: "zh",
         onEmojiSelect: (emoji: { native?: string }) => onEmojiSelectRef.current(emoji),
         theme: "light",
         previewPosition: "none",

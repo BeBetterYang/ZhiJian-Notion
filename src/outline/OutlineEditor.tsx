@@ -22,12 +22,12 @@ import {
   Highlighter,
   Image,
   Italic,
-  ListChecks,
   MoreHorizontal,
-  Pencil,
   Smile,
+  SquareCheck,
   Strikethrough,
   Table2,
+  TextQuote,
   Trash2,
   Underline,
 } from "lucide-react";
@@ -842,7 +842,7 @@ function OutlineRowMenuPortal() {
             <ChevronRight className="outline-row-menu-arrow" />
           </button>
           <button className="outline-row-menu-action" type="button" onClick={addDescription}>
-            <Pencil />
+            <TextQuote />
             <span>编辑引用</span>
           </button>
           <button className="outline-row-menu-action" type="button" onClick={() => imageInputRef.current?.click()}>
@@ -850,7 +850,7 @@ function OutlineRowMenuPortal() {
             <span>添加图片</span>
           </button>
           <button className="outline-row-menu-action" type="button" onClick={() => applyShortcut("toggle-todo")}>
-            <ListChecks />
+            <SquareCheck />
             <span>添加待办</span>
           </button>
           <button className="outline-row-menu-action" type="button" onClick={() => { setPalette(null); setEmojiPickerOpen((open) => !open); }}>
