@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { createPortal } from "react-dom";
 import {
   Camera,
+  Check,
   ChevronDown,
   ChevronRight,
   ChevronsRight,
@@ -31,7 +32,7 @@ import {
   X,
 } from "lucide-react";
 import App, { type FocusBreadcrumbItem, type FocusBreadcrumbState } from "../App";
-import { richTextToPlainText, cloneTree, plainTextContent, type ZhiJianMindMapDefaults, type ZhiJianNode, type ZhiJianTree } from "../core/tree";
+import { latestTreeUpdatedAt, richTextToPlainText, cloneTree, plainTextContent, type ZhiJianMindMapDefaults, type ZhiJianNode, type ZhiJianTree } from "../core/tree";
 import { TreeStore } from "../core/treeStore";
 import type { WorkspaceSession } from "./auth";
 import {
@@ -142,6 +143,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const [shareQrCode, setShareQrCode] = useState("");
   const [settingsView, setSettingsView] = useState<SettingsView>("account");
   const [settingsEdit, setSettingsEdit] = useState<SettingsEdit>(null);
+  const [settingsEditValue, setSettingsEditValue] = useState("");
+  const [defaultViewMenuOpen, setDefaultViewMenuOpen] = useState(false);
   const [assetCleanup, setAssetCleanup] = useState<{ busy: boolean; message: string; failed: boolean }>({ busy: false, message: "", failed: false });
   const [headerToolbarTarget, setHeaderToolbarTarget] = useState<HTMLDivElement | null>(null);
   const [focusBreadcrumbState, setFocusBreadcrumbState] = useState<FocusBreadcrumbState | null>(null);
@@ -174,6 +177,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const [sidebarWidth, setSidebarWidth] = useState(240);
   const [accountOpen, setAccountOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const [documentsCreateMenuOpen, setDocumentsCreateMenuOpen] = useState(false);
   const [menuNodeId, setMenuNodeId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<WorkspaceNode | null>(null);
   const [moveMenuOpen, setMoveMenuOpen] = useState(false);
@@ -376,14 +380,18 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   }, []);
 
   const enterSearchMode = useCallback(() => {
+    const enteringSearchMode = !searchMode;
     setSearchMode(true);
-    setCreateMenuOpen(false);
-    if (sidebarCollapsed) {
+    if (enteringSearchMode) {
+      setCreateMenuOpen(false);
+      setDocumentsCreateMenuOpen(false);
+    }
+    if (enteringSearchMode && sidebarCollapsed) {
       setSidebarCollapsed(false);
       setSidebarPeeking(false);
     }
-    window.requestAnimationFrame(() => searchRef.current?.focus());
-  }, [sidebarCollapsed]);
+    if (enteringSearchMode) window.requestAnimationFrame(() => searchRef.current?.focus());
+  }, [searchMode, sidebarCollapsed]);
 
   const closeSearchMode = useCallback(() => {
     rememberSearch(search, setRecentSearches);
@@ -393,8 +401,15 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   }, [search]);
 
   const revealCreateMenu = useCallback(() => {
+    setDocumentsCreateMenuOpen(false);
     setCreateMenuOpen(true);
     window.requestAnimationFrame(() => document.querySelector<HTMLElement>(".create-menu")?.scrollIntoView?.({ block: "nearest" }));
+  }, []);
+
+  const revealDocumentsCreateMenu = useCallback(() => {
+    setCreateMenuOpen(false);
+    setDocumentsCreateMenuOpen(true);
+    window.requestAnimationFrame(() => document.querySelector<HTMLElement>(".sidebar-section-actions .create-menu")?.scrollIntoView?.({ block: "nearest" }));
   }, []);
 
   useEffect(() => {
@@ -614,8 +629,12 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       }
       if (event.key === "Escape") {
         setSettingsOpen(false);
+        setSettingsEdit(null);
+        setSettingsEditValue("");
+        setDefaultViewMenuOpen(false);
         setAccountOpen(false);
         setCreateMenuOpen(false);
+        setDocumentsCreateMenuOpen(false);
         setMenuNodeId(null);
         setMoveMenuOpen(false);
         setSidebarOpen(false);
@@ -632,7 +651,11 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       const target = event.target;
       if (!(target instanceof Element)) return;
       if (!target.closest(".account-wrap")) setAccountOpen(false);
-      if (!target.closest(".create-wrap")) setCreateMenuOpen(false);
+      if (!target.closest(".settings-select")) setDefaultViewMenuOpen(false);
+      if (!target.closest(".create-wrap")) {
+        setCreateMenuOpen(false);
+        setDocumentsCreateMenuOpen(false);
+      }
       if (!target.closest(".sidebar-search-wrap")) setSearchFilterOpen(false);
       if (
         searchMode
@@ -655,11 +678,28 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const openSettings = (view: SettingsView = "account") => {
     setProfileDraft(userProfile);
     setNewPassword("");
+    setSettingsEditValue("");
     setSettingsEdit(null);
+    setDefaultViewMenuOpen(false);
     setSettingsView(view);
     setSettingsOpen(true);
     setAccountOpen(false);
     setAssetCleanup({ busy: false, message: "", failed: false });
+  };
+
+  const openSettingsEdit = (edit: Exclude<SettingsEdit, null>) => {
+    setSettingsEditValue(edit === "email" ? profileDraft.email : newPassword);
+    setSettingsEdit(edit);
+  };
+
+  const confirmSettingsEdit = () => {
+    if (settingsEdit === "email") {
+      setProfileDraft((current) => ({ ...current, email: settingsEditValue }));
+    } else if (settingsEdit === "password") {
+      setNewPassword(settingsEditValue);
+    }
+    setSettingsEdit(null);
+    setSettingsEditValue("");
   };
 
   const runAssetCleanup = async () => {
@@ -857,6 +897,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const createNode = (type: WorkspaceNode["type"], parentId?: string | null) => {
     const targetParent = parentId === undefined ? null : parentId;
     setCreateMenuOpen(false);
+    setDocumentsCreateMenuOpen(false);
     const result = createWorkspaceNode(nodes, type, targetParent);
     const created = result.node;
     if (!created) return;
@@ -884,6 +925,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
    */
   const importDocuments = async (files: File[]) => {
     setCreateMenuOpen(false);
+    setDocumentsCreateMenuOpen(false);
     const { documents: parsed, failedFiles, failedImageCount } = await importMarkdownFiles(files, importMarkdownImage);
     const notices = [
       failedFiles.length ? `${failedFiles.length} 个文件导入失败：${failedFiles.join("、")}` : "",
@@ -1080,6 +1122,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     setSidebarCollapsed(collapsed);
     setSidebarPeeking(false);
     setCreateMenuOpen(false);
+    setDocumentsCreateMenuOpen(false);
     saveSidebarCollapsed(collapsed);
   };
 
@@ -1171,6 +1214,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               onFavorite={() => node.type === "file" && toggleFavorite(node.id)}
               onCopyLink={() => void copyNodeLink(node)}
               onDuplicate={() => duplicateNode(node)}
+              lastEditedAt={node.type === "file" ? latestTreeUpdatedAt(getDocumentStore(documentStores.current, node, workspacePreferences.mindMapDefaults).getSnapshot()) : undefined}
               onDelete={() => requestDeleteNode(node)}
               onOpen={() => window.open(nodeUrl(node), "_blank", "noopener,noreferrer")}
             />
@@ -1296,7 +1340,10 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                     <span>我的文档</span>{expandedQuickSections.has("documents") ? <ChevronDown /> : <ChevronRight />}
                   </button>
                   <span className="sidebar-section-actions">
-                    <button className="tree-action icon-button" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file")} aria-label="在我的文档中新建文档" title="新增文档"><Plus /></button>
+                    <span className="create-wrap">
+                      <button className="tree-action icon-button" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => documentsCreateMenuOpen ? setDocumentsCreateMenuOpen(false) : revealDocumentsCreateMenu()} aria-label="在我的文档中新增" title="新增文档或文件夹" aria-expanded={documentsCreateMenuOpen}><Plus /></button>
+                      {documentsCreateMenuOpen ? <div className="create-menu"><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file")}><FilePlus />新增文档</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("folder")}><FolderPlus />新增文件夹</button></div> : null}
+                    </span>
                   </span>
                 </div>
                 {expandedQuickSections.has("documents") ? <div className="quick-file-list workspace-files-tree">{serverReady ? renderTree(null) : null}</div> : null}
@@ -1387,6 +1434,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               onSharePrefetch={prefetchDocumentShare}
               favorite={activeFile.favorite}
               onToggleFavorite={() => toggleFavorite(activeFile.id)}
+              onDuplicateDocument={() => duplicateNode(activeFile)}
               // 走和侧栏「删除」同一条路：先弹「移到回收站？」，确认了才动，也才进得了回收站。
               onDeleteDocument={() => requestDeleteNode(activeFile)}
               onImportDocuments={(files) => void importDocuments(files)}
@@ -1437,10 +1485,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                   </section>
                   <section className="settings-section">
                     <h3>账号安全</h3>
-                    <div className="settings-rule"><span><strong>邮箱地址</strong><small>{profileDraft.email}</small></span><button type="button" onClick={() => setSettingsEdit((current) => current === "email" ? null : "email")}>修改邮箱</button></div>
-                    {settingsEdit === "email" ? <label className="settings-inline-editor"><span>新邮箱地址</span><input type="email" value={profileDraft.email} onChange={(event) => setProfileDraft((current) => ({ ...current, email: event.target.value }))} autoFocus /></label> : null}
-                    <div className="settings-rule"><span><strong>密码</strong><small>更改用于登录的密码</small></span><button type="button" onClick={() => setSettingsEdit((current) => current === "password" ? null : "password")}>修改密码</button></div>
-                    {settingsEdit === "password" ? <label className="settings-inline-editor"><span>新密码</span><input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="输入新密码" autoFocus /></label> : null}
+                    <div className="settings-rule"><span><strong>邮箱地址</strong><small>{profileDraft.email}</small></span><button type="button" onClick={() => openSettingsEdit("email")}>修改邮箱</button></div>
+                    <div className="settings-rule"><span><strong>密码</strong><small>更改用于登录的密码</small></span><button type="button" onClick={() => openSettingsEdit("password")}>修改密码</button></div>
                   </section>
                   <footer className="settings-actions"><button type="button" onClick={() => setSettingsOpen(false)}>取消</button><button type="button" className="settings-save" onClick={() => void saveAccountSettings()}>保存修改</button></footer>
                 </div>
@@ -1454,26 +1500,41 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                         <strong>默认视图</strong>
                         <small>新建文档先用哪个视图打开。已经切过视图的文档仍按它自己记住的来。</small>
                       </span>
-                      {/* 用原生 radio 拼分段控件：方向键切换、读屏报「单选」都是浏览器自带的，样式全交给 `:has(:checked)`。 */}
-                      <div className="settings-choice" role="radiogroup" aria-label="默认视图">
-                        <label>
-                          <input
-                            type="radio"
-                            name="default-document-view"
-                            checked={(workspacePreferences.defaultDocumentView ?? "outline") === "outline"}
-                            onChange={() => updateDefaultDocumentView("outline")}
-                          />
-                          <span>大纲笔记</span>
-                        </label>
-                        <label>
-                          <input
-                            type="radio"
-                            name="default-document-view"
-                            checked={workspacePreferences.defaultDocumentView === "mindmap"}
-                            onChange={() => updateDefaultDocumentView("mindmap")}
-                          />
-                          <span>思维导图</span>
-                        </label>
+                      <div className="settings-select">
+                        <button
+                          type="button"
+                          className="settings-select-trigger"
+                          aria-haspopup="listbox"
+                          aria-expanded={defaultViewMenuOpen}
+                          aria-label="默认视图"
+                          onClick={() => setDefaultViewMenuOpen((open) => !open)}
+                        >
+                          <span>{workspacePreferences.defaultDocumentView === "mindmap" ? "思维导图" : "大纲笔记"}</span>
+                          <ChevronDown aria-hidden="true" />
+                        </button>
+                        {defaultViewMenuOpen ? (
+                          <div className="settings-select-menu" role="listbox" aria-label="默认视图选项">
+                            {(["outline", "mindmap"] as const).map((view) => {
+                              const selected = (workspacePreferences.defaultDocumentView ?? "outline") === view;
+                              return (
+                                <button
+                                  key={view}
+                                  type="button"
+                                  role="option"
+                                  aria-selected={selected}
+                                  className={selected ? "is-selected" : undefined}
+                                  onClick={() => {
+                                    updateDefaultDocumentView(view);
+                                    setDefaultViewMenuOpen(false);
+                                  }}
+                                >
+                                  <span>{view === "mindmap" ? "思维导图" : "大纲笔记"}</span>
+                                  {selected ? <Check aria-hidden="true" /> : null}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   </section>
@@ -1495,6 +1556,33 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               )}
             </div>
           </section>
+          {settingsEdit ? (
+            <div className="settings-edit-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSettingsEdit(null)}>
+              <section className="settings-edit-modal" role="dialog" aria-modal="true" aria-labelledby="settings-edit-title">
+                <header>
+                  <div>
+                    <h2 id="settings-edit-title">{settingsEdit === "password" ? "修改密码" : "修改邮箱"}</h2>
+                    <p>{settingsEdit === "password" ? "设置一个新的登录密码。" : "更新用于登录枝间的邮箱地址。"}</p>
+                  </div>
+                  <button type="button" className="icon-button" aria-label="关闭" onClick={() => setSettingsEdit(null)}><X /></button>
+                </header>
+                <label className="settings-edit-field">
+                  <span>{settingsEdit === "password" ? "新密码" : "新邮箱地址"}</span>
+                  <input
+                    type={settingsEdit === "password" ? "password" : "email"}
+                    value={settingsEditValue}
+                    onChange={(event) => setSettingsEditValue(event.target.value)}
+                    placeholder={settingsEdit === "password" ? "输入新密码" : "name@example.com"}
+                    autoFocus
+                  />
+                </label>
+                <footer>
+                  <button type="button" onClick={() => setSettingsEdit(null)}>取消</button>
+                  <button type="button" className="primary" onClick={confirmSettingsEdit}>保存</button>
+                </footer>
+              </section>
+            </div>
+          ) : null}
         </div>
       ) : null}
       {shareOpen ? (
@@ -1931,7 +2019,7 @@ function QuickFileSection({ title, source, expanded, files, selectedMenuKey, sto
   );
 }
 
-function NodeMenu({ node, nodes, anchor, moveOpen, onRename, onMoveToggle, onMove, onFavorite, onCopyLink, onDuplicate, onDelete, onOpen }: {
+function NodeMenu({ node, nodes, anchor, moveOpen, onRename, onMoveToggle, onMove, onFavorite, onCopyLink, onDuplicate, lastEditedAt, onDelete, onOpen }: {
   node: WorkspaceNode;
   nodes: WorkspaceNode[];
   anchor: HTMLElement | null;
@@ -1942,6 +2030,7 @@ function NodeMenu({ node, nodes, anchor, moveOpen, onRename, onMoveToggle, onMov
   onFavorite: () => void;
   onCopyLink: () => void;
   onDuplicate: () => void;
+  lastEditedAt?: number;
   onDelete: () => void;
   onOpen: () => void;
 }) {
@@ -1991,6 +2080,13 @@ function NodeMenu({ node, nodes, anchor, moveOpen, onRename, onMoveToggle, onMov
       <button type="button" onClick={onOpen}><ExternalLink />在新选项卡中打开</button>
       <div className="menu-divider" />
       <button type="button" className="danger" onClick={onDelete}><Trash2 />删除</button>
+      {lastEditedAt && lastEditedAt > 0 ? <>
+        <div className="menu-divider" />
+        <div className="node-menu-meta">
+          <span>最后编辑</span>
+          <time dateTime={new Date(lastEditedAt).toISOString()}>{formatLastEditedAt(lastEditedAt)}</time>
+        </div>
+      </> : null}
     </div>,
     document.body,
   );
@@ -2001,6 +2097,12 @@ function NodeMenu({ node, nodes, anchor, moveOpen, onRename, onMoveToggle, onMov
  * 弹层实际宽度跟着标题长短收缩，这里按上限夹只会让它离右边缘更远一点，不会溢出屏幕。
  */
 const FOCUS_SIBLING_MENU_MAX_WIDTH = 220;
+
+function formatLastEditedAt(timestamp: number) {
+  const date = new Date(timestamp);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 /**
  * 专注面包屑的一级：悬浮时列出同级主题，点一下就横向换过去，只有自己一个同级时不弹层。

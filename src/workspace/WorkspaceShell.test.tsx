@@ -474,6 +474,7 @@ describe("工作区 Toast 反馈", () => {
     await openSettings();
     fireEvent.click(screen.getByRole("button", { name: "修改邮箱" }));
     fireEvent.change(screen.getByRole("textbox", { name: "新邮箱地址" }), { target: { value: "next@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: /^保存$/ }));
     serverMocks.updateWorkspaceAccount.mockRejectedValueOnce(new Error("认证服务不可用"));
     fireEvent.click(screen.getByRole("button", { name: "保存修改" }));
     expect(await screen.findByText("账号修改失败：认证服务不可用")).toBeInTheDocument();
@@ -564,17 +565,18 @@ describe("默认视图偏好", () => {
 
     await openPreferences();
 
-    expect(screen.getByRole("radio", { name: "大纲笔记" })).toBeChecked();
-    expect(screen.getByRole("radio", { name: "思维导图" })).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "默认视图" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "默认视图" })).toHaveTextContent("大纲笔记");
   });
 
   it("选了思维导图之后存进偏好，并传给文档做默认视图", async () => {
     render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
     await openPreferences();
 
-    fireEvent.click(screen.getByRole("radio", { name: "思维导图" }));
+    fireEvent.click(screen.getByRole("button", { name: "默认视图" }));
+    fireEvent.click(screen.getByRole("option", { name: "思维导图" }));
 
-    expect(screen.getByRole("radio", { name: "思维导图" })).toBeChecked();
+    expect(screen.getByRole("button", { name: "默认视图" })).toHaveTextContent("思维导图");
     expect(screen.getByTestId("document-editor")).toHaveAttribute("data-default-view", "mindmap");
     await waitFor(() => expect(serverMocks.saveWorkspaceState).toHaveBeenCalledWith(
       session,
@@ -597,7 +599,7 @@ describe("默认视图偏好", () => {
     // 服务器状态回来之前只能先按大纲猜，拿到偏好后要补上导图那一块，否则等的是错的分块。
     expect(editorPreloadMocks.preloadEditorView).toHaveBeenCalledWith("mindmap");
     await openPreferences();
-    expect(screen.getByRole("radio", { name: "思维导图" })).toBeChecked();
+    expect(screen.getByRole("button", { name: "默认视图" })).toHaveTextContent("思维导图");
   });
 
   it("这篇自己记过大纲时不跟着偏好走", async () => {
@@ -748,7 +750,13 @@ describe("文档服务器记录的生命周期", () => {
     expect(sidebar.querySelector(".sidebar-footer .account-wrap")).not.toBeNull();
     expect(sidebar.querySelector(".sidebar-header .create-wrap")).not.toBeNull();
     expect(sidebar.querySelector(".sidebar-section-heading")).not.toBeNull();
-    expect(sections[2]?.querySelector<HTMLButtonElement>('[aria-label="在我的文档中新建文档"]')).not.toBeNull();
+    const documentsAddButton = sections[2]?.querySelector<HTMLButtonElement>('[aria-label="在我的文档中新增"]');
+    expect(documentsAddButton).not.toBeNull();
+
+    fireEvent.click(documentsAddButton!);
+    expect(screen.getByRole("button", { name: "新增文档" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "新增文件夹" })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
 
     fireEvent.click(await screen.findByRole("button", { name: "新增" }));
     expect(screen.getByRole("button", { name: "新增文档" })).toBeInTheDocument();

@@ -70,6 +70,10 @@ export function touchNode(node: ZhiJianNode): ZhiJianNode {
   };
 }
 
+export function latestTreeUpdatedAt(tree: ZhiJianTree) {
+  return Math.max(0, ...Object.values(tree.nodes).map((node) => node.meta?.updatedAt ?? 0));
+}
+
 export function createInitialTree(): ZhiJianTree {
   const root = node("root", null, "产品规划", ["web", "app"], "heading");
   const web = node("web", "root", "Web端");

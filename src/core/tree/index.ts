@@ -15,7 +15,7 @@ export type {
   ZhiJianTableData,
   ZhiJianTree,
 } from "./types";
-export { cloneTree, createInitialTree } from "./utils";
+export { cloneTree, createInitialTree, latestTreeUpdatedAt } from "./utils";
 export type { NodeVisualStyle } from "./style";
 export { getNodeStyle } from "./style";
 export type { RichTextContent, RichTextMarks, RichTextSpan } from "./richText";

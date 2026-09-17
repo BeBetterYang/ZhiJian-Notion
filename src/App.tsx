@@ -6,6 +6,7 @@ import {
   ChevronUp,
   ChevronsUpDown,
   Command,
+  Copy,
   Ellipsis,
   FileInput,
   FileOutput,
@@ -23,7 +24,7 @@ import {
 } from "lucide-react";
 import { markdownFileName, markdownImportTitle, markdownToTree, treeToMarkdown } from "./core/markdown/markdownDocument";
 import { outlineExportFileName, treeToOutlineHtmlDocument } from "./core/export/outlineDocument";
-import { createInitialTree, type ZhiJianMindMapDefaults } from "./core/tree";
+import { createInitialTree, latestTreeUpdatedAt, type ZhiJianMindMapDefaults } from "./core/tree";
 import { TreeStore, attachTreePersistence, loadPersistedTree } from "./core/treeStore";
 import { useTree } from "./core/treeStore/useTree";
 import type { MindMapTextSelection } from "./mindmap/MindMapEditor";
@@ -69,12 +70,14 @@ interface AppProps {
   onShare?: () => void;
   onSharePrefetch?: () => void;
   /**
-   * 星标和删除的对象是「当前这篇文档」，而不是文档里的某个主题，只有工作区知道它在文件树里
-   * 的位置。所以这三个由工作区给：没给（分享页、独立预览）时菜单里就不出现这两项。
+   * 星标、复制和删除的对象是「当前这篇文档」，而不是文档里的某个主题，只有工作区知道它在
+   * 文件树里的位置。所以这些回调由工作区给：没给（分享页、独立预览）时菜单里就不出现。
    */
   favorite?: boolean;
   onToggleFavorite?: () => void;
   onDeleteDocument?: () => void;
+  onDuplicateDocument?: () => void;
+  lastEditedAt?: number;
   /**
    * 由工作区提供：一次选中多个文件时，它们各自成为一篇新文档，而不是挤进当前这一篇。
    * 没有这个回调（分享页、独立预览）时导入只接受单个文件。
@@ -95,6 +98,12 @@ export interface FocusBreadcrumbState {
 
 const DEFAULT_VIEW_STATE_STORAGE_KEY = "zhijian.editor.view-state.v1";
 
+function formatLastEditedAt(timestamp: number) {
+  const date = new Date(timestamp);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export default function App({
   embedded = false,
   store: providedStore,
@@ -110,6 +119,8 @@ export default function App({
   favorite = false,
   onToggleFavorite,
   onDeleteDocument,
+  onDuplicateDocument,
+  lastEditedAt,
   mindMapDefaults,
   onMindMapDefaultsChange,
   readOnly = false,
@@ -126,6 +137,7 @@ export default function App({
     [internalStore, providedStore],
   );
   const tree = useTree(store);
+  const documentLastEditedAt = lastEditedAt ?? latestTreeUpdatedAt(tree);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [mindMapSelectedNodeIds, setMindMapSelectedNodeIds] = useState<string[]>([]);
   const [selectionActive, setSelectionActive] = useState(false);
@@ -649,6 +661,12 @@ export default function App({
               ) : null}
             </div>
             {onToggleFavorite || onDeleteDocument ? <div className="menu-divider" /> : null}
+            {!readOnly && onDuplicateDocument ? (
+              <button type="button" role="menuitem" onClick={() => runFromMenu(onDuplicateDocument)}>
+                <Copy />
+                <span>创建副本</span>
+              </button>
+            ) : null}
             {onToggleFavorite ? (
               <button type="button" role="menuitem" onClick={() => runFromMenu(onToggleFavorite)}>
                 <Star className={favorite ? "favorite-filled" : undefined} fill={favorite ? "currentColor" : "none"} />
@@ -667,6 +685,15 @@ export default function App({
               <span>快捷键列表</span>
               <kbd>{shortcutHint("shortcut-help")}</kbd>
             </button>
+            {documentLastEditedAt > 0 ? (
+              <>
+                <div className="menu-divider" />
+                <div className="toolbar-menu-meta">
+                  <span>最后编辑</span>
+                  <time dateTime={new Date(documentLastEditedAt).toISOString()}>{formatLastEditedAt(documentLastEditedAt)}</time>
+                </div>
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>

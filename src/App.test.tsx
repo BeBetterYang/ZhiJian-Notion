@@ -62,6 +62,19 @@ describe("标题栏「更多」菜单", () => {
     expect(within(menu).getByRole("menuitem", { name: /撤销/ }).querySelector("kbd")).toHaveTextContent("Ctrl Z");
   });
 
+  it("可创建副本，并在菜单底部显示最后编辑时间", async () => {
+    const onDuplicateDocument = vi.fn();
+    const timestamp = new Date(2026, 5, 18, 16, 41).getTime();
+    const menu = await renderApp({ onDuplicateDocument, lastEditedAt: timestamp });
+
+    expect(within(menu).getByRole("menuitem", { name: "创建副本" })).toBeInTheDocument();
+    expect(within(menu).getByText("最后编辑")).toBeInTheDocument();
+    expect(within(menu).getByText("2026年6月18日 16:41")).toBeInTheDocument();
+
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "创建副本" }));
+    expect(onDuplicateDocument).toHaveBeenCalledTimes(1);
+  });
+
   it("撤销和重做走文档自己的历史，没有可撤销的一步时是灰的", async () => {
     const menu = await renderApp();
     const undo = within(menu).getByRole("menuitem", { name: /撤销/ });
