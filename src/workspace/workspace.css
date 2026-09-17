@@ -262,7 +262,7 @@ button { color: inherit; }
 .recent-search-delete:hover { background: rgba(55, 53, 47, 0.08); color: #37352f; }
 .section-label { height: 28px; display: flex; align-items: center; padding: 0 8px; color: #9b9a97; font-size: 12px; line-height: 16px; font-weight: 600; }
 .tree-branch { min-width: 0; }
-.tree-node-row { position: relative; height: 28px; display: flex; align-items: center; margin: 0; padding-left: calc(3px + var(--tree-depth) * 16px); border-radius: 5px; color: #5f5e5a; line-height: 20px; }
+.tree-node-row { position: relative; height: 28px; display: flex; align-items: center; margin: 0 0 1px; padding-left: calc(3px + var(--tree-depth) * 16px); border-radius: 5px; color: #5f5e5a; line-height: 20px; }
 .tree-node-row:hover { background: var(--color-hover); }
 .tree-node-row.is-active, .tree-node-row.is-folder-selected { background: var(--color-selected); color: var(--color-text-primary); }
 .tree-node-row[draggable="true"] { cursor: grab; }
