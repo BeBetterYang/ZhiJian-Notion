@@ -9,6 +9,14 @@ export function applyMindElixirOperation(operation: Operation, store: TreeStore)
     case "insertBefore":
       createNodeFromMind(operation.obj, store);
       return;
+    case "insertParent": {
+      const childId = operation.obj.children?.[0]?.id;
+      const parentId = createNodeFromMind(operation.obj, store);
+      if (parentId && childId && store.getNode(childId)) {
+        store.moveNode(childId, parentId);
+      }
+      return;
+    }
     case "removeNodes":
       operation.objs.forEach((obj) => store.deleteNode(obj.id));
       return;
@@ -33,13 +41,13 @@ export function applyMindElixirOperation(operation: Operation, store: TreeStore)
 
 function createNodeFromMind(obj: NodeObj, store: TreeStore) {
   if (store.getNode(obj.id)) {
-    return;
+    return null;
   }
   const parentId = obj.parent?.id ?? store.getSnapshot().rootId;
   if (obj.id === store.getSnapshot().rootId || !store.getNode(parentId)) {
-    return;
+    return null;
   }
-  store.createNode({
+  return store.createNode({
     id: obj.id,
     parentId,
     index: getIndexInParent(obj),

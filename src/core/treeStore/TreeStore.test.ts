@@ -9,6 +9,27 @@ describe("TreeStore", () => {
     expect(tree.nodes[tree.rootId].children).toEqual(["web", "app"]);
   });
 
+  it("stores document icons through the history stack", () => {
+    const store = new TreeStore(createInitialTree());
+    const asset = { type: "asset" as const, assetId: "asset-a", storagePath: "user/asset-a.webp", name: "图标" };
+
+    store.setDocumentIcon({ type: "emoji", value: "🌱" });
+    store.setDocumentIcon(asset);
+    expect(store.getSnapshot().document?.icon).toEqual(asset);
+
+    store.undo();
+    expect(store.getSnapshot().document?.icon).toEqual({ type: "emoji", value: "🌱" });
+    store.undo();
+    expect(store.getSnapshot().document).toBeUndefined();
+    store.redo();
+    expect(store.getSnapshot().document?.icon).toEqual({ type: "emoji", value: "🌱" });
+
+    store.setDocumentIcon(undefined);
+    expect(store.getSnapshot().document).toBeUndefined();
+    store.undo();
+    expect(store.getSnapshot().document?.icon).toEqual({ type: "emoji", value: "🌱" });
+  });
+
   it("persists only the selected mind-map theme without changing document nodes", () => {
     const store = new TreeStore(createInitialTree());
     const nodesBefore = JSON.stringify(store.getSnapshot().nodes);

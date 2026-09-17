@@ -79,7 +79,17 @@ export function blockNoteToTree(blocks: Block[], previousTree?: ZhiJianTree): Zh
     visit(block, first.id);
     nodes[first.id].children.push(block.id);
   });
-  return { rootId: first.id, nodes };
+  return {
+    rootId: first.id,
+    nodes,
+    document: previousTree?.document
+      ? {
+          ...previousTree.document,
+          icon: previousTree.document.icon ? { ...previousTree.document.icon } : undefined,
+        }
+      : undefined,
+    mindMap: previousTree?.mindMap,
+  };
 }
 
 function nodePropsFromBlock(

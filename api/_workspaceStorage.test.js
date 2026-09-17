@@ -1,7 +1,7 @@
 /* global process, fetch, Response */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupUnreferencedAssets, readWorkspaceState, supabaseRequest, upsertWorkspace } from "./_workspaceStorage.js";
+import { cleanupUnreferencedAssets, cloneAssetsForTree, readWorkspaceState, supabaseRequest, upsertWorkspace } from "./_workspaceStorage.js";
 
 describe("Supabase service requests", () => {
   beforeEach(() => {
@@ -79,7 +79,7 @@ describe("无引用图片清理", () => {
   });
 
   /** 文档里引用了 KEPT，`workspace_assets` 里够旧的候选是 `agedAssetIds`。 */
-  function mockSupabase(agedAssetIds, { storageFails = false } = {}) {
+  function mockSupabase(agedAssetIds, { storageFails = false, tree } = {}) {
     return vi.spyOn(globalThis, "fetch").mockImplementation((url, init) => {
       const target = String(url);
       if (target.includes("/storage/v1/")) {
@@ -89,7 +89,7 @@ describe("无引用图片清理", () => {
       }
       if (target.includes("workspace_documents")) {
         return Promise.resolve(new Response(JSON.stringify([
-          { tree: { nodes: { a: { content: { attachments: [{ assetId: KEPT, storagePath: `u/${KEPT}` }] } } } } },
+          { tree: tree ?? { nodes: { a: { content: { attachments: [{ assetId: KEPT, storagePath: `u/${KEPT}` }] } } } } },
         ]), { status: 200 }));
       }
       if (init.method === "DELETE") {
@@ -128,5 +128,48 @@ describe("无引用图片清理", () => {
     mockSupabase([ORPHAN], { storageFails: true });
 
     await expect(cleanupUnreferencedAssets("user-1")).resolves.toEqual({ removed: 1 });
+  });
+
+  it("保留被文档图标引用的资源", async () => {
+    mockSupabase([KEPT], {
+      tree: { document: { icon: { type: "asset", assetId: KEPT, storagePath: `u/${KEPT}` } }, nodes: {} },
+    });
+
+    await expect(cleanupUnreferencedAssets("user-1")).resolves.toEqual({ removed: 0 });
+    expect(vi.mocked(fetch).mock.calls.some(([, init]) => init.method === "DELETE")).toBe(false);
+  });
+});
+
+describe("文档图标资源分享", () => {
+  beforeEach(() => {
+    process.env.SUPABASE_URL = "https://project.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "sb_secret_test";
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  });
+
+  it("分享时复制文档图标资源并替换 assetId", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((url, init) => {
+      const target = String(url);
+      if (target.includes("workspace_assets?") && init.method === "GET") {
+        return Promise.resolve(new Response(JSON.stringify([{ asset_id: "asset-a", storage_path: "source/asset-a.png", file_name: "icon.png", mime_type: "image/png", byte_size: 3 }]), { status: 200 }));
+      }
+      if (target.includes("/storage/v1/object/workspace-images/source/asset-a.png")) {
+        return Promise.resolve(new Response(new Uint8Array([1, 2, 3]), { status: 200 }));
+      }
+      if (target.includes("/storage/v1/object/sign/workspace-images/")) {
+        return Promise.resolve(new Response(JSON.stringify({ signedURL: "/object/sign/workspace-images/target/icon.webp" }), { status: 200 }));
+      }
+      return Promise.resolve(new Response("", { status: 201 }));
+    });
+
+    const tree = { document: { icon: { type: "asset", assetId: "asset-a", storagePath: "source/asset-a.png" } }, nodes: {} };
+    const cloned = await cloneAssetsForTree(tree, "source-user", "target-user");
+    expect(cloned.document.icon.assetId).not.toBe("asset-a");
+    expect(cloned.document.icon.storagePath).toContain("target-user/");
   });
 });

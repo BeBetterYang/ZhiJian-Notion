@@ -1,5 +1,7 @@
 export type {
   TreeListener,
+  ZhiJianDocumentIcon,
+  ZhiJianDocumentMetadata,
   ZhiJianImageData,
   ZhiJianMindMapArrow,
   ZhiJianMindMapDecorations,

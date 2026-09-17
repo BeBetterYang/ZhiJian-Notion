@@ -108,6 +108,22 @@ export type ZhiJianMindMapLayout = {
   order?: "left-first" | "right-first" | "alternating";
 };
 
+export type ZhiJianDocumentIcon =
+  | {
+      type: "emoji";
+      value: string;
+    }
+  | {
+      type: "asset";
+      assetId: string;
+      storagePath: string;
+      name?: string;
+    };
+
+export interface ZhiJianDocumentMetadata {
+  icon?: ZhiJianDocumentIcon;
+}
+
 /**
  * What the mind map draws over the tree and nothing else does.
  *
@@ -144,6 +160,7 @@ export type ZhiJianMindMapDefaults = Pick<
 export interface ZhiJianTree {
   rootId: string;
   nodes: Record<string, ZhiJianNode>;
+  document?: ZhiJianDocumentMetadata;
   mindMap?: ZhiJianMindMapDecorations;
 }
 

@@ -1,6 +1,7 @@
 import type {
   RichTextContent,
   TreeListener,
+  ZhiJianDocumentIcon,
   ZhiJianMindMapDecorations,
   ZhiJianNode,
   ZhiJianNodeBlock,
@@ -78,6 +79,18 @@ export class TreeStore {
 
   getChildren(parentId: string) {
     return this.requireNode(parentId).children.map((id) => this.requireNode(id));
+  }
+
+  setDocumentIcon(icon?: ZhiJianDocumentIcon) {
+    this.commit((draft) => {
+      if (icon) {
+        draft.document = { ...draft.document, icon: { ...icon } };
+        return;
+      }
+      if (!draft.document) return;
+      delete draft.document.icon;
+      if (!Object.keys(draft.document).length) delete draft.document;
+    });
   }
 
   getOrderedNodes() {

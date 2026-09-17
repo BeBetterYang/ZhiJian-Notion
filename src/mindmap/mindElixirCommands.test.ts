@@ -32,6 +32,30 @@ describe("applyMindElixirOperation", () => {
     expect(richTextToPlainText(store.getNode("api")!.content)).toBe("API");
   });
 
+  it("inserts a parent while preserving the existing child subtree", () => {
+    const initialTree = createInitialTree();
+    initialTree.nodes.web.description = { text: "节点描述" };
+    initialTree.nodes.web.type = "todo";
+    initialTree.nodes.web.props = { checked: true, style: { background: "#eee" } };
+    const store = new TreeStore(initialTree);
+    const root = node("root", "产品规划");
+    const parent = node("new-parent", "新父节点", root);
+    parent.children = [node("web", "Web端", parent)];
+    root.children = [parent, node("app", "App端", root)];
+
+    applyMindElixirOperation({ name: "insertParent", obj: parent }, store);
+
+    expect(store.getNode("root")?.children).toEqual(["new-parent", "app"]);
+    expect(store.getNode("new-parent")?.parentId).toBe("root");
+    expect(store.getNode("new-parent")?.children).toEqual(["web"]);
+    expect(store.getNode("web")).toMatchObject({
+      parentId: "new-parent",
+      type: "todo",
+      description: { text: "节点描述" },
+      props: { checked: true, style: { background: "#eee" } },
+    });
+  });
+
   it("deletes nodes from MindElixir removeNodes operation", () => {
     const store = new TreeStore(createInitialTree());
 

@@ -7,6 +7,12 @@ export function cloneTree(tree: ZhiJianTree): ZhiJianTree {
     nodes: Object.fromEntries(
       Object.entries(tree.nodes).map(([id, node]) => [id, cloneNode(node)]),
     ),
+    document: tree.document
+      ? {
+          ...tree.document,
+          icon: tree.document.icon ? { ...tree.document.icon } : undefined,
+        }
+      : undefined,
     mindMap: tree.mindMap ? cloneMindMapDecorations(tree.mindMap) : undefined,
   };
 }

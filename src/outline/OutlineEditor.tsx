@@ -58,6 +58,8 @@ import { collapsedOutlineCss } from "./outlineCollapse";
 import { isProtectedOutlineRoot, zoomedOutlineCss } from "./outlineZoom";
 import { outlineRowMenuPosition } from "./outlineRowMenuPosition";
 import { LinkDialog } from "../shared/LinkDialog";
+import { EmojiPickerPopover } from "../shared/emoji/EmojiPickerPopover";
+import { DocumentIconControl } from "../shared/documentIcon/DocumentIcon";
 import {
   applyBlockShortcut,
   applyLink,
@@ -131,10 +133,36 @@ export function OutlineEditor({
   const suppressGestureClickTimer = useRef(0);
   const [linkText, setLinkText] = useState<string | null>(null);
   const [rowMenu, setRowMenu] = useState<OutlineRowMenuState | null>(null);
+  const [showDocumentIcon, setShowDocumentIcon] = useState(false);
+  const documentIconHideTimer = useRef<number | null>(null);
   const searchVisibilityCss = useMemo(() => outlineSearchVisibilityCss(tree, visibleNodeIds, searchQuery), [searchQuery, tree, visibleNodeIds]);
   const activeSearchCss = useMemo(() => outlineActiveSearchCss(activeSearchNodeId), [activeSearchNodeId]);
   const zoomCss = useMemo(() => zoomedOutlineCss(tree, zoomedNodeId), [tree, zoomedNodeId]);
   const rowMenuHighlightCss = useMemo(() => outlineRowMenuHighlightCss(rowMenu?.nodeId ?? null), [rowMenu?.nodeId]);
+  const updateDocumentIconVisibility = useCallback((target: EventTarget | null) => {
+    if (readOnly || tree.document?.icon) return;
+    const element = target instanceof Element ? target : null;
+    const block = element?.closest<HTMLElement>(".bn-block-outer[data-id]");
+    const inRootTitle = block?.dataset.id === tree.rootId;
+    const inIconArea = Boolean(element?.closest(".outline-document-icon"));
+    if (inRootTitle || inIconArea) {
+      if (documentIconHideTimer.current !== null) {
+        window.clearTimeout(documentIconHideTimer.current);
+        documentIconHideTimer.current = null;
+      }
+      setShowDocumentIcon(true);
+      return;
+    }
+    if (documentIconHideTimer.current !== null) window.clearTimeout(documentIconHideTimer.current);
+    documentIconHideTimer.current = window.setTimeout(() => {
+      documentIconHideTimer.current = null;
+      setShowDocumentIcon(false);
+    }, 120);
+  }, [readOnly, tree.document?.icon, tree.rootId]);
+
+  useEffect(() => () => {
+    if (documentIconHideTimer.current !== null) window.clearTimeout(documentIconHideTimer.current);
+  }, []);
   const outlineContextValue = useMemo(
     () => ({ store, rowMenu, setRowMenu, onFocusNode, zoomedNodeId }),
     [onFocusNode, rowMenu, store, zoomedNodeId],
@@ -341,6 +369,9 @@ export function OutlineEditor({
       ref={panelRef}
       className="outline-panel"
       data-document-theme={tree.mindMap?.theme?.id ?? "paper"}
+      onMouseMoveCapture={(event) => updateDocumentIconVisibility(event.target)}
+      onMouseLeave={() => updateDocumentIconVisibility(null)}
+      onFocusCapture={(event) => updateDocumentIconVisibility(event.target)}
       onMouseDownCapture={(event) => {
         if (readOnly) return;
         const target = event.target as Element;
@@ -445,6 +476,11 @@ export function OutlineEditor({
       <style>{activeSearchCss}</style>
       <style>{zoomCss}</style>
       <style>{rowMenuHighlightCss}</style>
+      {tree.document?.icon || showDocumentIcon ? (
+        <div className={`outline-document-icon${tree.document?.icon ? "" : " is-empty"}`}>
+          <DocumentIconControl store={store} readOnly={readOnly} size="page" showEmpty={showDocumentIcon} />
+        </div>
+      ) : null}
       <OutlineStoreContext.Provider value={outlineContextValue}>{editorView}</OutlineStoreContext.Provider>
       {readOnly ? <ReadOnlyCollapseLayer store={store} panelRef={panelRef} protectedNodeId={zoomedNodeId} /> : null}
       {/* 添加图片 (Alt Enter) has nothing to insert until a file has been chosen, and
@@ -598,7 +634,7 @@ function RootProtectedSideMenu() {
   );
 }
 
-type PaletteKind = "text" | "background" | "emoji";
+type PaletteKind = "text" | "background";
 type BasicStyle = "bold" | "italic" | "underline" | "strike";
 
 const COLOR_ITEMS: Array<{ label: string; value: string | null }> = [
@@ -612,12 +648,6 @@ const COLOR_ITEMS: Array<{ label: string; value: string | null }> = [
   { label: "蓝色", value: "blue" },
   { label: "紫色", value: "purple" },
   { label: "粉色", value: "pink" },
-];
-
-const EMOJI_ITEMS = [
-  "😀", "😄", "😂", "😊", "😍", "🤔", "😎", "😭", "😡", "👍", "👏", "🙏",
-  "💡", "⭐", "✅", "🔥", "📌", "📷", "📊", "📝", "🚩", "❗", "🎯", "🔗",
-  "📁", "📄", "📚", "💻", "📱", "🚀", "⚠️", "❤️", "💬", "🔍", "🧠", "🏷️",
 ];
 
 function OutlineRowMenuButton({ nodeId, rootId }: { nodeId: string; rootId: string | null }) {
@@ -660,6 +690,7 @@ function OutlineRowMenuPortal() {
   const menuRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [palette, setPalette] = useState<PaletteKind | null>(null);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [position, setPosition] = useState({ top: 8, left: 8 });
   const menu = context?.rowMenu ?? null;
   const nodeId = menu?.nodeId ?? "";
@@ -700,6 +731,7 @@ function OutlineRowMenuPortal() {
       if (menuRef.current?.contains(event.target as Node)) return;
       context?.setRowMenu(null);
       setPalette(null);
+      setEmojiPickerOpen(false);
     };
     window.addEventListener("pointerdown", close);
     return () => window.removeEventListener("pointerdown", close);
@@ -714,6 +746,7 @@ function OutlineRowMenuPortal() {
     if (!keepOpen) {
       context?.setRowMenu(null);
       setPalette(null);
+      setEmojiPickerOpen(false);
     }
   };
 
@@ -728,7 +761,6 @@ function OutlineRowMenuPortal() {
   };
 
   const applyColor = (kind: PaletteKind, color: string | null) => {
-    if (kind === "emoji") return;
     withTargetBlock(() => {
       toggleWholeBlockColor(editor, nodeId, kind, color);
     });
@@ -799,12 +831,12 @@ function OutlineRowMenuPortal() {
             <RowMenuIconButton label="下划线" icon={<Underline />} active={Boolean(activeStyles.underline)} onClick={() => withTargetBlock(() => toggleWholeBlockStyle(editor, nodeId, "underline"))} />
             <RowMenuIconButton label="删除线" icon={<Strikethrough />} active={Boolean(activeStyles.strike)} onClick={() => withTargetBlock(() => toggleWholeBlockStyle(editor, nodeId, "strike"))} />
           </div>
-          <button className="outline-row-menu-action" type="button" onClick={() => setPalette(palette === "text" ? null : "text")}>
+          <button className="outline-row-menu-action" type="button" onClick={() => { setEmojiPickerOpen(false); setPalette(palette === "text" ? null : "text"); }}>
             <Baseline />
             <span>文本颜色</span>
             <ChevronRight className="outline-row-menu-arrow" />
           </button>
-          <button className="outline-row-menu-action" type="button" onClick={() => setPalette(palette === "background" ? null : "background")}>
+          <button className="outline-row-menu-action" type="button" onClick={() => { setEmojiPickerOpen(false); setPalette(palette === "background" ? null : "background"); }}>
             <Highlighter />
             <span>荧光笔</span>
             <ChevronRight className="outline-row-menu-arrow" />
@@ -821,7 +853,7 @@ function OutlineRowMenuPortal() {
             <ListChecks />
             <span>添加待办</span>
           </button>
-          <button className="outline-row-menu-action" type="button" onClick={() => setPalette(palette === "emoji" ? null : "emoji")}>
+          <button className="outline-row-menu-action" type="button" onClick={() => { setPalette(null); setEmojiPickerOpen((open) => !open); }}>
             <Smile />
             <span>表情符号</span>
             <ChevronRight className="outline-row-menu-arrow" />
@@ -834,7 +866,7 @@ function OutlineRowMenuPortal() {
             <Trash2 />
             <span>删除</span>
           </button>
-          {palette && palette !== "emoji" ? (
+          {palette ? (
             <div className="outline-row-palette">
               {COLOR_ITEMS.map((item) => (
                 <button
@@ -853,15 +885,7 @@ function OutlineRowMenuPortal() {
               ))}
             </div>
           ) : null}
-          {palette === "emoji" ? (
-            <div className="outline-row-palette outline-row-emoji-palette">
-              {EMOJI_ITEMS.map((emoji) => (
-                <button className="outline-row-emoji-item" key={emoji} type="button" onClick={() => insertEmoji(emoji)}>
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          ) : null}
+          {emojiPickerOpen ? <div className="outline-emoji-picker"><EmojiPickerPopover onEmojiSelect={insertEmoji} /></div> : null}
       </div>
     </div>
     ,
@@ -969,7 +993,6 @@ function isActiveColor(
   activeTextColor: string | null,
   activeBackgroundColor: string | null,
 ) {
-  if (kind === "emoji") return false;
   const active = kind === "text" ? activeTextColor : activeBackgroundColor;
   return color === null ? active === null || active === "default" : active === color;
 }

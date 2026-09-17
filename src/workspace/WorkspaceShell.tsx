@@ -59,6 +59,7 @@ import { workspaceNodeMenuPosition } from "./workspaceNodeMenuPosition";
 import { AppErrorBoundary } from "../shared/AppErrorBoundary";
 import { LoadingScreen } from "../shared/LoadingScreen";
 import { toast } from "../shared/toast/toast";
+import { DocumentIcon, DocumentIconFromStore } from "../shared/documentIcon/DocumentIcon";
 import logoUrl from "./assets/zhijian-logo.png";
 import {
   childNodes,
@@ -582,11 +583,11 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     if (!activeFile || !activeDocumentStore) return;
     const syncTitle = (tree: ZhiJianTree) => {
       const title = tree.nodes[tree.rootId]?.content.text ?? "";
-      setNodes((current) => current.map((node) =>
-        node.id === activeFile.id && node.type === "file" && node.title !== title
-          ? { ...node, title }
-          : node,
-      ));
+      setNodes((current) => {
+        const index = current.findIndex((node) => node.id === activeFile.id && node.type === "file");
+        if (index < 0 || current[index].title === title) return current;
+        return current.map((node, nodeIndex) => nodeIndex === index ? { ...node, title } : node);
+      });
     };
     syncTitle(activeDocumentStore.getSnapshot());
     const unsubscribe = activeDocumentStore.subscribe(syncTitle);
@@ -1130,7 +1131,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               {expanded ? <FolderOpen className="leading-default-icon" /> : <Folder className="leading-default-icon" />}
               {expanded ? <ChevronDown className="leading-state-icon" /> : <ChevronRight className="leading-state-icon" />}
             </button>
-          ) : <span className="tree-leading"><FileText /></span>}
+          ) : <span className="tree-leading">{documentStores.current.get(node.id) ? <DocumentIconFromStore store={documentStores.current.get(node.id)!} size="sidebar" /> : <DocumentIcon size="sidebar" />}</span>}
           {renamingId === node.id ? (
             <input
               className="tree-rename-input"
@@ -1252,6 +1253,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
             <GlobalSearchResults
               query={search}
               results={workspaceSearchResults}
+              stores={documentStores.current}
               expandedFileIds={expandedSearchFileIds}
               onToggleFile={(fileId) => setExpandedSearchFileIds((current) => {
                 const next = new Set(current);
@@ -1286,8 +1288,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
             />
           ) : (
             <>
-              <QuickFileSection title="最近打开" source="recent" expanded={expandedQuickSections.has("recent")} files={recentFiles} selectedMenuKey={selectedMenuKey} onToggle={() => toggleQuickSection("recent")} onSelect={selectFile} />
-              <QuickFileSection title="星标文件" source="favorites" expanded={expandedQuickSections.has("favorites")} files={favoriteFiles} selectedMenuKey={selectedMenuKey} onToggle={() => toggleQuickSection("favorites")} onSelect={selectFile} />
+              <QuickFileSection title="最近打开" source="recent" expanded={expandedQuickSections.has("recent")} files={recentFiles} selectedMenuKey={selectedMenuKey} stores={documentStores.current} onToggle={() => toggleQuickSection("recent")} onSelect={selectFile} />
+              <QuickFileSection title="星标文件" source="favorites" expanded={expandedQuickSections.has("favorites")} files={favoriteFiles} selectedMenuKey={selectedMenuKey} stores={documentStores.current} onToggle={() => toggleQuickSection("favorites")} onSelect={selectFile} />
               <section className="workspace-files quick-file-section" aria-labelledby="workspace-files-title">
                 <div className="sidebar-section-heading">
                   <button type="button" className="sidebar-section-toggle" id="workspace-files-title" aria-expanded={expandedQuickSections.has("documents")} onClick={() => toggleQuickSection("documents")}>
@@ -1340,6 +1342,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         <header className="document-header">
           <div className="document-path">
             {breadcrumbs.map((folder) => <span className="breadcrumb-part" key={folder.id}><span>{folder.title}</span><ChevronRight /></span>)}
+            {activeDocumentStore ? <DocumentIconFromStore store={activeDocumentStore} size="header" hideWhenEmpty /> : null}
             {focusedTitle && focusBreadcrumbState ? (
               <>
                 <button type="button" className="document-path-current" onClick={() => focusBreadcrumbState.navigate(null)}>
@@ -1745,13 +1748,15 @@ function highlightText(text: string, query: string) {
   return parts.length ? parts : text;
 }
 
-function SimpleFileRow({ file, active, onSelect }: { file: WorkspaceFile; active: boolean; onSelect: (file: WorkspaceFile) => void }) {
-  return <button type="button" className={`simple-file-row ${active ? "is-active" : ""}`} onClick={() => onSelect(file)}><FileText /><span>{file.title || "无标题"}</span></button>;
+function SimpleFileRow({ file, active, stores, onSelect }: { file: WorkspaceFile; active: boolean; stores: Map<string, TreeStore>; onSelect: (file: WorkspaceFile) => void }) {
+  const store = stores.get(file.id);
+  return <button type="button" className={`simple-file-row ${active ? "is-active" : ""}`} onClick={() => onSelect(file)}>{store ? <DocumentIconFromStore store={store} size="sidebar" /> : <DocumentIcon size="sidebar" />}<span>{file.title || "无标题"}</span></button>;
 }
 
-function GlobalSearchResults({ query, results, expandedFileIds, onToggleFile, onSelectFolder, onSelectFile, onSelectMatch }: {
+function GlobalSearchResults({ query, results, stores, expandedFileIds, onToggleFile, onSelectFolder, onSelectFile, onSelectMatch }: {
   query: string;
   results: WorkspaceSearchResult[];
+  stores: Map<string, TreeStore>;
   expandedFileIds: Set<string>;
   onToggleFile: (fileId: string) => void;
   onSelectFolder: (folder: WorkspaceFolder) => void;
@@ -1778,7 +1783,7 @@ function GlobalSearchResults({ query, results, expandedFileIds, onToggleFile, on
         return (
           <article className="global-search-item document-result" key={`file:${result.file.id}`}>
             <button type="button" className="global-result-heading" onClick={() => onSelectFile(result.file)}>
-              <FileText className="global-result-icon" />
+              {stores.get(result.file.id) ? <DocumentIconFromStore className="global-result-icon" store={stores.get(result.file.id)!} size="sidebar" /> : <DocumentIcon className="global-result-icon" size="sidebar" />}
               <span className="global-result-body">
                 <strong>{highlightText(result.file.title || "无标题", query)}</strong>
                 <small>{result.path}</small>
@@ -1906,12 +1911,13 @@ function SearchFilterPopover({ folders, nodes, query, selectedFolderIds, onQuery
   );
 }
 
-function QuickFileSection({ title, source, expanded, files, selectedMenuKey, onToggle, onSelect }: {
+function QuickFileSection({ title, source, expanded, files, selectedMenuKey, stores, onToggle, onSelect }: {
   title: string;
   source: QuickSection;
   expanded: boolean;
   files: WorkspaceFile[];
   selectedMenuKey: string;
+  stores: Map<string, TreeStore>;
   onToggle: () => void;
   onSelect: (file: WorkspaceFile, source: string) => void;
 }) {
@@ -1920,7 +1926,7 @@ function QuickFileSection({ title, source, expanded, files, selectedMenuKey, onT
       <button type="button" className="sidebar-section-toggle" aria-expanded={expanded} onClick={onToggle}>
         <span>{title}</span>{expanded ? <ChevronDown /> : <ChevronRight />}
       </button>
-      {expanded ? <div className="quick-file-list">{files.map((file) => <SimpleFileRow key={file.id} file={file} active={selectedMenuKey === `${source}:${file.id}`} onSelect={(selected) => onSelect(selected, source)} />)}{!files.length ? <div className="empty-section">暂无文件</div> : null}</div> : null}
+      {expanded ? <div className="quick-file-list">{files.map((file) => <SimpleFileRow key={file.id} file={file} stores={stores} active={selectedMenuKey === `${source}:${file.id}`} onSelect={(selected) => onSelect(selected, source)} />)}{!files.length ? <div className="empty-section">暂无文件</div> : null}</div> : null}
     </section>
   );
 }

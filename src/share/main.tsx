@@ -7,6 +7,7 @@ import type { ZhiJianTree } from "../core/tree";
 import { TreeStore } from "../core/treeStore";
 import { hydrateRemoteImageAssets, type ImageAssetReference } from "../shared/imageAssetStore";
 import { AppErrorBoundary } from "../shared/AppErrorBoundary";
+import { DocumentIcon } from "../shared/documentIcon/DocumentIcon";
 import { preloadEditorView } from "../shared/editorPreload";
 import { loadWorkspaceSession } from "../workspace/auth";
 import { importSharedDocument, WorkspaceApiError } from "../workspace/serverApi";
@@ -105,6 +106,7 @@ function SharedDocumentApp() {
   if (!store || !sharedDocument) return <main className="share-state"><div className="workspace-loading-spinner" /><p>正在加载分享文档</p></main>;
   return <main className="shared-document-shell">
     <header className="shared-document-header">
+      {sharedDocument.tree.document?.icon ? <DocumentIcon icon={sharedDocument.tree.document.icon} size="header" /> : null}
       <strong>{sharedDocument.title}</strong>
       <span className="shared-document-badge">只读分享</span>
       <div className="shared-document-actions">

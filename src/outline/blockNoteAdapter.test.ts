@@ -45,6 +45,16 @@ describe("blockNoteAdapter", () => {
     expect(parsed.nodes.web.blocks).toBeUndefined();
   });
 
+  it("keeps document metadata while projecting edited blocks", () => {
+    const tree = createInitialTree();
+    tree.document = { icon: { type: "emoji", value: "🌱" } };
+    const [projected] = treeToBlockNote(tree);
+    const parsed = blockNoteToTree([projected as Block], tree)!;
+
+    expect(parsed.document).toEqual(tree.document);
+    expect(parsed.document).not.toBe(tree.document);
+  });
+
   it("keeps table data in an exclusive table node", () => {
     const table = {
       id: "table", type: "table", props: {},
