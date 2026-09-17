@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef } from "react";
 import zhI18n from "@emoji-mart/data/i18n/zh.json";
 import type { EmojiMartData } from "@emoji-mart/data";
 import { withChineseEmojiSearch } from "./emojiSearchData";
+import { installEmojiSearchInputGuard } from "./emojiSearchInputGuard";
 
 const loadEmojiPicker = async () => {
   const [{ Picker }, { default: data }] = await Promise.all([
@@ -27,7 +28,25 @@ const loadEmojiPicker = async () => {
       });
       const pickerElement = picker as unknown as HTMLElement;
       pickerRootRef.current.appendChild(pickerElement);
-      return () => pickerElement.remove();
+      let removeSearchGuard = () => {};
+      const attachSearchGuard = () => {
+        const shadowRoot = pickerElement.shadowRoot;
+        const searchInput = shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]');
+        if (!shadowRoot || !searchInput) return false;
+        removeSearchGuard = installEmojiSearchInputGuard(shadowRoot, searchInput);
+        return true;
+      };
+      const observer = new MutationObserver(() => {
+        if (attachSearchGuard()) observer.disconnect();
+      });
+      if (!attachSearchGuard()) {
+        observer.observe(pickerElement.shadowRoot ?? pickerElement, { childList: true, subtree: true });
+      }
+      return () => {
+        observer.disconnect();
+        removeSearchGuard();
+        pickerElement.remove();
+      };
     }, []);
 
     return <div ref={pickerRootRef} />;
