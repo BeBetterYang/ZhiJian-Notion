@@ -36,6 +36,15 @@
   --radius-sm: 5px;
   --radius-md: 8px;
   --radius-lg: 12px;
+  --menu-surface: rgba(255, 255, 255, 0.98);
+  --menu-border: rgba(55, 53, 47, 0.08);
+  --menu-hover: rgba(55, 53, 47, 0.06);
+  --menu-selected: rgba(55, 53, 47, 0.09);
+  --menu-divider: rgba(55, 53, 47, 0.08);
+  --menu-icon: #787774;
+  --menu-radius: 10px;
+  --menu-item-radius: 5px;
+  --menu-shadow: 0 2px 6px rgba(15, 15, 15, 0.08), 0 8px 24px rgba(15, 15, 15, 0.1);
   --shadow-popover: 0 8px 24px rgba(15, 15, 15, 0.12), 0 2px 5px rgba(15, 15, 15, 0.08);
   --shadow-dialog: 0 24px 70px rgba(15, 15, 15, 0.22), 0 2px 8px rgba(15, 15, 15, 0.08);
   --overlay-dialog: rgba(15, 15, 15, 0.44);
@@ -280,12 +289,13 @@ textarea {
   top: calc(100% + 5px);
   right: 0;
   width: 190px;
-  padding: var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+  padding: 6px;
+  border: 1px solid var(--menu-border);
+  border-radius: var(--menu-radius);
+  background: var(--menu-surface);
   font-size: 14px;
-  box-shadow: var(--shadow-popover);
+  line-height: 20px;
+  box-shadow: var(--menu-shadow);
   animation: zhijian-popover-in var(--motion-popover, 150ms) var(--motion-ease-out, cubic-bezier(.2, .8, .2, 1));
 }
 
@@ -294,17 +304,18 @@ textarea {
   height: 30px;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   padding: 0 8px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--menu-item-radius);
   background: transparent;
   font-size: 14px;
+  line-height: 20px;
   text-align: left;
 }
 
 .toolbar .toolbar-more-menu button:hover:not(:disabled) {
-  background: var(--color-hover);
+  background: var(--menu-hover);
 }
 
 /* 删除是唯一一个点下去会丢东西的菜单项，和侧栏节点菜单里的「删除」一样标成红色。 */
@@ -323,13 +334,14 @@ textarea {
 .toolbar-more-menu .menu-divider {
   height: 1px;
   margin: 5px 2px;
-  background: rgba(55, 53, 47, 0.1);
+  background: var(--menu-divider);
 }
 
 .toolbar-more-menu svg {
   width: 15px;
   height: 15px;
   flex: none;
+  color: var(--menu-icon);
 }
 
 .toolbar-submenu-wrap {
@@ -363,7 +375,7 @@ textarea {
 /* 菜单项右侧那一小行快捷键。收起/展开菜单和「更多」菜单共用同一份样式。 */
 .toolbar-more-menu kbd {
   margin-left: auto;
-  color: #b0afab;
+  color: var(--color-text-muted);
   font-family: inherit;
   font-size: 11px;
   font-weight: 400;
@@ -1404,13 +1416,13 @@ textarea {
   position: relative;
   width: 180px;
   padding: 6px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-popover);
+  border: 1px solid var(--menu-border);
+  border-radius: var(--menu-radius);
+  background: var(--menu-surface);
+  box-shadow: var(--menu-shadow);
   color: var(--color-text-primary);
   font-size: 14px;
-  line-height: 1;
+  line-height: 20px;
 }
 
 .outline-row-menu-grid {
@@ -1422,7 +1434,7 @@ textarea {
 
 .outline-row-menu-grid + .outline-row-menu-grid {
   padding-top: 4px;
-  border-top: 1px solid rgba(55, 53, 47, 0.08);
+  border-top: 1px solid var(--menu-divider);
 }
 
 .outline-row-menu-icon,
@@ -1441,8 +1453,8 @@ textarea {
   height: 28px;
   min-width: 0;
   padding: 0;
-  border-radius: 4px;
-  color: #37352f;
+  border-radius: var(--menu-item-radius);
+  color: var(--menu-icon);
 }
 
 .outline-row-menu-icon svg {
@@ -1457,7 +1469,7 @@ textarea {
   height: 30px;
   padding: 0 6px;
   gap: 8px;
-  border-radius: 4px;
+  border-radius: var(--menu-item-radius);
   text-align: left;
   cursor: default;
 }
@@ -1466,7 +1478,7 @@ textarea {
   width: 16px;
   height: 16px;
   flex: 0 0 auto;
-  color: #37352f;
+  color: var(--menu-icon);
 }
 
 .outline-row-menu-action span {
@@ -1484,13 +1496,13 @@ textarea {
 .outline-row-menu-icon:hover,
 .outline-row-menu-action:hover,
 .outline-row-palette-item:hover {
-  background: rgba(55, 53, 47, 0.08);
+  background: var(--menu-hover);
 }
 
 .outline-row-menu-icon.is-active,
 .outline-row-menu-action.is-active,
 .outline-row-palette-item.is-active {
-  background: rgba(55, 53, 47, 0.12);
+  background: var(--menu-selected);
 }
 
 .outline-row-menu-action.is-disabled {
@@ -1512,10 +1524,10 @@ textarea {
   left: calc(100% + 6px);
   width: 128px;
   padding: 6px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-popover);
+  border: 1px solid var(--menu-border);
+  border-radius: var(--menu-radius);
+  background: var(--menu-surface);
+  box-shadow: var(--menu-shadow);
 }
 
 .outline-row-palette-item {
@@ -1525,7 +1537,7 @@ textarea {
   height: 28px;
   padding: 0 6px;
   gap: 8px;
-  border-radius: 4px;
+  border-radius: var(--menu-item-radius);
   text-align: left;
   cursor: default;
 }
@@ -1661,6 +1673,13 @@ textarea {
   border-radius: 8px;
 }
 
+.document-icon-emoji {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
 .document-icon-picker {
   position: absolute;
   top: calc(100% + 8px);
@@ -1686,7 +1705,18 @@ textarea {
 .document-icon-picker .emoji-picker-popover {
   width: 100%;
   border: 0;
-  border-radius: 6px;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.document-icon-picker .emoji-picker-popover em-emoji-picker {
+  --border-radius: 0;
+  --shadow: none;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
   box-shadow: none;
 }
 
@@ -1968,17 +1998,15 @@ textarea {
 .mindmap-canvas .map-container .context-menu .menu-list {
   min-width: 190px;
   padding: 6px;
-  border: 1px solid rgba(55, 53, 47, 0.12);
-  border-radius: 6px;
-  background: #fff;
+  border: 1px solid var(--menu-border);
+  border-radius: var(--menu-radius);
+  background: var(--menu-surface);
   color: #37352f;
   font-size: 14px;
-  line-height: 1.2;
+  line-height: 20px;
   list-style: none;
   overflow: hidden;
-  box-shadow:
-    0 8px 24px rgba(15, 15, 15, 0.12),
-    0 2px 5px rgba(15, 15, 15, 0.08);
+  box-shadow: var(--menu-shadow);
 }
 
 .mindmap-canvas .map-container .context-menu .menu-list li {
@@ -1986,10 +2014,10 @@ textarea {
   min-height: 30px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 0 8px;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--menu-item-radius);
   background: transparent;
   color: #37352f;
   font-size: 14px;
@@ -1997,7 +2025,7 @@ textarea {
 }
 
 .mindmap-canvas .map-container .context-menu .menu-list li:hover {
-  background: rgba(55, 53, 47, 0.07);
+  background: var(--menu-hover);
   filter: none;
 }
 
@@ -2021,10 +2049,9 @@ textarea {
 }
 
 .mindmap-canvas .map-container .context-menu .key {
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: rgba(55, 53, 47, 0.06);
-  color: #9b9a97;
+  padding: 0;
+  background: transparent;
+  color: var(--color-text-muted);
   font-family: inherit;
   font-size: 11px;
 }
@@ -2763,10 +2790,10 @@ textarea {
 
 .mindmap-viewport-controls,
 .mindmap-style-menu-wrap {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-popover);
+  border: 1px solid var(--menu-border);
+  border-radius: var(--menu-radius);
+  background: var(--menu-surface);
+  box-shadow: var(--menu-shadow);
 }
 
 .mindmap-viewport-controls {
@@ -2925,13 +2952,14 @@ textarea {
   transform-origin: top right;
   width: 168px;
   padding: 6px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+  border: 1px solid var(--menu-border);
+  border-radius: var(--menu-radius);
+  background: var(--menu-surface);
   color: var(--color-text-primary);
   font-family: var(--zhijian-font-family);
   font-size: 14px;
-  box-shadow: var(--shadow-popover);
+  line-height: 20px;
+  box-shadow: var(--menu-shadow);
   animation: zhijian-popover-in var(--motion-popover, 150ms) var(--motion-ease-out, cubic-bezier(.2, .8, .2, 1));
 }
 
@@ -2944,17 +2972,18 @@ textarea {
   gap: 8px;
   padding: 0 8px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--menu-item-radius);
   background: transparent;
   color: inherit;
   font: inherit;
+  line-height: 20px;
   white-space: nowrap;
   cursor: pointer;
 }
 
 .mindmap-style-menu button:hover,
 .mindmap-style-menu button.is-active {
-  background: var(--color-hover);
+  background: var(--menu-hover);
 }
 
 .mindmap-style-menu button svg {
@@ -3000,10 +3029,10 @@ textarea {
   right: 0;
   width: 142px;
   padding: 4px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-popover);
+  border: 1px solid var(--menu-border);
+  border-radius: var(--menu-radius);
+  background: var(--menu-surface);
+  box-shadow: var(--menu-shadow);
   animation: zhijian-popover-in var(--motion-popover, 150ms) var(--motion-ease-out, cubic-bezier(.2, .8, .2, 1));
 }
 
@@ -3112,7 +3141,7 @@ textarea {
   gap: 12px;
   margin-top: 10px;
   padding: 9px 2px 0;
-  border-top: 1px solid rgba(55, 53, 47, 0.1);
+  border-top: 1px solid var(--menu-divider);
   color: #787774;
   font-size: 12px;
   font-weight: 600;
@@ -3195,7 +3224,7 @@ textarea {
   gap: 12px;
   margin-top: 8px;
   padding: 8px 2px 0;
-  border-top: 1px solid rgba(55, 53, 47, 0.1);
+  border-top: 1px solid var(--menu-divider);
   color: #787774;
   font-size: 12px;
   font-weight: 600;
