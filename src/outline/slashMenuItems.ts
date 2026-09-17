@@ -19,6 +19,17 @@ const removedItems = new Set([
   "file",
 ]);
 
+const slashMenuOrder = ["heading", "heading_2", "heading_3", "paragraph"];
+
+export function orderSlashMenuItems<T extends { key?: string }>(items: T[]) {
+  const order = new Map(slashMenuOrder.map((key, index) => [key, index]));
+  return [...items].sort((a, b) => {
+    const aIndex = order.get(a.key ?? "") ?? slashMenuOrder.length;
+    const bIndex = order.get(b.key ?? "") ?? slashMenuOrder.length;
+    return aIndex - bIndex;
+  });
+}
+
 export function isSupportedSlashItemKey(key: string) {
   return !removedItems.has(key);
 }

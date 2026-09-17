@@ -57,6 +57,7 @@ import { preloadEditorView } from "../shared/editorPreload";
 import { importMarkdownFiles, localizeRemoteImages } from "./markdownImageImport";
 import { compressAvatarFile } from "./avatarImage";
 import { workspaceNodeMenuPosition } from "./workspaceNodeMenuPosition";
+import { FolderView } from "./FolderView";
 import { AppErrorBoundary } from "../shared/AppErrorBoundary";
 import { LoadingScreen } from "../shared/LoadingScreen";
 import { toast } from "../shared/toast/toast";
@@ -360,7 +361,11 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
 
   const files = useMemo(() => nodes.filter(isWorkspaceFile), [nodes]);
   const activeFile = files.find((file) => file.id === activeFileId) ?? files[0];
-  const breadcrumbs = activeFile ? folderPath(nodes, activeFile.id) : [];
+  const selectedFolder = selectedFolderId
+    ? nodes.find((node): node is WorkspaceFolder => node.id === selectedFolderId && node.type === "folder") ?? null
+    : null;
+  const documentBreadcrumbs = activeFile ? folderPath(nodes, activeFile.id) : [];
+  const folderBreadcrumbs = selectedFolder ? folderPath(nodes, selectedFolder.id) : [];
   const focusBreadcrumbItems = focusBreadcrumbState?.items ?? [];
   const focusedTitle = focusBreadcrumbItems.at(-1)?.label ?? null;
   const activeDocumentStore = activeFile
@@ -369,8 +374,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const sidebarDisplayWidth = searchMode ? Math.max(sidebarWidth, 448) : sidebarWidth;
 
   useEffect(() => {
-    document.title = `${activeFile?.title || "无标题"}-枝间`;
-  }, [activeFile?.title]);
+    document.title = `${selectedFolder?.title ?? activeFile?.title ?? "枝间"}-枝间`;
+  }, [activeFile?.title, selectedFolder?.title]);
 
   /**
    * 窗口跨过移动端断点时重算一次收起状态：桌面的收起状态留到移动端会把抽屉一起按成透明、点不动，
@@ -458,8 +463,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         // 不报错也不白屏——分享出去的链接指向被删掉的文档是很正常的事。
         const deepLink = readWorkspaceDeepLink();
         const linkedFile = nextNodes.find((node) => node.id === deepLink.fileId && node.type === "file");
-        // 历史链接里可能两个参数都在。文档能打开就以文档为准，`?folder=` 只在没有有效文档
-        // 链接时才决定侧栏选中哪一个；加载完成后地址栏那条 effect 会把多余的参数清掉。
+        // 历史链接里可能两个参数都在。文档能打开就以文档为准；否则有效 folder 进入 Folder View。
         const linkedFolder = linkedFile
           ? undefined
           : nextNodes.find((node) => node.id === deepLink.folderId && node.type === "folder");
@@ -484,7 +488,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         }
         setActiveFileId(nextActiveFileId);
         setSelectedMenuKey(linkedFolder ? `tree:${linkedFolder.id}` : nextActiveFileId ? `tree:${nextActiveFileId}` : "");
-        if (linkedFolder) setSelectedFolderId(linkedFolder.id);
+        setSelectedFolderId(linkedFolder?.id ?? null);
         // 从用户记忆开始，只额外展开定位目标和最终打开文档的祖先路径。已经不存在的文件夹丢掉。
         // 这里算出来的不回写：加载失败或者工作区是空的时候不该把用户的记忆冲掉，而祖先路径每次
         // 启动都会照着当前打开的文档重新算一遍，存了也是多余的。
@@ -671,7 +675,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       ) {
         closeSearchMode();
       }
-      if (!target.closest(".node-menu") && !target.closest(".move-popover") && !target.closest(".tree-row-actions")) {
+      if (!target.closest(".node-menu") && !target.closest(".move-popover") && !target.closest("[data-node-menu-trigger]")) {
         setMenuNodeId(null);
         setMoveMenuOpen(false);
       }
@@ -870,6 +874,18 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     setMenuNodeId(null);
   };
 
+  const selectFolder = (folder: WorkspaceFolder) => {
+    const nextExpanded = new Set(expandedFolders);
+    for (const ancestor of folderPath(nodes, folder.id)) nextExpanded.add(ancestor.id);
+    applyExpandedFolders(nextExpanded);
+    setSelectedFolderId(folder.id);
+    setSelectedMenuKey(`tree:${folder.id}`);
+    setCreateMenuOpen(false);
+    setDocumentsCreateMenuOpen(false);
+    setSidebarOpen(false);
+    setMenuNodeId(null);
+  };
+
   const toggleFolderExpanded = (folderId: string) => {
     const next = new Set(expandedFolders);
     if (next.has(folderId)) next.delete(folderId); else next.add(folderId);
@@ -1011,7 +1027,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     const next = result.nodes;
     setNodes(next);
     if (result.entry) setTrash((current) => [result.entry!, ...current]);
-    if (node.id === selectedFolderId) {
+    if (selectedFolderId && (node.id === selectedFolderId || (node.type === "folder" && folderPath(nodes, selectedFolderId).some((folder) => folder.id === node.id)))) {
       setSelectedFolderId(null);
       setSelectedMenuKey(`tree:${activeFileId}`);
     }
@@ -1138,13 +1154,40 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
 
   const finishDrop = (event: DragEvent, target: DropTarget) => {
     event.preventDefault();
-    if (draggedNodeId && target) {
-      setNodes((current) => placeWorkspaceNode(current, draggedNodeId, target.nodeId, target.mode));
-      if (target.mode === "inside") applyExpandedFolders(new Set(expandedFolders).add(target.nodeId));
-    }
+    if (draggedNodeId && target) moveNodeByDrop(draggedNodeId, target.nodeId, target.mode);
     setDraggedNodeId(null);
     setDropTarget(null);
   };
+
+  const moveNodeByDrop = (nodeId: string, targetId: string, mode: DropMode) => {
+    setNodes((current) => placeWorkspaceNode(current, nodeId, targetId, mode));
+    if (mode === "inside") applyExpandedFolders(new Set(expandedFolders).add(targetId));
+  };
+
+  const openNodeMenu = (node: WorkspaceNode, anchor: HTMLElement) => {
+    const menuOpen = menuNodeId === node.id;
+    setMenuNodeId(menuOpen ? null : node.id);
+    setMenuAnchor(menuOpen ? null : anchor);
+    setMoveMenuOpen(false);
+  };
+
+  const renderNodeMenu = (node: WorkspaceNode) => menuNodeId === node.id ? (
+    <NodeMenu
+      node={node}
+      nodes={nodes}
+      anchor={menuAnchor}
+      moveOpen={moveMenuOpen}
+      onRename={() => beginRename(node)}
+      onMoveToggle={() => setMoveMenuOpen((open) => !open)}
+      onMove={(folderId) => { setNodes((current) => moveWorkspaceNode(current, node.id, folderId)); setMenuNodeId(null); }}
+      onFavorite={() => node.type === "file" && toggleFavorite(node.id)}
+      onCopyLink={() => void copyNodeLink(node)}
+      onDuplicate={() => duplicateNode(node)}
+      lastEditedAt={node.type === "file" ? latestTreeUpdatedAt(getDocumentStore(documentStores.current, node, workspacePreferences.mindMapDefaults).getSnapshot()) : undefined}
+      onDelete={() => requestDeleteNode(node)}
+      onOpen={() => window.open(nodeUrl(node), "_blank", "noopener,noreferrer")}
+    />
+  ) : null;
 
   const renderTree = (parentId: string | null, depth = 0): React.ReactNode => childNodes(nodes, parentId).map((node) => {
     const expanded = node.type === "folder" && expandedFolders.has(node.id);
@@ -1180,7 +1223,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
           onDrop={(event) => finishDrop(event, { nodeId: node.id, mode: nodeDrop ?? "after" })}
         >
           {node.type === "folder" ? (
-            <button className="tree-leading icon-button" type="button" onClick={() => { setSelectedFolderId(node.id); setSelectedMenuKey(`tree:${node.id}`); toggleFolderExpanded(node.id); }} aria-label={expanded ? `收起${nodeLabel}` : `展开${nodeLabel}`}>
+            <button className="tree-leading icon-button" type="button" onClick={() => toggleFolderExpanded(node.id)} aria-label={expanded ? `收起${nodeLabel}` : `展开${nodeLabel}`}>
               {expanded ? <FolderOpen className="leading-default-icon" /> : <Folder className="leading-default-icon" />}
               {expanded ? <ChevronDown className="leading-state-icon" /> : <ChevronRight className="leading-state-icon" />}
             </button>
@@ -1206,29 +1249,13 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               autoFocus
             />
           ) : (
-            <button className="tree-node-title" type="button" onClick={() => node.type === "file" ? selectFile(node) : (setSelectedFolderId(node.id), setSelectedMenuKey(`tree:${node.id}`), toggleFolderExpanded(node.id))}>{nodeLabel}</button>
+            <button className="tree-node-title" type="button" onClick={() => node.type === "file" ? selectFile(node) : selectFolder(node)}>{nodeLabel}</button>
           )}
           <span className="tree-row-actions">
             {node.type === "folder" ? <button className="tree-action icon-button" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file", node.id)} aria-label={`在${nodeLabel}中新建文档`} title="新增文档"><Plus /></button> : null}
-            <button className="tree-action icon-button" type="button" onClick={(event) => { setMenuNodeId(menuOpen ? null : node.id); setMenuAnchor(menuOpen ? null : event.currentTarget); setMoveMenuOpen(false); }} aria-label={`${nodeLabel}的更多操作`} title="更多"><MoreHorizontal /></button>
+            <button className="tree-action icon-button workspace-node-menu-trigger" data-node-menu-trigger="true" type="button" onClick={(event) => openNodeMenu(node, event.currentTarget)} aria-label={`${nodeLabel}的更多操作`} title="更多"><MoreHorizontal /></button>
           </span>
-          {menuOpen ? (
-            <NodeMenu
-              node={node}
-              nodes={nodes}
-              anchor={menuAnchor}
-              moveOpen={moveMenuOpen}
-              onRename={() => beginRename(node)}
-              onMoveToggle={() => setMoveMenuOpen((open) => !open)}
-              onMove={(folderId) => { setNodes((current) => moveWorkspaceNode(current, node.id, folderId)); setMenuNodeId(null); }}
-              onFavorite={() => node.type === "file" && toggleFavorite(node.id)}
-              onCopyLink={() => void copyNodeLink(node)}
-              onDuplicate={() => duplicateNode(node)}
-              lastEditedAt={node.type === "file" ? latestTreeUpdatedAt(getDocumentStore(documentStores.current, node, workspacePreferences.mindMapDefaults).getSnapshot()) : undefined}
-              onDelete={() => requestDeleteNode(node)}
-              onOpen={() => window.open(nodeUrl(node), "_blank", "noopener,noreferrer")}
-            />
-          ) : null}
+          {menuOpen ? renderNodeMenu(node) : null}
         </div>
         {node.type === "folder" && expanded ? renderTree(node.id, depth + 1) : null}
       </div>
@@ -1316,9 +1343,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               })}
               onSelectFolder={(folder) => {
                 rememberSearch(search, setRecentSearches);
-                setSelectedFolderId(folder.id);
-                setSelectedMenuKey(`search:${folder.id}`);
-                applyExpandedFolders(new Set(expandedFolders).add(folder.id));
+                selectFolder(folder);
               }}
               onSelectFile={(file) => {
                 rememberSearch(search, setRecentSearches);
@@ -1398,22 +1423,41 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       <section className="workspace-main">
         <header className="document-header">
           <div className="document-path">
-            {breadcrumbs.map((folder) => <span className="breadcrumb-part" key={folder.id}><span>{folder.title}</span><ChevronRight /></span>)}
-            {activeDocumentStore ? <DocumentIconFromStore store={activeDocumentStore} size="header" hideWhenEmpty /> : null}
-            {focusedTitle && focusBreadcrumbState ? (
+            {selectedFolder ? (
               <>
-                <button type="button" className="document-path-current" onClick={() => focusBreadcrumbState.navigate(null)}>
-                  {activeFile?.title || "无标题"}
-                </button>
-                {focusBreadcrumbItems.map((item) => (
-                  <FocusBreadcrumbPart key={item.id} item={item} onNavigate={focusBreadcrumbState.navigate} />
+                {folderBreadcrumbs.map((folder) => (
+                  <span className="breadcrumb-part" key={folder.id}>
+                    <button type="button" className="breadcrumb-folder" onClick={() => selectFolder(folder)}>{folder.title}</button>
+                    <ChevronRight />
+                  </span>
                 ))}
+                <strong className="breadcrumb-current" aria-current="page">{selectedFolder.title || "无标题"}</strong>
               </>
             ) : (
-              <strong>{activeFile?.title || "无标题"}</strong>
+              <>
+                {documentBreadcrumbs.map((folder) => (
+                  <span className="breadcrumb-part" key={folder.id}>
+                    <button type="button" className="breadcrumb-folder" onClick={() => selectFolder(folder)}>{folder.title}</button>
+                    <ChevronRight />
+                  </span>
+                ))}
+                {activeDocumentStore ? <DocumentIconFromStore store={activeDocumentStore} size="header" hideWhenEmpty /> : null}
+                {focusedTitle && focusBreadcrumbState ? (
+                  <>
+                    <button type="button" className="document-path-current" onClick={() => focusBreadcrumbState.navigate(null)}>
+                      {activeFile?.title || "无标题"}
+                    </button>
+                    {focusBreadcrumbItems.map((item) => (
+                      <FocusBreadcrumbPart key={item.id} item={item} onNavigate={focusBreadcrumbState.navigate} />
+                    ))}
+                  </>
+                ) : (
+                  <strong>{activeFile?.title || "无标题"}</strong>
+                )}
+              </>
             )}
           </div>
-          {activeFile ? (
+          {!selectedFolder && activeFile ? (
             <DocumentSaveStatus
               state={documentSaveStates[activeFile.id]}
               noticeHidden={conflictNoticeHidden.has(activeFile.id)}
@@ -1429,10 +1473,57 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               })}
             />
           ) : null}
-          <div className="document-header-actions" ref={setHeaderToolbarTarget} />
+          {selectedFolder ? (
+            <div className="document-header-actions folder-header-actions">
+              <div className="create-wrap">
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label="新增"
+                  title="新增文档或文件夹"
+                  aria-expanded={createMenuOpen}
+                  onClick={() => createMenuOpen ? setCreateMenuOpen(false) : revealCreateMenu()}
+                >
+                  <Plus />
+                </button>
+                {createMenuOpen ? (
+                  <div className="create-menu">
+                    <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file", selectedFolder.id)}><FilePlus />新增文档</button>
+                    <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("folder", selectedFolder.id)}><FolderPlus />新增文件夹</button>
+                  </div>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                className="icon-button workspace-node-menu-trigger"
+                data-node-menu-trigger="true"
+                aria-label={`${selectedFolder.title || "无标题"}的更多操作`}
+                title="更多"
+                aria-expanded={menuNodeId === selectedFolder.id}
+                onClick={(event) => openNodeMenu(selectedFolder, event.currentTarget)}
+              >
+                <MoreHorizontal />
+              </button>
+              {renderNodeMenu(selectedFolder)}
+            </div>
+          ) : <div className="document-header-actions" ref={setHeaderToolbarTarget} />}
         </header>
         <div className="document-stage">
-          {!serverReady ? null : activeDocumentStore && activeFile ? (
+          {!serverReady ? null : selectedFolder ? (
+            <FolderView
+              folder={selectedFolder}
+              nodes={nodes}
+              stores={documentStores.current}
+              onSelectFolder={selectFolder}
+              onSelectFile={selectFile}
+              onCreateFile={() => createNode("file", selectedFolder.id)}
+              onCreateFolder={() => createNode("folder", selectedFolder.id)}
+              onMoveNode={moveNodeByDrop}
+              onOpenNodeMenu={openNodeMenu}
+              openMenuNodeId={menuNodeId}
+              renderNodeMenu={renderNodeMenu}
+            />
+          ) : activeDocumentStore && activeFile ? (
             <AppErrorBoundary scope="文档"><App
               key={`${activeFile.id}:${documentStoreEpoch}`}
               embedded

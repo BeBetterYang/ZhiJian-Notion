@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createInitialTree } from "./core/tree";
 import { TreeStore } from "./core/treeStore";
@@ -6,8 +6,12 @@ import { SHORTCUTS, formatShortcutHint } from "./shared/shortcuts/shortcutRegist
 
 // 两个编辑器都是懒加载的重依赖（BlockNote / MindElixir），这里只看标题栏的菜单，换成占位。
 vi.mock("./outline/OutlineEditor", () => ({
-  OutlineEditor: ({ fullWidth }: { fullWidth?: boolean }) => (
-    <div data-testid="outline-editor" data-full-width={fullWidth ? "true" : "false"} />
+  OutlineEditor: ({ fullWidth, noteMode }: { fullWidth?: boolean; noteMode?: boolean }) => (
+    <div
+      data-testid="outline-editor"
+      data-full-width={fullWidth ? "true" : "false"}
+      data-note-mode={noteMode ? "true" : "false"}
+    />
   ),
 }));
 vi.mock("./mindmap/MindMapEditor", () => ({
@@ -52,6 +56,7 @@ describe("标题栏「更多」菜单", () => {
       "导入",
       "导出",
       "全宽",
+      "笔记模式",
       "添加星标",
       "删除",
       `快捷键列表${registryHint("shortcut-help")}`,
@@ -79,6 +84,30 @@ describe("标题栏「更多」菜单", () => {
 
     expect(screen.getByTestId("outline-editor")).toHaveAttribute("data-full-width", "true");
     expect(JSON.parse(window.localStorage.getItem(viewStateStorageKey) ?? "{}")).toMatchObject({ outlineFullWidth: true });
+  });
+
+  it("笔记模式按当前文档保存，不修改树或文档历史", async () => {
+    const viewStateStorageKey = "zhijian.test.document.note-mode.v1";
+    const before = store.getSnapshot();
+    const menu = await renderApp({ viewStateStorageKey });
+    const noteMode = within(menu).getByRole("menuitem", { name: "笔记模式" });
+
+    expect(noteMode).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByTestId("outline-editor")).toHaveAttribute("data-note-mode", "false");
+    expect(store.canUndo()).toBe(false);
+
+    fireEvent.click(noteMode);
+
+    expect(screen.getByTestId("outline-editor")).toHaveAttribute("data-note-mode", "true");
+    expect(JSON.parse(window.localStorage.getItem(viewStateStorageKey) ?? "{}")).toMatchObject({ outlineNoteMode: true });
+    expect(store.getSnapshot()).toEqual(before);
+    expect(store.canUndo()).toBe(false);
+
+    cleanup();
+    const rendered = render(<App store={store} viewStateStorageKey={viewStateStorageKey} />);
+    await screen.findByTestId("outline-editor");
+    expect(screen.getByTestId("outline-editor")).toHaveAttribute("data-note-mode", "true");
+    rendered.unmount();
   });
 
   it("可创建副本，并在菜单底部显示最后编辑时间", async () => {
@@ -153,6 +182,7 @@ describe("标题栏「更多」菜单", () => {
     expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
       "导出",
       "全宽",
+      "笔记模式",
       "添加星标",
       `快捷键列表${registryHint("shortcut-help")}`,
     ]);
@@ -163,6 +193,14 @@ describe("标题栏「更多」菜单", () => {
 
     expect(within(menu).queryByRole("menuitem", { name: "添加星标" })).not.toBeInTheDocument();
     expect(within(menu).queryByRole("menuitem", { name: "删除" })).not.toBeInTheDocument();
+  });
+
+  it("思维导图视图不显示笔记模式", async () => {
+    render(<App store={store} defaultView="mindmap" />);
+    await screen.findByTestId("mindmap-editor");
+    fireEvent.click(screen.getByRole("button", { name: "更多" }));
+
+    expect(within(screen.getByRole("menu")).queryByRole("menuitem", { name: "笔记模式" })).not.toBeInTheDocument();
   });
 });
 

@@ -88,6 +88,7 @@ interface OutlineEditorProps {
   onScrollPositionChange?: (scrollTop: number) => void;
   onFocusNode?: (nodeId: string) => void;
   fullWidth?: boolean;
+  noteMode?: boolean;
   initialTitleFocusRequestId?: number | null;
   onInitialTitleFocusHandled?: (requestId: number) => void;
 }
@@ -120,6 +121,7 @@ export function OutlineEditor({
   onScrollPositionChange,
   onFocusNode,
   fullWidth = false,
+  noteMode = false,
   initialTitleFocusRequestId = null,
   onInitialTitleFocusHandled,
 }: OutlineEditorProps) {
@@ -390,7 +392,11 @@ export function OutlineEditor({
   return (
     <section
       ref={panelRef}
-      className={`outline-panel${fullWidth ? " is-full-width" : ""}`}
+      className={[
+        "outline-panel",
+        fullWidth ? "is-full-width" : "",
+        noteMode ? "is-note-mode" : "",
+      ].filter(Boolean).join(" ")}
       data-document-theme={tree.mindMap?.theme?.id ?? "paper"}
       onMouseMoveCapture={(event) => updateDocumentIconVisibility(event.target)}
       onMouseLeave={() => updateDocumentIconVisibility(null)}

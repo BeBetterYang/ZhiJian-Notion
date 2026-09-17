@@ -22,24 +22,92 @@ import {
   TextQuote,
   type LucideIcon,
 } from "lucide-react";
+import { createPortal } from "react-dom";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { insertNodeAttachmentBlocks } from "../shared/attachmentInsertion";
-import { isSupportedSlashItemKey } from "./slashMenuItems";
+import { EmojiPickerPopover } from "../shared/emoji/EmojiPickerPopover";
+import { isSupportedSlashItemKey, orderSlashMenuItems } from "./slashMenuItems";
+
+const EMOJI_PICKER_WIDTH = 352;
+const EMOJI_PICKER_HEIGHT = 435;
+const EMOJI_PICKER_GAP = 8;
 
 export function ZhiJianSlashMenu() {
   const editor = useBlockNoteEditor();
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [emojiPickerPosition, setEmojiPickerPosition] = useState({ top: 8, left: 8 });
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+
+  const updateEmojiPickerPosition = useCallback(() => {
+    if (!emojiPickerOpen) return;
+    const rect = editor._tiptapEditor.view.coordsAtPos(editor._tiptapEditor.state.selection.from);
+    const pickerWidth = Math.min(EMOJI_PICKER_WIDTH, window.innerWidth - 32);
+    const pickerHeight = Math.min(EMOJI_PICKER_HEIGHT, window.innerHeight - 16);
+    setEmojiPickerPosition({
+      top: Math.max(8, Math.min(rect.bottom + EMOJI_PICKER_GAP, window.innerHeight - pickerHeight - 8)),
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - pickerWidth - 8)),
+    });
+  }, [editor, emojiPickerOpen]);
+
+  useLayoutEffect(() => {
+    if (!emojiPickerOpen) return undefined;
+    updateEmojiPickerPosition();
+    const reposition = () => updateEmojiPickerPosition();
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  }, [emojiPickerOpen, updateEmojiPickerPosition]);
+
+  useEffect(() => {
+    if (!emojiPickerOpen) return undefined;
+    const close = (event: PointerEvent) => {
+      if (!emojiPickerRef.current?.contains(event.target as Node)) setEmojiPickerOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setEmojiPickerOpen(false);
+    };
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [emojiPickerOpen]);
+
+  const insertSelectedEmoji = (emoji: string) => {
+    editor.insertInlineContent(`${emoji} `);
+    editor.focus();
+    setEmojiPickerOpen(false);
+  };
 
   return (
-    <SuggestionMenuController
-      triggerCharacter="/"
-      getItems={async (query) =>
-        filterSuggestionItems(
-          getDefaultReactSlashMenuItems(editor)
-            .filter((item) => isSupportedSlashItemKey((item as typeof item & { key: string }).key))
-            .map((item) => withZhiJianMenuPresentation(withAttachmentBodyGuard(editor, item))),
-          query,
-        )
-      }
-    />
+    <>
+      <SuggestionMenuController
+        triggerCharacter="/"
+        getItems={async (query) =>
+          filterSuggestionItems(
+            orderSlashMenuItems(
+              (getDefaultReactSlashMenuItems(editor) as Array<DefaultReactSuggestionItem & { key?: string }>)
+                .filter((item) => isSupportedSlashItemKey(item.key ?? "")),
+            )
+              .map((item) => withZhiJianMenuPresentation(
+                withAttachmentBodyGuard(editor, item),
+                () => setEmojiPickerOpen(true),
+              )),
+            query,
+          )
+        }
+      />
+      {emojiPickerOpen ? createPortal(
+        <div className="slash-emoji-picker emoji-picker-anchor" ref={emojiPickerRef} style={{ top: emojiPickerPosition.top, left: emojiPickerPosition.left }}>
+          <EmojiPickerPopover onEmojiSelect={insertSelectedEmoji} />
+        </div>,
+        document.body,
+      ) : null}
+    </>
   );
 }
 
@@ -57,12 +125,13 @@ const slashMenuIcons: Record<string, LucideIcon> = {
   emoji: Smile,
 };
 
-function withZhiJianMenuPresentation(item: DefaultReactSuggestionItem): DefaultReactSuggestionItem {
+function withZhiJianMenuPresentation(item: DefaultReactSuggestionItem, onEmojiClick: () => void): DefaultReactSuggestionItem {
   const key = (item as typeof item & { key?: string }).key;
   const Icon = key ? slashMenuIcons[key] : undefined;
 
   return {
     ...item,
+    onItemClick: key === "emoji" ? onEmojiClick : item.onItemClick,
     group: undefined,
     size: "small",
     icon: Icon ? <Icon aria-hidden="true" /> : <FileText aria-hidden="true" />,

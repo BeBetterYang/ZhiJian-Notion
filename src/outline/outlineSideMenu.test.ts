@@ -33,4 +33,13 @@ describe("outline side menu controls", () => {
     expect(styles).not.toContain('[draggable="true"]:focus-visible::before');
     expect(styles).not.toContain('[draggable="true"]:active::before');
   });
+
+  it("note mode hides only guide and resting marker visuals", () => {
+    expect(styles).toContain(".outline-panel.is-note-mode");
+    expect(styles).toContain("background-image: none !important;");
+    expect(styles).toContain("background: transparent;");
+    expect(styles).toContain("box-shadow: none !important;");
+    expect(styles).toContain(".outline-panel.is-note-mode\n  .bn-side-menu\n  .outline-focus-drag-handle::before");
+    expect(styles).not.toContain(".outline-panel.is-note-mode *::before");
+  });
 });

@@ -7,6 +7,7 @@ import {
   ChevronsUpDown,
   Command,
   Copy,
+  BrainCircuit,
   Ellipsis,
   FileInput,
   FileOutput,
@@ -14,7 +15,7 @@ import {
   Image,
   ListTree,
   MoveHorizontal,
-  Network,
+  NotebookText,
   RotateCcw,
   RotateCw,
   ScanSearch,
@@ -148,6 +149,7 @@ export default function App({
   const [selectionActive, setSelectionActive] = useState(false);
   const [activeView, setActiveView] = useState<"outline" | "mindmap">(initialViewState?.activeView ?? defaultView);
   const [outlineFullWidth, setOutlineFullWidth] = useState(initialViewState?.outlineFullWidth ?? false);
+  const [outlineNoteMode, setOutlineNoteMode] = useState(initialViewState?.outlineNoteMode ?? false);
   // Set while the node being edited in the map is formatting one of its own quote or
   // picture blocks, which it does through its own toolbar in the shared host.
   const [mindMapNodeToolbarActive, setMindMapNodeToolbarActive] = useState(false);
@@ -239,6 +241,15 @@ export default function App({
     setOutlineFullWidth((current) => {
       const next = !current;
       persistViewStatePatch({ outlineFullWidth: next });
+      return next;
+    });
+    setToolbarMoreOpen(false);
+  }, [persistViewStatePatch]);
+
+  const toggleOutlineNoteMode = useCallback(() => {
+    setOutlineNoteMode((current) => {
+      const next = !current;
+      persistViewStatePatch({ outlineNoteMode: next });
       return next;
     });
     setToolbarMoreOpen(false);
@@ -548,7 +559,7 @@ export default function App({
           setExportMenuOpen(false);
         }}
       >
-        {activeView === "outline" ? <Network /> : <ListTree />}
+        {activeView === "outline" ? <BrainCircuit /> : <ListTree />}
         <span>{activeView === "outline" ? "思维导图" : "大纲笔记"}</span>
       </button>
       <div className="toolbar-more-wrap" ref={collapseMenuRef}>
@@ -697,6 +708,18 @@ export default function App({
                 <span className={`toolbar-menu-switch${outlineFullWidth ? " is-active" : ""}`} aria-hidden="true"><span /></span>
               </button>
             ) : null}
+            {activeView === "outline" ? (
+              <button
+                type="button"
+                role="menuitem"
+                aria-pressed={outlineNoteMode}
+                onClick={toggleOutlineNoteMode}
+              >
+                <NotebookText />
+                <span>笔记模式</span>
+                <span className={`toolbar-menu-switch${outlineNoteMode ? " is-active" : ""}`} aria-hidden="true"><span /></span>
+              </button>
+            ) : null}
             {onToggleFavorite || onDeleteDocument ? <div className="menu-divider" /> : null}
             {!readOnly && onDuplicateDocument ? (
               <button type="button" role="menuitem" onClick={() => runFromMenu(onDuplicateDocument)}>
@@ -790,6 +813,7 @@ export default function App({
               initialScrollTop={initialViewState?.outlineScrollTop}
               onScrollPositionChange={updateOutlineScroll}
               fullWidth={outlineFullWidth}
+              noteMode={outlineNoteMode}
               initialTitleFocusRequestId={activeView === "outline" && shouldFocusInitialTitle ? initialTitleFocusRequestId : null}
               onInitialTitleFocusHandled={handleInitialTitleFocusHandled}
               onFocusNode={(nodeId) => {
@@ -977,6 +1001,8 @@ function loadDocumentViewState(key: string): DocumentViewState {
     const value = parsed as DocumentViewState;
     return {
       activeView: value.activeView === "outline" || value.activeView === "mindmap" ? value.activeView : undefined,
+      outlineFullWidth: typeof value.outlineFullWidth === "boolean" ? value.outlineFullWidth : undefined,
+      outlineNoteMode: typeof value.outlineNoteMode === "boolean" ? value.outlineNoteMode : undefined,
       outlineScrollTop: typeof value.outlineScrollTop === "number" ? value.outlineScrollTop : undefined,
       mindMapViewport: isMindMapViewportState(value.mindMapViewport) ? value.mindMapViewport : undefined,
       mindMapDirection: value.mindMapDirection === 0 || value.mindMapDirection === 1 || value.mindMapDirection === 2 ? value.mindMapDirection : undefined,

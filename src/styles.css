@@ -994,6 +994,16 @@ textarea {
   background: rgba(55, 53, 47, 0.08);
 }
 
+/* BlockNote selects the first command internally when the menu opens. Keep the
+   menu visually neutral until the user moves the pointer or keyboard focus. */
+.outline-panel .bn-mantine .bn-suggestion-menu > .bn-suggestion-menu-item:first-child[aria-selected="true"] {
+  background: transparent;
+}
+
+.outline-panel .bn-mantine .bn-suggestion-menu > .bn-suggestion-menu-item:first-child[aria-selected="true"]:hover {
+  background: rgba(55, 53, 47, 0.08);
+}
+
 .outline-panel .bn-mantine .bn-mt-suggestion-menu-item-section[data-position="left"] {
   width: 24px;
   height: 24px;
@@ -1716,12 +1726,16 @@ textarea {
   background: #fff;
 }
 
-.outline-emoji-picker {
+.outline-emoji-picker,
+.slash-emoji-picker {
   position: fixed;
   z-index: 70;
 }
 
 .emoji-picker-popover {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
   width: min(352px, calc(100vw - 32px));
   min-height: 0;
   height: min(435px, calc(100vh - 16px));
@@ -1732,11 +1746,21 @@ textarea {
   box-shadow: var(--shadow-popover);
 }
 
-.outline-emoji-picker .emoji-picker-popover em-emoji-picker {
-  display: block;
+.emoji-picker-popover > div {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+.outline-emoji-picker .emoji-picker-popover em-emoji-picker,
+.slash-emoji-picker .emoji-picker-popover em-emoji-picker {
+  flex: 1 1 auto;
+  display: flex;
   width: 100%;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .emoji-picker-loading {
@@ -2018,6 +2042,55 @@ textarea {
 
 .outline-panel .bn-side-menu [draggable="true"]:active {
   cursor: grabbing;
+}
+
+/* Outline note mode changes presentation only. Keep the guide and marker boxes in
+   the layout so switching modes cannot move text, and let BlockNote continue to
+   own the side menu and its real draggable handle. */
+.outline-panel.is-note-mode
+  .bn-editor
+  .bn-block-group
+  .bn-block-group
+  > .bn-block-outer:not([data-prev-depth-changed])::before {
+  border-left-color: transparent;
+}
+
+.outline-panel.is-note-mode
+  .bn-block-group
+  .bn-block-outer:has(> .bn-block > .bn-block-group)
+  > .bn-block
+  > .bn-block-content {
+  background-image: none !important;
+}
+
+.outline-panel.is-note-mode
+  .bn-block-group
+  .bn-block-outer
+  > .bn-block
+  > .bn-block-content:is(
+    [data-content-type="paragraph"],
+    [data-content-type="heading"],
+    [data-content-type="checkListItem"],
+    [data-content-type="table"]
+  )::before {
+  background: transparent;
+  box-shadow: none !important;
+}
+
+/* The side menu is still rendered by BlockNote on hover/focus. Its handle remains
+   the existing draggable button; only its marker becomes visible in this mode. */
+.outline-panel.is-note-mode
+  .bn-side-menu
+  .outline-focus-drag-handle::before {
+  background: #686970;
+}
+
+@media (pointer: coarse) {
+  .outline-panel.is-note-mode
+    .bn-side-menu
+    .outline-focus-drag-handle::before {
+    background: #686970;
+  }
 }
 
 .outline-panel .bn-visual-media-wrapper {

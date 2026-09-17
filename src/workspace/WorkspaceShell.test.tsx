@@ -630,9 +630,10 @@ describe("文档服务器记录的生命周期", () => {
     { id: "file-b", title: "会议记录", type: "file" as const, parentId: "sub", order: 0, favorite: false, openedAt: 2 },
   ];
 
-  function treeWithRootText(text: string) {
+  function treeWithRootText(text: string, createdAt = 1_700_000_000_000, updatedAt = createdAt) {
     const tree = createInitialTree();
     tree.nodes[tree.rootId].content.text = text;
+    tree.nodes[tree.rootId].meta = { createdAt, updatedAt };
     return tree;
   }
 
@@ -777,10 +778,15 @@ describe("文档服务器记录的生命周期", () => {
     renderShell();
     await screen.findByTestId("document-editor");
 
-    act(() => screen.getByPlaceholderText("全局搜索").focus());
+    await act(async () => {
+      screen.getByPlaceholderText("全局搜索").focus();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(document.querySelector(".workspace-shell-ui")).toHaveClass("is-search-mode"));
     fireEvent.keyDown(window, { key: "n", code: "KeyN", ctrlKey: true });
 
-    expect(await screen.findByRole("button", { name: "新增文档" })).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector(".sidebar-header .create-menu")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "新增文档" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "新增文件夹" })).toBeInTheDocument();
     expect(document.querySelector(".workspace-files")).not.toBeNull();
   });
@@ -839,6 +845,20 @@ describe("Workspace Deep Link", () => {
     // 加载遮罩撤掉之前整块内容都是 aria-hidden 的，按 role 查要等它可访问。
     expect(await within(sidebar).findByRole("button", { name: "展开项目 A" })).toBeInTheDocument();
     expect(within(sidebar).queryByText("子文件夹")).not.toBeInTheDocument();
+  });
+
+  it("点击文件夹前方控件只展开，不切换 Folder View", async () => {
+    window.localStorage.setItem("zhijian.workspace.last-open-file.v1:user-1", "file-1");
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+    expect(await screen.findByTestId("document-editor")).toHaveTextContent("产品规划");
+
+    const sidebar = document.querySelector<HTMLElement>(".workspace-files")!;
+    fireEvent.click(await within(sidebar).findByRole("button", { name: "展开项目 A" }));
+
+    expect(within(sidebar).getByText("子文件夹")).toBeInTheDocument();
+    expect(screen.getByTestId("document-editor")).toHaveTextContent("产品规划");
+    expect(new URLSearchParams(window.location.search).get("file")).toBe("file-1");
   });
 
   it("记住用户展开和收起的文件夹", async () => {
@@ -917,16 +937,103 @@ describe("Workspace Deep Link", () => {
     expect(await screen.findByTestId("document-editor")).toHaveTextContent("产品规划");
   });
 
-  it("?folder= 选中文件夹并展开祖先路径，文档仍是记住的那一篇", async () => {
+  it("?folder= 恢复文件夹视图并展开祖先路径，文档仍保留为最近打开文档", async () => {
     window.localStorage.setItem("zhijian.workspace.last-open-file.v1:user-1", "file-1");
     window.history.replaceState(null, "", "/workspace.html?folder=sub");
 
     render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
 
-    expect(await screen.findByTestId("document-editor")).toHaveTextContent("产品规划");
+    expect(await screen.findByRole("heading", { name: "子文件夹", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开文档 深层文档" })).toBeInTheDocument();
+    expect(screen.queryByTestId("document-editor")).not.toBeInTheDocument();
     const sidebar = document.querySelector<HTMLElement>(".workspace-files")!;
     expect(within(sidebar).getByText("子文件夹")).toBeInTheDocument();
     expect(within(sidebar).queryByText("深层文档")).not.toBeInTheDocument();
+  });
+
+  it("Folder View 只显示当前文件夹的直接子级", async () => {
+    window.history.replaceState(null, "", "/workspace.html?folder=folder");
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+
+    expect(await screen.findByRole("heading", { name: "项目 A", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开文件夹 子文件夹" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "打开文档 深层文档" })).not.toBeInTheDocument();
+  });
+
+  it("Folder View 文档显示最近编辑和创建时间", async () => {
+    const document = createInitialTree();
+    document.nodes[document.rootId].content.text = "需求";
+    document.nodes[document.rootId].meta = { createdAt: 1_700_000_000_000, updatedAt: 1_700_000_100_000 };
+    serverMocks.loadWorkspaceState.mockResolvedValue({
+      profile: { name: "枝间用户", email: session.email, avatarUrl: "" },
+      nodes: [{ id: "folder", title: "项目 A", type: "folder", parentId: null, order: 0 }, { id: "file-a", title: "需求", type: "file", parentId: "folder", order: 0, favorite: false, openedAt: 1 }],
+      documents: { "file-a": document },
+    });
+    window.history.replaceState(null, "", "/workspace.html?folder=folder");
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+
+    await screen.findByRole("heading", { name: "项目 A", level: 1 });
+    const metadata = screen.getByLabelText(/最近编辑/);
+    expect(metadata).toHaveTextContent("最近编辑");
+    expect(metadata).toHaveTextContent("创建时间");
+  });
+
+  it("Folder View 拖动文档后同步更新左侧文件树顺序", async () => {
+    const firstDocument = createInitialTree();
+    firstDocument.nodes[firstDocument.rootId].content.text = "A";
+    const secondDocument = createInitialTree();
+    secondDocument.nodes[secondDocument.rootId].content.text = "B";
+    const folderNodes = [
+      { id: "folder", title: "项目 A", type: "folder" as const, parentId: null, order: 0 },
+      { id: "file-a", title: "A", type: "file" as const, parentId: "folder", order: 0, favorite: false, openedAt: 1 },
+      { id: "file-b", title: "B", type: "file" as const, parentId: "folder", order: 1, favorite: false, openedAt: 2 },
+    ];
+    serverMocks.loadWorkspaceState.mockResolvedValue({
+      profile: { name: "枝间用户", email: session.email, avatarUrl: "" },
+      nodes: folderNodes,
+      documents: { "file-a": firstDocument, "file-b": secondDocument },
+    });
+    window.history.replaceState(null, "", "/workspace.html?folder=folder");
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+
+    await screen.findByRole("heading", { name: "项目 A", level: 1 });
+    const source = screen.getByRole("button", { name: "打开文档 A" }).closest<HTMLElement>(".folder-view-row");
+    const target = screen.getByRole("button", { name: "打开文档 B" }).closest<HTMLElement>(".folder-view-row");
+    expect(source).not.toBeNull();
+    expect(target).not.toBeNull();
+    Object.defineProperty(target!, "getBoundingClientRect", { value: () => ({ top: 0, height: 40 }) });
+    const dataTransfer = {
+      effectAllowed: "",
+      dropEffect: "",
+      setData: vi.fn(),
+      setDragImage: vi.fn(),
+    } as unknown as DataTransfer;
+
+    fireEvent.dragStart(source!, { dataTransfer });
+    fireEvent.dragOver(target!, { dataTransfer, clientY: 32 });
+    fireEvent.drop(target!, { dataTransfer, clientY: 32 });
+
+    await waitFor(() => {
+      expect(Array.from(document.querySelectorAll(".folder-view-row-main .folder-view-row-copy > span:first-child")).map((item) => item.textContent)).toEqual(["B", "A"]);
+    });
+
+    const sidebar = document.querySelector<HTMLElement>(".workspace-files")!;
+    const expandButton = within(sidebar).queryByRole("button", { name: "展开项目 A" });
+    if (expandButton) fireEvent.click(expandButton);
+    expect(Array.from(sidebar.querySelectorAll(".tree-node-row .tree-node-title")).map((item) => item.textContent)).toEqual(["项目 A", "B", "A"]);
+  });
+
+  it("面包屑父级和当前文件夹使用统一的展示结构", async () => {
+    window.history.replaceState(null, "", "/workspace.html?folder=sub");
+
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+
+    await screen.findByRole("heading", { name: "子文件夹", level: 1 });
+    expect(within(document.querySelector(".document-path")!).getByRole("button", { name: "项目 A" })).toHaveClass("breadcrumb-folder");
+    expect(document.querySelector(".breadcrumb-current")).toHaveTextContent("子文件夹");
   });
 
   it("地址栏跟着当前文档走，用 replaceState 不堆历史记录", async () => {
@@ -948,7 +1055,7 @@ describe("Workspace Deep Link", () => {
     window.history.replaceState(null, "", "/workspace.html?folder=sub");
 
     render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
-    expect(await screen.findByTestId("document-editor")).toHaveTextContent("产品规划");
+    expect(await screen.findByRole("heading", { name: "子文件夹", level: 1 })).toBeInTheDocument();
     await waitFor(() => expect(new URLSearchParams(window.location.search).get("folder")).toBe("sub"));
 
     const sidebar = document.querySelector<HTMLElement>(".workspace-files")!;
@@ -971,8 +1078,8 @@ describe("Workspace Deep Link", () => {
 
     await waitFor(() => expect(new URLSearchParams(window.location.search).get("folder")).toBe("folder"));
     expect(new URLSearchParams(window.location.search).has("file")).toBe(false);
-    // 选文件夹只挪侧栏，正文还是原来那一篇。
-    expect(screen.getByTestId("document-editor")).toHaveTextContent("深层文档");
+    expect(screen.getByRole("heading", { name: "项目 A", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByTestId("document-editor")).not.toBeInTheDocument();
   });
 
   it("历史链接两个参数都在时以 file 为准，并把地址栏收敛成只有 file", async () => {
@@ -991,7 +1098,7 @@ describe("Workspace Deep Link", () => {
 
     render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
 
-    expect(await screen.findByTestId("document-editor")).toHaveTextContent("产品规划");
+    expect(await screen.findByRole("heading", { name: "子文件夹", level: 1 })).toBeInTheDocument();
     // 文档链接是坏的，这时才轮到 folder 决定侧栏选中哪一个；坏掉的 file 参数一并清掉。
     const sidebar = document.querySelector<HTMLElement>(".workspace-files")!;
     expect(within(sidebar).getByText("子文件夹")).toBeInTheDocument();
