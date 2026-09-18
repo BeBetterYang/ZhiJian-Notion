@@ -48,7 +48,7 @@ export class WorkspaceApiError extends Error {
   }
 }
 
-interface WorkspaceApiOptions {
+export interface WorkspaceApiOptions {
   onSessionRefresh?: (session: WorkspaceSession) => void;
 }
 
@@ -166,7 +166,7 @@ export async function importSharedDocument(session: WorkspaceSession, token: str
   return readJsonResponse(response, "服务器返回的保存结果格式不正确。") as Promise<{ ok: boolean; fileId: string }>;
 }
 
-async function workspaceFetch(input: RequestInfo | URL, init: RequestInit, session: WorkspaceSession, options?: WorkspaceApiOptions) {
+export async function workspaceFetch(input: RequestInfo | URL, init: RequestInit, session: WorkspaceSession, options?: WorkspaceApiOptions) {
   const freshSession = await ensureFreshSession(session, options);
   const response = await fetch(input, {
     ...init,

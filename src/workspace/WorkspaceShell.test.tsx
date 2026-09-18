@@ -265,6 +265,38 @@ describe("WorkspaceShell session refresh", () => {
     expect(screen.getByTestId("document-editor")).toHaveAttribute("data-layout", "mind-map");
   });
 
+  it("只显示当前入口的新增菜单", async () => {
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+    await screen.findByTestId("document-editor");
+
+    const createButtons = await screen.findAllByRole("button", { name: /^新增$/ });
+    fireEvent.click(createButtons[0]);
+    fireEvent.click(screen.getByRole("button", { name: "新增文件夹" }));
+
+    const sidebar = document.querySelector<HTMLElement>(".workspace-sidebar")!;
+    fireEvent.click(await within(sidebar).findByRole("button", { name: /^新增$/ }));
+    expect(document.querySelectorAll(".create-menu")).toHaveLength(1);
+    expect(document.querySelector(".folder-header-actions .create-menu")).toBeNull();
+
+    fireEvent.click(document.querySelector<HTMLButtonElement>(".folder-header-actions button[aria-label='新增']")!);
+    expect(document.querySelectorAll(".create-menu")).toHaveLength(1);
+    expect(document.querySelector(".sidebar-header .create-menu")).toBeNull();
+  });
+
+  it("AI 开关关闭时导入按钮直接打开 Markdown 选择器", async () => {
+    const inputClick = vi.spyOn(HTMLInputElement.prototype, "click");
+    render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
+    await screen.findByTestId("document-editor");
+
+    const sidebar = document.querySelector<HTMLElement>(".workspace-sidebar")!;
+    fireEvent.click(await within(sidebar).findByRole("button", { name: "导入文档" }));
+
+    expect(sidebar.querySelector(".create-menu")).toBeNull();
+    expect(screen.queryByRole("button", { name: "AI文档导入" })).not.toBeInTheDocument();
+    expect(inputClick).toHaveBeenCalledTimes(1);
+    inputClick.mockRestore();
+  });
+
   it("portals the sidebar node menu outside the scrolling sidebar", async () => {
     render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
 

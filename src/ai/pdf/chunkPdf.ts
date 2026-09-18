@@ -44,6 +44,11 @@ function pageRangeText(document: PdfSourceDocument, startPage: number, endPage: 
     .join("\n\n");
 }
 
+function pageTextLength(document: PdfSourceDocument, pageNumber: number) {
+  const page = document.pages.find((item) => item.page === pageNumber);
+  return page ? pageTextLabel(page.page, page.text).length : 0;
+}
+
 function chunkPages(document: PdfSourceDocument, pageNumbers: number[], source: "outline" | "pages", title?: string, idPrefix: string = source) {
   const pages = pageNumbers
     .map((page) => document.pages.find((item) => item.page === page))
@@ -92,8 +97,8 @@ function outlineChunks(document: PdfSourceDocument, targetChars: number, maxChar
     let cursor: number[] = [];
     let cursorChars = 0;
     for (const page of pages) {
-      const pageChars = document.pages.find((item) => item.page === page)?.charCount ?? 0;
-      if (cursor.length && cursorChars >= targetChars) {
+      const pageChars = pageTextLength(document, page);
+      if (cursor.length && (cursorChars >= targetChars || cursorChars + pageChars > maxChars)) {
         const split = chunkPages(document, cursor, "outline", `${entry.title} · ${part}`, `outline-${index + 1}-${part}`);
         if (split) chunks.push(split);
         part += 1;
@@ -115,7 +120,8 @@ function pageChunks(document: PdfSourceDocument, targetChars: number, maxChars: 
   let chars = 0;
   let index = 1;
   for (const page of document.pages) {
-    if (pageNumbers.length && chars >= targetChars) {
+    const pageChars = pageTextLabel(page.page, page.text).length;
+    if (pageNumbers.length && (chars >= targetChars || chars + pageChars > maxChars)) {
       const chunk = chunkPages(document, pageNumbers, "pages", undefined, `pages-${index}`);
       if (chunk) chunks.push(chunk);
       index += 1;
@@ -123,7 +129,7 @@ function pageChunks(document: PdfSourceDocument, targetChars: number, maxChars: 
       chars = 0;
     }
     pageNumbers.push(page.page);
-    chars += page.charCount;
+    chars += pageChars;
     if (chars >= maxChars && pageNumbers.length === 1) {
       const chunk = chunkPages(document, pageNumbers, "pages", undefined, `pages-${index}`);
       if (chunk) chunks.push(chunk);

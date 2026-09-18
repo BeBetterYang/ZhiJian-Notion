@@ -6,8 +6,10 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronsRight,
+  CloudUpload,
   Copy,
   ExternalLink,
+  FileUp,
   FilePlus,
   FileText,
   Folder,
@@ -59,6 +61,11 @@ import { compressAvatarFile } from "./avatarImage";
 import { workspaceNodeMenuPosition } from "./workspaceNodeMenuPosition";
 import { FolderView, type FolderViewCollection } from "./FolderView";
 import { PdfImportDialog } from "../ai/components/PdfImportDialog";
+import { AIProviderSettings } from "../ai/components/AIProviderSettings";
+import { AIChatWidget } from "../ai/chat/AIChatWidget";
+import { loadAIProviderConfig, saveAIProviderConfig, type AIProviderConfig } from "../ai/aiProviderConfig";
+import { outlineDraftToTree } from "../ai/outlineDraftToTree";
+import type { AIOutlineDraft } from "../ai/types";
 import { AppErrorBoundary } from "../shared/AppErrorBoundary";
 import { LoadingScreen } from "../shared/LoadingScreen";
 import { toast } from "../shared/toast/toast";
@@ -136,6 +143,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const [userProfile, setUserProfile] = useState<UserProfile>(() => profileFromSession(session));
   const [profileDraft, setProfileDraft] = useState<UserProfile>(() => profileFromSession(session));
   const [workspacePreferences, setWorkspacePreferences] = useState<WorkspacePreferences>({});
+  const [aiProviderConfig, setAIProviderConfig] = useState<AIProviderConfig>(() => loadAIProviderConfig(session.userId));
   const [newPassword, setNewPassword] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -184,8 +192,10 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const [sidebarPeeking, setSidebarPeeking] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(240);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [importMenuOpen, setImportMenuOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [documentsCreateMenuOpen, setDocumentsCreateMenuOpen] = useState(false);
+  const [folderCreateMenuOpen, setFolderCreateMenuOpen] = useState(false);
   const [menuNodeId, setMenuNodeId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<WorkspaceNode | null>(null);
   const [moveMenuOpen, setMoveMenuOpen] = useState(false);
@@ -399,6 +409,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     if (enteringSearchMode) {
       setCreateMenuOpen(false);
       setDocumentsCreateMenuOpen(false);
+      setFolderCreateMenuOpen(false);
+      setImportMenuOpen(false);
     }
     if (enteringSearchMode && sidebarCollapsed) {
       setSidebarCollapsed(false);
@@ -417,15 +429,33 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   }, [search]);
 
   const revealCreateMenu = useCallback(() => {
+    setImportMenuOpen(false);
     setDocumentsCreateMenuOpen(false);
+    setFolderCreateMenuOpen(false);
     setCreateMenuOpen(true);
     window.requestAnimationFrame(() => document.querySelector<HTMLElement>(".create-menu")?.scrollIntoView?.({ block: "nearest" }));
   }, []);
 
   const revealDocumentsCreateMenu = useCallback(() => {
+    setImportMenuOpen(false);
     setCreateMenuOpen(false);
+    setFolderCreateMenuOpen(false);
     setDocumentsCreateMenuOpen(true);
     window.requestAnimationFrame(() => document.querySelector<HTMLElement>(".sidebar-section-actions .create-menu")?.scrollIntoView?.({ block: "nearest" }));
+  }, []);
+
+  const revealFolderCreateMenu = useCallback(() => {
+    setImportMenuOpen(false);
+    setCreateMenuOpen(false);
+    setDocumentsCreateMenuOpen(false);
+    setFolderCreateMenuOpen(true);
+  }, []);
+
+  const revealImportMenu = useCallback(() => {
+    setCreateMenuOpen(false);
+    setDocumentsCreateMenuOpen(false);
+    setFolderCreateMenuOpen(false);
+    setImportMenuOpen(true);
   }, []);
 
   // 保持全局快捷键监听稳定，避免搜索模式切换时卸载/重绑监听造成 Ctrl/Cmd+N 丢失。
@@ -620,6 +650,10 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   }, []);
 
   useEffect(() => {
+    setAIProviderConfig(loadAIProviderConfig(session.userId));
+  }, [session.userId]);
+
+  useEffect(() => {
     if (!activeFile || !activeDocumentStore) return;
     const syncTitle = (tree: ZhiJianTree) => {
       const title = tree.nodes[tree.rootId]?.content.text ?? "";
@@ -660,6 +694,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         setAccountOpen(false);
         setCreateMenuOpen(false);
         setDocumentsCreateMenuOpen(false);
+        setFolderCreateMenuOpen(false);
+        setImportMenuOpen(false);
         setMenuNodeId(null);
         setMoveMenuOpen(false);
         setSidebarOpen(false);
@@ -680,6 +716,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       if (!target.closest(".create-wrap")) {
         setCreateMenuOpen(false);
         setDocumentsCreateMenuOpen(false);
+        setFolderCreateMenuOpen(false);
+        setImportMenuOpen(false);
       }
       if (!target.closest(".sidebar-search-wrap")) setSearchFilterOpen(false);
       if (
@@ -851,6 +889,13 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     }
   };
 
+  const saveAIProviderSettings = (config: AIProviderConfig) => {
+    saveAIProviderConfig(sessionRef.current.userId, config);
+    setAIProviderConfig(config);
+    setImportMenuOpen(false);
+    toast.success("AI 设置已保存");
+  };
+
   const recentFiles = useMemo(() => [...files].sort((a, b) => b.openedAt - a.openedAt).slice(0, 6), [files]);
   const favoriteFiles = useMemo(() => files.filter((file) => file.favorite), [files]);
   const workspaceSearchResults = useMemo(
@@ -900,6 +945,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     setSelectedMenuKey(`tree:${folder.id}`);
     setCreateMenuOpen(false);
     setDocumentsCreateMenuOpen(false);
+    setFolderCreateMenuOpen(false);
+    setImportMenuOpen(false);
     setSidebarOpen(false);
     setMenuNodeId(null);
   };
@@ -910,6 +957,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     setSelectedMenuKey(`section:${section}`);
     setCreateMenuOpen(false);
     setDocumentsCreateMenuOpen(false);
+    setFolderCreateMenuOpen(false);
+    setImportMenuOpen(false);
     setSidebarOpen(false);
     setMenuNodeId(null);
   };
@@ -941,12 +990,34 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     if (serverAvailable) void persistDocument(fileId, tree);
   };
 
+  const createDocumentFromAIDraft = (draft: AIOutlineDraft) => {
+    const targetParent = activeFile?.parentId ?? null;
+    const result = createWorkspaceNode(nodes, "file", targetParent);
+    if (!result.node) {
+      toast.error("当前文件夹层级已达到上限，无法创建文档。");
+      return;
+    }
+    const created = result.node;
+    const nextNodes = result.nodes.map((node) => node.id === created.id ? { ...node, title: draft.title } : node);
+    const tree = applyMindMapDefaults(outlineDraftToTree(draft), workspacePreferences.mindMapDefaults);
+    setNodes(nextNodes);
+    createAndPersistDocument(created.id, tree);
+    if (targetParent) applyExpandedFolders(new Set(expandedFolders).add(targetParent));
+    setActiveFileId(created.id);
+    setSelectedMenuKey(`tree:${created.id}`);
+    setSelectedFolderId(null);
+    setSelectedQuickSection(null);
+    setPdfImportOpen(false);
+  };
+
   // 新建带着「立刻写一次服务器」的副作用，所以不放在 setNodes 的 updater 里：StrictMode 下
   // updater 会跑两次，那就会对同一个 fileId 发两次首存。
   const createNode = (type: WorkspaceNode["type"], parentId?: string | null) => {
     const targetParent = parentId === undefined ? null : parentId;
     setCreateMenuOpen(false);
     setDocumentsCreateMenuOpen(false);
+    setFolderCreateMenuOpen(false);
+    setImportMenuOpen(false);
     const result = createWorkspaceNode(nodes, type, targetParent);
     const created = result.node;
     if (!created) return;
@@ -981,6 +1052,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const importDocuments = async (files: File[]) => {
     setCreateMenuOpen(false);
     setDocumentsCreateMenuOpen(false);
+    setFolderCreateMenuOpen(false);
+    setImportMenuOpen(false);
     const { documents: parsed, failedFiles, failedImageCount } = await importMarkdownFiles(files, importMarkdownImage);
     const notices = [
       failedFiles.length ? `${failedFiles.length} 个文件导入失败：${failedFiles.join("、")}` : "",
@@ -1178,6 +1251,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     setSidebarPeeking(false);
     setCreateMenuOpen(false);
     setDocumentsCreateMenuOpen(false);
+    setFolderCreateMenuOpen(false);
+    setImportMenuOpen(false);
     saveSidebarCollapsed(collapsed);
   };
 
@@ -1301,10 +1376,27 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
         <header className="sidebar-header">
           <button type="button" className="sidebar-collapse icon-button" onClick={() => applySidebarCollapsed(true)} aria-label="收起侧栏" title="收起侧栏"><PanelLeft /></button>
           <div className="sidebar-header-actions">
-            <button type="button" className="sidebar-header-action icon-button" onClick={() => importInputRef.current?.click()} aria-label="导入文档" title="导入文档"><FolderUp /></button>
+            <div className="create-wrap">
+              <button type="button" className="sidebar-header-action icon-button" onClick={() => {
+                if (!aiProviderConfig.enabled) {
+                  setImportMenuOpen(false);
+                  importInputRef.current?.click();
+                } else if (importMenuOpen) {
+                  setImportMenuOpen(false);
+                } else {
+                  revealImportMenu();
+                }
+              }} aria-label="导入文档" title="导入文档" aria-expanded={aiProviderConfig.enabled ? importMenuOpen : undefined}><FolderUp /></button>
+              {aiProviderConfig.enabled && importMenuOpen ? (
+                <div className="create-menu">
+                  <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setImportMenuOpen(false); importInputRef.current?.click(); }}><FileUp />导入 Markdown</button>
+                  <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setImportMenuOpen(false); setPdfImportOpen(true); }}><CloudUpload />AI文档导入</button>
+                </div>
+              ) : null}
+            </div>
             <div className="create-wrap">
               <button type="button" className="sidebar-header-action icon-button" aria-label="新增" title="新增文档或文件夹" aria-expanded={createMenuOpen} onClick={() => createMenuOpen ? setCreateMenuOpen(false) : revealCreateMenu()}><SquarePen /></button>
-              {createMenuOpen ? <div className="create-menu"><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file")}><FilePlus />新增文档</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("folder")}><FolderPlus />新增文件夹</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setCreateMenuOpen(false); setPdfImportOpen(true); }}><FileText />从 PDF 生成大纲</button></div> : null}
+              {createMenuOpen ? <div className="create-menu"><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file")}><FilePlus />新增文档</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("folder")}><FolderPlus />新增文件夹</button></div> : null}
             </div>
           </div>
           <button type="button" className="mobile-close icon-button" onClick={() => setSidebarOpen(false)} aria-label="关闭侧栏" title="关闭侧栏"><X /></button>
@@ -1414,7 +1506,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                   <span className="sidebar-section-actions">
                     <span className="create-wrap">
                       <button className="tree-action icon-button" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => documentsCreateMenuOpen ? setDocumentsCreateMenuOpen(false) : revealDocumentsCreateMenu()} aria-label="在我的文档中新增" title="新增文档或文件夹" aria-expanded={documentsCreateMenuOpen}><Plus /></button>
-                      {documentsCreateMenuOpen ? <div className="create-menu"><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file")}><FilePlus />新增文档</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("folder")}><FolderPlus />新增文件夹</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setDocumentsCreateMenuOpen(false); setPdfImportOpen(true); }}><FileText />从 PDF 生成大纲</button></div> : null}
+                      {documentsCreateMenuOpen ? <div className="create-menu"><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file")}><FilePlus />新增文档</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("folder")}><FolderPlus />新增文件夹</button></div> : null}
                     </span>
                   </span>
                 </div>
@@ -1520,16 +1612,15 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                   className="icon-button"
                   aria-label="新增"
                   title="新增文档或文件夹"
-                  aria-expanded={createMenuOpen}
-                  onClick={() => createMenuOpen ? setCreateMenuOpen(false) : revealCreateMenu()}
+                  aria-expanded={folderCreateMenuOpen}
+                  onClick={() => folderCreateMenuOpen ? setFolderCreateMenuOpen(false) : revealFolderCreateMenu()}
                 >
                   <Plus />
                 </button>
-                {createMenuOpen ? (
+                {folderCreateMenuOpen ? (
                   <div className="create-menu">
                     <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file", selectedFolder.id)}><FilePlus />新增文档</button>
                     <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("folder", selectedFolder.id)}><FolderPlus />新增文件夹</button>
-                    <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setCreateMenuOpen(false); setPdfImportOpen(true); }}><FileText />从 PDF 生成大纲</button>
                   </div>
                 ) : null}
               </div>
@@ -1620,7 +1711,18 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
           )}
         </div>
       </section>
-      {pdfImportOpen ? <PdfImportDialog onClose={() => setPdfImportOpen(false)} /> : null}
+      {serverReady && activeFile && activeDocumentStore ? (
+        <AIChatWidget
+          documentId={activeFile.id}
+          documentTitle={activeFile.title || "无标题"}
+          store={activeDocumentStore}
+          session={session}
+          onSessionRefresh={handleSessionRefresh}
+          provider={aiProviderConfig}
+          visible={!selectedFolder && !selectedQuickSection && !settingsOpen && !trashOpen}
+        />
+      ) : null}
+      {pdfImportOpen ? <PdfImportDialog session={session} aiProvider={aiProviderConfig} onClose={() => setPdfImportOpen(false)} onCreateDocument={createDocumentFromAIDraft} /> : null}
       {settingsOpen ? (
         <div className="settings-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSettingsOpen(false)}>
           <section className="settings-dialog" role="dialog" aria-modal="true" aria-label="设置">
@@ -1706,6 +1808,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                       </div>
                     </div>
                   </section>
+                  <AIProviderSettings value={aiProviderConfig} onSave={saveAIProviderSettings} />
                   <section className="settings-section">
                     <h3>存储</h3>
                     <div className="settings-rule">

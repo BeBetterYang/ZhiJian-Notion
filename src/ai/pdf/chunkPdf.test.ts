@@ -37,6 +37,12 @@ describe("chunkPdf", () => {
     expect(result[0].startPage).toBe(1);
     expect(result[0].endPage).toBe(1);
   });
+
+  it("ends a chunk before adding a page that would exceed maxChars", () => {
+    const result = chunkPdf(documentWithPages([16_000, 16_000, 4_000]), { targetChars: 20_000, maxChars: 30_000 });
+    expect(result.map((chunk) => [chunk.startPage, chunk.endPage])).toEqual([[1, 1], [2, 3]]);
+    expect(result[0].charCount).toBeLessThanOrEqual(30_000);
+  });
 });
 
 describe("isUsablePdfOutline", () => {

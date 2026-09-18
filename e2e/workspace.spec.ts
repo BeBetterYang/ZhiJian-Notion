@@ -1,5 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
-import { keepSidebarExpanded, resetLocalTestWorkspace, signInAsLocalTestUser } from "./localSession";
+import { jsPDF } from "jspdf";
+import { enableLocalTestAIImport, keepSidebarExpanded, resetLocalTestWorkspace, signInAsLocalTestUser } from "./localSession";
+
+type E2EAIChatRequestBody = {
+  documentId?: string;
+  document?: { content?: string };
+  messages?: Array<{ role: string; content: string }>;
+  provider?: { apiKey?: string; model?: string; apiUrl?: string };
+};
 
 test("workspace login entry renders", async ({ page }) => {
   await page.goto("/workspace.html");
@@ -72,21 +80,110 @@ test("侧栏搜索和账号固定，最近、星标与文档共用滚动区", as
   await expect(sidebar.getByRole("button", { name: "退出登录" })).toBeVisible();
 });
 
-test("新增菜单打开 PDF 本地解析预览", async ({ page }) => {
+test("侧边栏导入菜单打开 AI 文档解析预览", async ({ page }) => {
   await resetLocalTestWorkspace();
   await signInAsLocalTestUser(page);
   await keepSidebarExpanded(page);
+  await enableLocalTestAIImport(page);
   await page.goto("/workspace.html");
   await expect(page.locator(".zhijian-loading-screen")).toHaveCount(0);
 
   const sidebar = page.locator(".workspace-sidebar");
+  await sidebar.getByRole("button", { name: "导入文档" }).click();
+  const markdownImport = sidebar.getByRole("button", { name: "导入 Markdown" });
+  const aiImport = sidebar.getByRole("button", { name: "AI文档导入" });
+  await expect(markdownImport).toBeVisible();
+  await expect(markdownImport.locator("svg")).toHaveClass(/lucide-file-up/);
+  await expect(aiImport).toBeVisible();
+  await expect(aiImport.locator("svg")).toHaveClass(/lucide-cloud-upload/);
+  await sidebar.getByRole("button", { name: "AI文档导入" }).click();
+  await expect(page.getByRole("heading", { name: "从 PDF / Word 生成大纲" })).toBeVisible();
+  await expect(page.getByText("拖入 PDF 或 DOCX 文件")).toBeVisible();
+  await page.getByRole("button", { name: "关闭文件导入" }).click();
+  await expect(page.getByRole("heading", { name: "从 PDF / Word 生成大纲" })).toHaveCount(0);
+});
+
+test("PDF 解析、AI 草稿编辑和创建工作区文档", async ({ page }) => {
+  await resetLocalTestWorkspace();
+  await signInAsLocalTestUser(page);
+  await keepSidebarExpanded(page);
+  await enableLocalTestAIImport(page);
+  await page.route("**/api/ai/outline", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        type: "ai-outline-draft",
+        version: 1,
+        title: "AI 课程大纲",
+        source: { fileName: "课程.pdf", title: "课程讲义", pageCount: 2 },
+        nodes: [{ id: "chapter-1", title: "第一章", summary: "课程重点", sourcePages: { startPage: 1, endPage: 2 }, children: [] }],
+      }),
+    });
+  });
+  await page.goto("/workspace.html");
+  await expect(page.locator(".zhijian-loading-screen")).toHaveCount(0);
+
+  const pdf = new jsPDF();
+  pdf.text(Array.from({ length: 40 }, (_, index) => `课程测试文本 ${index + 1}，用于验证 PDF 导入和 AI 草稿流程。`), 20, 20);
+  pdf.addPage();
+  pdf.text(Array.from({ length: 40 }, (_, index) => `第二页测试文本 ${index + 1}，用于验证页码引用。`), 20, 20);
+  const buffer = Buffer.from(pdf.output("arraybuffer"));
+
+  const sidebar = page.locator(".workspace-sidebar");
   await sidebar.getByRole("button", { name: "新增", exact: true }).click();
-  await expect(sidebar.getByRole("button", { name: "从 PDF 生成大纲" })).toBeVisible();
-  await sidebar.getByRole("button", { name: "从 PDF 生成大纲" }).click();
-  await expect(page.getByRole("heading", { name: "从 PDF 生成大纲" })).toBeVisible();
-  await expect(page.getByText("拖入 PDF 文件")).toBeVisible();
-  await page.getByRole("button", { name: "关闭 PDF 导入" }).click();
-  await expect(page.getByRole("heading", { name: "从 PDF 生成大纲" })).toHaveCount(0);
+  await sidebar.getByRole("button", { name: "导入文档" }).click();
+  await sidebar.getByRole("button", { name: "AI文档导入" }).click();
+  const dialog = page.getByRole("dialog", { name: "从 PDF / Word 生成大纲" });
+  await dialog.locator("input[type=file]").setInputFiles({ name: "课程.pdf", mimeType: "application/pdf", buffer });
+  await expect(dialog.getByText("内容分块")).toBeVisible({ timeout: 30000 });
+  await dialog.getByRole("button", { name: "生成 AI 大纲" }).click();
+  await expect(dialog.locator('input[aria-label="大纲标题"]')).toHaveValue("AI 课程大纲");
+  await dialog.getByRole("button", { name: "创建工作区文档" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(sidebar.getByText("AI 课程大纲", { exact: true })).toBeVisible();
+});
+
+test("AI Chat 基于当前文档读取并渲染流式回答", async ({ page }) => {
+  await resetLocalTestWorkspace();
+  await signInAsLocalTestUser(page);
+  await keepSidebarExpanded(page);
+  await enableLocalTestAIImport(page);
+
+  let requestBody: E2EAIChatRequestBody | null = null;
+  await page.route("**/api/ai/chat", async (route) => {
+    requestBody = JSON.parse(route.request().postData() ?? "null");
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": "text/event-stream; charset=utf-8" },
+      body: [
+        'data: {"type":"text-delta","text":"这是来自当前文档的"}\n\n',
+        'data: {"type":"text-delta","text":"流式回答。"}\n\n',
+        'data: {"type":"done"}\n\n',
+      ].join(""),
+    });
+  });
+
+  await page.goto("/workspace.html");
+  await expect(page.locator(".zhijian-loading-screen")).toHaveCount(0);
+  const sidebar = page.locator(".workspace-sidebar");
+  await sidebar.getByRole("button", { name: "新增", exact: true }).click();
+  await sidebar.getByRole("button", { name: "新增文档" }).click();
+  const titleEditor = page.locator('[contenteditable="true"]').first();
+  await expect(titleEditor).toBeFocused();
+  await titleEditor.fill("E2E AI 当前文档");
+
+  await page.locator(".ai-chat-launcher").click();
+  const panel = page.getByRole("dialog", { name: "和 AI 聊聊" });
+  await expect(panel).toBeVisible();
+  await panel.getByRole("button", { name: "总结文档" }).click();
+  await expect(panel.locator(".ai-chat-message.is-assistant")).toContainText("这是来自当前文档的流式回答。");
+
+  expect(requestBody).toEqual(expect.objectContaining({ documentId: expect.any(String) }));
+  expect(requestBody?.document?.content).toContain("E2E AI 当前文档");
+  expect(requestBody?.document?.content).not.toContain(requestBody?.documentId);
+  expect(requestBody?.messages).toEqual([{ role: "user", content: "总结文档" }]);
+  expect(requestBody?.provider).toEqual({ apiKey: "e2e-test-key", model: "e2e-test-model", apiUrl: "https://ai.test/v1/chat/completions" });
 });
 
 /**

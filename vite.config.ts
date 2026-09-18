@@ -7,6 +7,10 @@ import type { ServerResponse } from "node:http";
 import { loadEnv, type Connect } from "vite";
 // @ts-expect-error Shared by Vercel functions and the local Node middleware.
 import { downloadRemoteImage } from "./api/_remoteImageImport.js";
+// @ts-expect-error Shared by Vercel functions and the local Node middleware.
+import { generateAIOutline } from "./api/_aiOutline.js";
+// @ts-expect-error Shared by Vercel functions and the local Node middleware.
+import { openAIChatStream, sse } from "./api/_aiChatCore.js";
 
 const DATA_DIR = path.resolve(".zhijian-server-data", "users");
 const ASSETS_DIR = path.resolve(".zhijian-server-data", "assets");
@@ -45,6 +49,55 @@ export default defineConfig(({ mode }) => {
 
 function workspaceServerPlugin(appEnv: Record<string, string>) {
   const attachApi = (middlewares: Connect.Server) => {
+    middlewares.use("/api/ai/outline", async (request, response, next) => {
+      if (request.method !== "POST") return next();
+      try {
+        await requireAuthenticatedUser(appEnv, request);
+        const draft = await generateAIOutline(await readJsonBody(request), appEnv);
+        return sendJson(response, 200, draft);
+      } catch (error) {
+        return sendJson(response, statusCodeFromError(error) ?? 500, {
+          error: error instanceof Error ? error.message : "AI 生成失败，请稍后重试。",
+        });
+      }
+    });
+
+    middlewares.use("/api/ai/chat", async (request, response, next) => {
+      if (request.method !== "POST") return next();
+      try {
+        const user = await requireAuthenticatedUser(appEnv, request);
+        const body = await readJsonBody(request);
+        if (typeof body.documentId !== "string" || !body.documentId.trim()) return sendJson(response, 400, { error: "缺少文档 ID。" });
+        const record = (await readUserRecord(user.id, user.email)) ?? {};
+        const documents = readRecord(record.documents);
+        const stored = readRecord(documents[body.documentId.trim()]);
+        if (!stored.tree) return sendJson(response, 404, { error: "文档不存在。" });
+        const controller = new AbortController();
+        const abortOnDisconnect = () => {
+          if (!response.writableEnded) controller.abort();
+        };
+        response.once?.("close", abortOnDisconnect);
+        const stream = await openAIChatStream(body, appEnv, controller.signal);
+        response.statusCode = 200;
+        response.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+        response.setHeader("Cache-Control", "no-cache, no-transform");
+        response.setHeader("Connection", "keep-alive");
+        for await (const event of stream) response.write(event);
+        response.end();
+        response.off?.("close", abortOnDisconnect);
+        return;
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return response.end();
+        if (response.headersSent) {
+          response.write(sse("error", { message: error instanceof Error ? error.message : "AI 生成失败，请稍后重试。" }));
+          return response.end();
+        }
+        return sendJson(response, statusCodeFromError(error) ?? 500, {
+          error: error instanceof Error ? error.message : "AI 生成失败，请稍后重试。",
+        });
+      }
+    });
+
     // An <img> tag cannot send an Authorization header, which is why production hands out
     // signed Storage URLs; the dev server serves the bytes unauthenticated instead — it only
     // ever holds local scratch data under `.zhijian-server-data`.

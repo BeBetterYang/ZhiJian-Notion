@@ -30,6 +30,31 @@ export interface PdfSourceDocument {
   stats?: PdfSourceDocumentStats;
 }
 
+export interface DocxSourceSection {
+  id: string;
+  title?: string;
+  level?: number;
+  text: string;
+  charCount: number;
+}
+
+export interface DocxSourceDocumentStats {
+  totalChars: number;
+  sectionCount: number;
+  titledSectionCount: number;
+  emptySectionCount: number;
+}
+
+export interface DocxSourceDocument {
+  type: "docx";
+  fileName: string;
+  title: string;
+  sections: DocxSourceSection[];
+  stats?: DocxSourceDocumentStats;
+}
+
+export type SourceDocument = PdfSourceDocument | DocxSourceDocument;
+
 export type PdfSourceChunkSource = "outline" | "pages";
 
 export interface PdfSourceChunk {
@@ -41,6 +66,20 @@ export interface PdfSourceChunk {
   charCount: number;
   source: PdfSourceChunkSource;
 }
+
+export type DocxSourceChunkSource = "headings" | "sections";
+
+export interface DocxSourceChunk {
+  id: string;
+  title?: string;
+  startSection: number;
+  endSection: number;
+  text: string;
+  charCount: number;
+  source: DocxSourceChunkSource;
+}
+
+export type SourceChunk = PdfSourceChunk | DocxSourceChunk;
 
 export interface PdfExtractionProgress {
   stage: "loading" | "metadata" | "outline" | "pages" | "normalizing" | "done";
@@ -72,7 +111,51 @@ export interface PdfExtractionOptions {
   signal?: AbortSignal;
 }
 
+export interface DocxExtractionProgress {
+  stage: "loading" | "parsing" | "normalizing" | "done";
+}
+
+export interface DocxExtractionOptions {
+  onProgress?: (progress: DocxExtractionProgress) => void;
+  signal?: AbortSignal;
+}
+
 export interface PreparePdfOptions extends PdfExtractionOptions {
   targetChars?: number;
   maxChars?: number;
+}
+
+export interface AIOutlineDraftSource {
+  fileName: string;
+  title: string;
+  format?: "pdf" | "docx";
+  pageCount?: number;
+  sectionCount?: number;
+}
+
+export interface AIOutlineDraftSourcePages {
+  startPage: number;
+  endPage: number;
+}
+
+export interface AIOutlineDraftSourceSections {
+  startSection: number;
+  endSection: number;
+}
+
+export interface AIOutlineDraftNode {
+  id: string;
+  title: string;
+  summary?: string;
+  sourcePages?: AIOutlineDraftSourcePages;
+  sourceSections?: AIOutlineDraftSourceSections;
+  children: AIOutlineDraftNode[];
+}
+
+export interface AIOutlineDraft {
+  type: "ai-outline-draft";
+  version: 1;
+  title: string;
+  source: AIOutlineDraftSource;
+  nodes: AIOutlineDraftNode[];
 }

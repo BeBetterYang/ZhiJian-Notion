@@ -14,6 +14,10 @@ describe("isLikelyScannedPdf", () => {
   it("keeps a text PDF out of the scanned path", () => {
     expect(isLikelyScannedPdf(Array.from({ length: 50 }, (_, index) => ({ page: index + 1, text: "正文".repeat(20), charCount: 40 })))).toBe(false);
   });
+
+  it("keeps a short single-page text PDF out of the scanned path", () => {
+    expect(isLikelyScannedPdf([{ page: 1, text: "短文", charCount: 2 }])).toBe(false);
+  });
 });
 
 describe("extractPdf", () => {

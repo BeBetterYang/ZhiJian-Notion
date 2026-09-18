@@ -52,3 +52,15 @@ export async function keepSidebarExpanded(page: Page) {
     window.localStorage.setItem("zhijian.workspace.sidebar-collapsed.v1", "false");
   });
 }
+
+/** 为需要验证 AI 导入入口的用例打开本地测试用户的 AI 开关。 */
+export async function enableLocalTestAIImport(page: Page) {
+  await page.addInitScript(([userId]) => {
+    window.localStorage.setItem(`zhijian.ai-provider-config.v1:${userId}`, JSON.stringify({
+      enabled: true,
+      apiKey: "e2e-test-key",
+      model: "e2e-test-model",
+      apiUrl: "https://ai.test/v1/chat/completions",
+    }));
+  }, [LOCAL_TEST_USER_ID]);
+}

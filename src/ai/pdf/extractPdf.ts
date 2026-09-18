@@ -78,7 +78,7 @@ export function isLikelyScannedPdf(pages: PdfSourcePage[]) {
   const totalChars = pages.reduce((sum, page) => sum + page.charCount, 0);
   const textPageCount = pages.filter((page) => page.charCount >= MIN_PAGE_TEXT_CHARS).length;
   const ratio = pages.length ? textPageCount / pages.length : 0;
-  return totalChars < MIN_TOTAL_TEXT_CHARS || ratio < MIN_TEXT_PAGE_RATIO;
+  return totalChars === 0 || pages.length > 1 && totalChars < MIN_TOTAL_TEXT_CHARS && ratio < MIN_TEXT_PAGE_RATIO;
 }
 
 function readPageText(content: { items: PdfTextItemLike[] }) {
