@@ -1846,6 +1846,39 @@ textarea {
   outline: none;
 }
 
+/* Native emoji glyphs keep a little extra ascent inside their 60px box. Keep the
+   page icon's hit area unchanged, but place its hover wash over the visible glyph
+   instead of painting a full-height box that looks too high. */
+.document-icon-control-page.has-document-icon .document-icon-trigger {
+  position: relative;
+  background: transparent;
+}
+
+.document-icon-control-page.has-document-icon .document-icon-trigger:hover,
+.document-icon-control-page.has-document-icon .document-icon-trigger:focus-visible {
+  background: transparent;
+}
+
+.document-icon-control-page.has-document-icon .document-icon-trigger::before {
+  position: absolute;
+  inset: 4px 0 0;
+  z-index: 0;
+  border-radius: 8px;
+  background: transparent;
+  content: "";
+  pointer-events: none;
+}
+
+.document-icon-control-page.has-document-icon .document-icon-trigger:hover::before,
+.document-icon-control-page.has-document-icon .document-icon-trigger:focus-visible::before {
+  background: rgba(55, 53, 47, 0.06);
+}
+
+.document-icon-control-page.has-document-icon .document-icon-trigger > .document-icon {
+  position: relative;
+  z-index: 1;
+}
+
 .document-icon-control-empty .document-icon-trigger-empty {
   min-width: 0;
   min-height: 28px;
