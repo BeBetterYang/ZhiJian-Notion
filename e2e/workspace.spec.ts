@@ -64,7 +64,7 @@ test("侧栏搜索和账号固定，最近、星标与文档共用滚动区", as
   expect(searchBox!.y + searchBox!.height).toBeLessThanOrEqual(scrollBox!.y);
   expect(scrollBox!.y + scrollBox!.height).toBeLessThanOrEqual(footerBox!.y);
 
-  await sidebar.getByRole("button", { name: "新增" }).click();
+  await sidebar.getByRole("button", { name: "新增", exact: true }).click();
   await expect(sidebar.getByRole("button", { name: "新增文档" })).toBeVisible();
   await expect(sidebar.getByRole("button", { name: "设置" })).toBeVisible();
   await expect(sidebar.getByRole("button", { name: "回收站" })).toBeVisible();
@@ -104,17 +104,16 @@ test.describe("文档内容在刷新后仍然存在", () => {
 
   async function openWorkspace(page: Page) {
     await page.goto("/workspace.html");
-    await expect(page.getByRole("button", { name: "新增" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "新增", exact: true })).toBeVisible();
   }
 
-  /** 新建一篇文档并命名。新建后侧栏会直接进入重命名状态，名字整段选中，直接打字就是改名。 */
+  /** 新建一篇文档并命名。新建后标题编辑器会自动聚焦，直接输入就是改名。 */
   async function createDocument(page: Page, title: string) {
-    await page.getByRole("button", { name: "新增" }).click();
+    await page.getByRole("button", { name: "新增", exact: true }).click();
     await page.getByRole("button", { name: "新增文档" }).click();
-    const renameInput = page.locator(".tree-rename-input");
-    await expect(renameInput).toBeVisible();
-    await renameInput.fill(title);
-    await renameInput.press("Enter");
+    const titleEditor = editor(page);
+    await expect(titleEditor).toBeFocused();
+    await titleEditor.fill(title);
     await expect(sidebar(page).getByText(title, { exact: true })).toBeVisible();
   }
 
@@ -137,7 +136,7 @@ test.describe("文档内容在刷新后仍然存在", () => {
   async function reloadWorkspace(page: Page) {
     await page.waitForTimeout(900);
     await page.reload();
-    await expect(page.getByRole("button", { name: "新增" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "新增", exact: true })).toBeVisible();
     // 「新增」在加载遮罩后面就已经存在了。等正文出现才说明工作区数据真的到了：在那之前点侧栏，
     // 加载完成后的「展开当前文档所在文件夹」会把刚点出来的展开状态覆盖掉。
     await expect(editor(page)).toBeVisible();
@@ -177,16 +176,16 @@ test.describe("文档内容在刷新后仍然存在", () => {
 
   test("复制含子文档的文件夹后刷新，子文档内容仍在", async ({ page }) => {
     await openWorkspace(page);
-    await page.getByRole("button", { name: "新增" }).click();
+    await page.getByRole("button", { name: "新增", exact: true }).click();
     await page.getByRole("button", { name: "新增文件夹" }).click();
     const renameInput = page.locator(".tree-rename-input");
     await renameInput.fill("E2E 项目");
     await renameInput.press("Enter");
 
     await page.getByRole("button", { name: "在E2E 项目中新建文档" }).click();
-    const childRename = page.locator(".tree-rename-input");
-    await childRename.fill("E2E 子文档");
-    await childRename.press("Enter");
+    const childTitleEditor = editor(page);
+    await expect(childTitleEditor).toBeFocused();
+    await childTitleEditor.fill("E2E 子文档");
     await typeIntoDocument(page, "子文档的内容");
 
     await openNodeMenu(page, "E2E 项目");
