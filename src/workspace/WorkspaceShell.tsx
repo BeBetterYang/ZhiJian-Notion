@@ -58,6 +58,7 @@ import { importMarkdownFiles, localizeRemoteImages } from "./markdownImageImport
 import { compressAvatarFile } from "./avatarImage";
 import { workspaceNodeMenuPosition } from "./workspaceNodeMenuPosition";
 import { FolderView, type FolderViewCollection } from "./FolderView";
+import { PdfImportDialog } from "../ai/components/PdfImportDialog";
 import { AppErrorBoundary } from "../shared/AppErrorBoundary";
 import { LoadingScreen } from "../shared/LoadingScreen";
 import { toast } from "../shared/toast/toast";
@@ -138,6 +139,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const [newPassword, setNewPassword] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [pdfImportOpen, setPdfImportOpen] = useState(false);
   const [shareState, setShareState] = useState<WorkspaceDocumentShare>({ enabled: false });
   const [shareLoading, setShareLoading] = useState(false);
   const [shareError, setShareError] = useState("");
@@ -1302,7 +1304,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
             <button type="button" className="sidebar-header-action icon-button" onClick={() => importInputRef.current?.click()} aria-label="导入文档" title="导入文档"><FolderUp /></button>
             <div className="create-wrap">
               <button type="button" className="sidebar-header-action icon-button" aria-label="新增" title="新增文档或文件夹" aria-expanded={createMenuOpen} onClick={() => createMenuOpen ? setCreateMenuOpen(false) : revealCreateMenu()}><SquarePen /></button>
-              {createMenuOpen ? <div className="create-menu"><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file")}><FilePlus />新增文档</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("folder")}><FolderPlus />新增文件夹</button></div> : null}
+              {createMenuOpen ? <div className="create-menu"><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file")}><FilePlus />新增文档</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("folder")}><FolderPlus />新增文件夹</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setCreateMenuOpen(false); setPdfImportOpen(true); }}><FileText />从 PDF 生成大纲</button></div> : null}
             </div>
           </div>
           <button type="button" className="mobile-close icon-button" onClick={() => setSidebarOpen(false)} aria-label="关闭侧栏" title="关闭侧栏"><X /></button>
@@ -1412,7 +1414,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                   <span className="sidebar-section-actions">
                     <span className="create-wrap">
                       <button className="tree-action icon-button" type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => documentsCreateMenuOpen ? setDocumentsCreateMenuOpen(false) : revealDocumentsCreateMenu()} aria-label="在我的文档中新增" title="新增文档或文件夹" aria-expanded={documentsCreateMenuOpen}><Plus /></button>
-                      {documentsCreateMenuOpen ? <div className="create-menu"><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file")}><FilePlus />新增文档</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("folder")}><FolderPlus />新增文件夹</button></div> : null}
+                      {documentsCreateMenuOpen ? <div className="create-menu"><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file")}><FilePlus />新增文档</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("folder")}><FolderPlus />新增文件夹</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setDocumentsCreateMenuOpen(false); setPdfImportOpen(true); }}><FileText />从 PDF 生成大纲</button></div> : null}
                     </span>
                   </span>
                 </div>
@@ -1527,6 +1529,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                   <div className="create-menu">
                     <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("file", selectedFolder.id)}><FilePlus />新增文档</button>
                     <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => createNode("folder", selectedFolder.id)}><FolderPlus />新增文件夹</button>
+                    <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setCreateMenuOpen(false); setPdfImportOpen(true); }}><FileText />从 PDF 生成大纲</button>
                   </div>
                 ) : null}
               </div>
@@ -1617,6 +1620,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
           )}
         </div>
       </section>
+      {pdfImportOpen ? <PdfImportDialog onClose={() => setPdfImportOpen(false)} /> : null}
       {settingsOpen ? (
         <div className="settings-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSettingsOpen(false)}>
           <section className="settings-dialog" role="dialog" aria-modal="true" aria-label="设置">

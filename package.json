@@ -22,6 +22,7 @@
     "jspdf": "^4.2.1",
     "lucide-react": "^1.45.0",
     "mind-elixir": "5.15.1",
+    "pdfjs-dist": "^6.3.289",
     "qrcode": "^1.5.4",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"

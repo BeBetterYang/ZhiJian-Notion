@@ -1,0 +1,9 @@
+export const MAX_PDF_FILE_BYTES = 20 * 1024 * 1024;
+export const MAX_PDF_PAGES = 150;
+export const FAILED_PAGE_RATIO_LIMIT = 0.2;
+export const MIN_PAGE_TEXT_CHARS = 20;
+export const MIN_TOTAL_TEXT_CHARS = 500;
+export const MIN_TEXT_PAGE_RATIO = 0.2;
+export const DEFAULT_TARGET_CHARS = 20_000;
+export const DEFAULT_MAX_CHARS = 30_000;
+export const MIN_PREFACE_CHARS = 120;

@@ -72,6 +72,23 @@ test("侧栏搜索和账号固定，最近、星标与文档共用滚动区", as
   await expect(sidebar.getByRole("button", { name: "退出登录" })).toBeVisible();
 });
 
+test("新增菜单打开 PDF 本地解析预览", async ({ page }) => {
+  await resetLocalTestWorkspace();
+  await signInAsLocalTestUser(page);
+  await keepSidebarExpanded(page);
+  await page.goto("/workspace.html");
+  await expect(page.locator(".zhijian-loading-screen")).toHaveCount(0);
+
+  const sidebar = page.locator(".workspace-sidebar");
+  await sidebar.getByRole("button", { name: "新增", exact: true }).click();
+  await expect(sidebar.getByRole("button", { name: "从 PDF 生成大纲" })).toBeVisible();
+  await sidebar.getByRole("button", { name: "从 PDF 生成大纲" }).click();
+  await expect(page.getByRole("heading", { name: "从 PDF 生成大纲" })).toBeVisible();
+  await expect(page.getByText("拖入 PDF 文件")).toBeVisible();
+  await page.getByRole("button", { name: "关闭 PDF 导入" }).click();
+  await expect(page.getByRole("heading", { name: "从 PDF 生成大纲" })).toHaveCount(0);
+});
+
 /**
  * 文档内容的落地测试：这些用例只关心「刷新之后内容还在不在」，也就是每一个 fileId 在服务器上
  * 是否真的有自己的一行。用的是开发服务器里的本地假身份，不碰真实 Supabase 账号和真人数据。
