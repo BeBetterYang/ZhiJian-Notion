@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, Check, FileText, Folder, FolderOpen, MoreHorizontal } from "lucide-react";
+import { ArrowDown, ArrowUp, FileText, Folder, FolderOpen, MoreHorizontal } from "lucide-react";
 import { DocumentIcon, DocumentIconFromStore } from "../shared/documentIcon/DocumentIcon";
 import { latestTreeUpdatedAt } from "../core/tree";
 import { childNodes, isWorkspaceFile, type DropMode, type WorkspaceFile, type WorkspaceFolder, type WorkspaceNode } from "./workspaceData";
@@ -275,7 +275,6 @@ function FolderSortControl({ preference, onChange }: { preference: FolderSortPre
               className={preference.key === option.key ? "is-selected" : undefined}
               onClick={() => onChange({ ...preference, key: option.key })}
             >
-              <Check aria-hidden="true" />
               <span>{option.label}</span>
             </button>
           ))}
