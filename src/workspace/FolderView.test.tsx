@@ -30,6 +30,9 @@ function renderFolder(items: FolderFileViewItem[]) {
     const tree = createInitialTree();
     tree.nodes[tree.rootId].content.text = item.file.title;
     tree.nodes[tree.rootId].meta = { createdAt: item.createdAt, updatedAt: item.lastEditedAt };
+    Object.values(tree.nodes).forEach((node) => {
+      if (node.id !== tree.rootId) node.meta = { createdAt: 0, updatedAt: 0 };
+    });
     return [item.file.id, new TreeStore(tree)] as const;
   }));
   const renderView = (currentFolder: WorkspaceFolder) => {

@@ -777,13 +777,14 @@ describe("文档服务器记录的生命周期", () => {
   it("搜索时仍能通过快捷键打开新建菜单", async () => {
     renderShell();
     await screen.findByTestId("document-editor");
+    const searchInput = screen.getByPlaceholderText("全局搜索");
 
     await act(async () => {
-      screen.getByPlaceholderText("全局搜索").focus();
+      searchInput.focus();
       await Promise.resolve();
     });
     await waitFor(() => expect(document.querySelector(".workspace-shell-ui")).toHaveClass("is-search-mode"));
-    fireEvent.keyDown(window, { key: "n", code: "KeyN", ctrlKey: true });
+    fireEvent.keyDown(searchInput, { key: "n", code: "KeyN", ctrlKey: true });
 
     await waitFor(() => expect(document.querySelector(".sidebar-header .create-menu")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "新增文档" })).toBeInTheDocument();
