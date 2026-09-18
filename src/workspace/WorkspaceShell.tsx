@@ -422,6 +422,16 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     window.requestAnimationFrame(() => document.querySelector<HTMLElement>(".sidebar-section-actions .create-menu")?.scrollIntoView?.({ block: "nearest" }));
   }, []);
 
+  // 保持全局快捷键监听稳定，避免搜索模式切换时卸载/重绑监听造成 Ctrl/Cmd+N 丢失。
+  const searchModeRef = useRef(searchMode);
+  const enterSearchModeRef = useRef(enterSearchMode);
+  const closeSearchModeRef = useRef(closeSearchMode);
+  const revealCreateMenuRef = useRef(revealCreateMenu);
+  searchModeRef.current = searchMode;
+  enterSearchModeRef.current = enterSearchMode;
+  closeSearchModeRef.current = closeSearchMode;
+  revealCreateMenuRef.current = revealCreateMenu;
+
   useEffect(() => {
     let canceled = false;
     const loadingSession = sessionRef.current;
@@ -626,15 +636,15 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       // document; plain Ctrl+F is the search within the open document.
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.code === "KeyF") {
         event.preventDefault();
-        enterSearchMode();
+        enterSearchModeRef.current();
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "n") {
         event.preventDefault();
-        if (searchMode) {
+        if (searchModeRef.current) {
           searchRef.current?.blur();
-          closeSearchMode();
+          closeSearchModeRef.current();
         }
-        revealCreateMenu();
+        revealCreateMenuRef.current();
       }
       if (event.key === "Escape") {
         setSettingsOpen(false);
@@ -653,7 +663,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [enterSearchMode, closeSearchMode, searchMode, revealCreateMenu]);
+  }, []);
 
   useEffect(() => {
     const onPointerDown = (event: globalThis.PointerEvent) => {
