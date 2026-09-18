@@ -323,7 +323,7 @@ function FolderViewRow({ node, nodes, stores, fileItem, visibleMeta, onOpen, onO
 }) {
   const store = node.type === "file" ? stores.get(node.id) : undefined;
   const childCount = node.type === "folder" ? childNodes(nodes, node.id).length : 0;
-  const fullMetadata = fileItem ? `最近编辑 ${formatFolderDate(fileItem.lastEditedAt)}，创建时间 ${formatFolderDate(fileItem.createdAt)}` : undefined;
+  const fullMetadata = fileItem ? `最后编辑 ${formatFolderDate(fileItem.lastEditedAt)}，创建时间 ${formatFolderDate(fileItem.createdAt)}` : undefined;
   return (
     <div
       className={`folder-view-row${dragging ? " is-dragging" : ""}${dropMode ? ` drop-${dropMode}` : ""}`}
@@ -380,7 +380,7 @@ export function sortFolderFileItems(items: FolderFileViewItem[], key: FolderFile
 
 function getVisibleMetadata(item: FolderFileViewItem, key: FolderFileSortKey) {
   if (key === "createdAt" && item.createdAt > 0) return { text: formatFolderDateCompact(item.createdAt), title: `创建时间 ${formatFolderDate(item.createdAt)}` };
-  if (key === "lastEditedAt" && item.lastEditedAt > 0) return { text: formatFolderDateCompact(item.lastEditedAt), title: `最近编辑 ${formatFolderDate(item.lastEditedAt)}` };
+  if (key === "lastEditedAt" && item.lastEditedAt > 0) return { text: formatFolderDateCompact(item.lastEditedAt), title: `最后编辑 ${formatFolderDate(item.lastEditedAt)}` };
   return undefined;
 }
 

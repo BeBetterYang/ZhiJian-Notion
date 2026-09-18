@@ -961,7 +961,7 @@ describe("Workspace Deep Link", () => {
     expect(screen.queryByRole("button", { name: "打开文档 深层文档" })).not.toBeInTheDocument();
   });
 
-  it("Folder View 文档显示最近编辑和创建时间", async () => {
+  it("Folder View 文档显示最后编辑和创建时间", async () => {
     const document = createInitialTree();
     document.nodes[document.rootId].content.text = "需求";
     document.nodes[document.rootId].meta = { createdAt: 1_700_000_000_000, updatedAt: 1_700_000_100_000 };
@@ -975,8 +975,8 @@ describe("Workspace Deep Link", () => {
     render(<WorkspaceShell session={session} onSessionRefresh={vi.fn()} onLogout={vi.fn()} />);
 
     await screen.findByRole("heading", { name: "项目 A", level: 1 });
-    const metadata = screen.getByLabelText(/最近编辑/);
-    expect(metadata).toHaveTextContent("最近编辑");
+    const metadata = screen.getByLabelText(/最后编辑/);
+    expect(metadata).toHaveTextContent("最后编辑");
     expect(metadata).toHaveTextContent("创建时间");
   });
 
