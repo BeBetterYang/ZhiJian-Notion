@@ -400,7 +400,9 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       setSidebarCollapsed(false);
       setSidebarPeeking(false);
     }
-    if (enteringSearchMode) window.requestAnimationFrame(() => searchRef.current?.focus());
+    if (enteringSearchMode && document.activeElement !== searchRef.current) {
+      window.requestAnimationFrame(() => searchRef.current?.focus());
+    }
   }, [searchMode, sidebarCollapsed]);
 
   const closeSearchMode = useCallback(() => {
@@ -1299,6 +1301,14 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                 onFocus={enterSearchMode}
                 onChange={(event) => setSearch(event.target.value)}
                 onKeyDown={(event) => {
+                  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "n") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    searchRef.current?.blur();
+                    closeSearchModeRef.current();
+                    revealCreateMenuRef.current();
+                    return;
+                  }
                   if (event.key === "Enter") rememberSearch(search, setRecentSearches);
                 }}
                 placeholder="全局搜索"
