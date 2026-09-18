@@ -57,7 +57,7 @@ import { preloadEditorView } from "../shared/editorPreload";
 import { importMarkdownFiles, localizeRemoteImages } from "./markdownImageImport";
 import { compressAvatarFile } from "./avatarImage";
 import { workspaceNodeMenuPosition } from "./workspaceNodeMenuPosition";
-import { FolderView } from "./FolderView";
+import { FolderView, type FolderViewCollection } from "./FolderView";
 import { AppErrorBoundary } from "../shared/AppErrorBoundary";
 import { LoadingScreen } from "../shared/LoadingScreen";
 import { toast } from "../shared/toast/toast";
@@ -157,6 +157,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const [activeFileId, setActiveFileId] = useState("");
   const [selectedMenuKey, setSelectedMenuKey] = useState("");
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [selectedQuickSection, setSelectedQuickSection] = useState<FolderViewCollection | null>(null);
   const [expandedFolders, setExpandedFolders] = useState(() => loadExpandedFolders(session.userId));
   const [search, setSearch] = useState("");
   const [searchFilterOpen, setSearchFilterOpen] = useState(false);
@@ -366,6 +367,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     : null;
   const documentBreadcrumbs = activeFile ? folderPath(nodes, activeFile.id) : [];
   const folderBreadcrumbs = selectedFolder ? folderPath(nodes, selectedFolder.id) : [];
+  const selectedQuickSectionTitle = selectedQuickSection === "recent" ? "最近打开" : selectedQuickSection === "favorites" ? "星标文件" : "我的文档";
   const focusBreadcrumbItems = focusBreadcrumbState?.items ?? [];
   const focusedTitle = focusBreadcrumbItems.at(-1)?.label ?? null;
   const activeDocumentStore = activeFile
@@ -374,8 +376,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const sidebarDisplayWidth = searchMode ? Math.max(sidebarWidth, 448) : sidebarWidth;
 
   useEffect(() => {
-    document.title = `${selectedFolder?.title ?? activeFile?.title ?? "枝间"}-枝间`;
-  }, [activeFile?.title, selectedFolder?.title]);
+    document.title = `${selectedFolder?.title ?? (selectedQuickSection ? selectedQuickSectionTitle : activeFile?.title) ?? "枝间"}-枝间`;
+  }, [activeFile?.title, selectedFolder?.title, selectedQuickSection, selectedQuickSectionTitle]);
 
   /**
    * 窗口跨过移动端断点时重算一次收起状态：桌面的收起状态留到移动端会把抽屉一起按成透明、点不动，
@@ -881,6 +883,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     setActiveFileId(file.id);
     setSelectedMenuKey(`${source}:${file.id}`);
     setSelectedFolderId(null);
+    setSelectedQuickSection(null);
     setNodes((current) => markFileOpened(current, file.id));
     setSidebarOpen(false);
     setMenuNodeId(null);
@@ -891,7 +894,18 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
     for (const ancestor of folderPath(nodes, folder.id)) nextExpanded.add(ancestor.id);
     applyExpandedFolders(nextExpanded);
     setSelectedFolderId(folder.id);
+    setSelectedQuickSection(null);
     setSelectedMenuKey(`tree:${folder.id}`);
+    setCreateMenuOpen(false);
+    setDocumentsCreateMenuOpen(false);
+    setSidebarOpen(false);
+    setMenuNodeId(null);
+  };
+
+  const selectQuickSection = (section: FolderViewCollection) => {
+    setSelectedFolderId(null);
+    setSelectedQuickSection(section);
+    setSelectedMenuKey(`section:${section}`);
     setCreateMenuOpen(false);
     setDocumentsCreateMenuOpen(false);
     setSidebarOpen(false);
@@ -941,6 +955,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
       setActiveFileId(created.id);
       setSelectedMenuKey(`tree:${created.id}`);
       setSelectedFolderId(null);
+      setSelectedQuickSection(null);
       setRenamingId(null);
       setRenameValue("");
       selectCreatedNameOnFocus.current = false;
@@ -1387,11 +1402,11 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
             />
           ) : (
             <>
-              <QuickFileSection title="最近打开" source="recent" expanded={expandedQuickSections.has("recent")} files={recentFiles} selectedMenuKey={selectedMenuKey} stores={documentStores.current} onToggle={() => toggleQuickSection("recent")} onSelect={selectFile} />
-              <QuickFileSection title="星标文件" source="favorites" expanded={expandedQuickSections.has("favorites")} files={favoriteFiles} selectedMenuKey={selectedMenuKey} stores={documentStores.current} onToggle={() => toggleQuickSection("favorites")} onSelect={selectFile} />
+              <QuickFileSection title="最近打开" source="recent" expanded={expandedQuickSections.has("recent")} files={recentFiles} selectedMenuKey={selectedMenuKey} stores={documentStores.current} onToggle={() => { selectQuickSection("recent"); toggleQuickSection("recent"); }} onSelect={selectFile} />
+              <QuickFileSection title="星标文件" source="favorites" expanded={expandedQuickSections.has("favorites")} files={favoriteFiles} selectedMenuKey={selectedMenuKey} stores={documentStores.current} onToggle={() => { selectQuickSection("favorites"); toggleQuickSection("favorites"); }} onSelect={selectFile} />
               <section className="workspace-files quick-file-section" aria-labelledby="workspace-files-title">
                 <div className="sidebar-section-heading">
-                  <button type="button" className="sidebar-section-toggle" id="workspace-files-title" aria-expanded={expandedQuickSections.has("documents")} onClick={() => toggleQuickSection("documents")}>
+                  <button type="button" className={`sidebar-section-toggle${selectedQuickSection === "documents" ? " is-active" : ""}`} id="workspace-files-title" aria-expanded={expandedQuickSections.has("documents")} aria-current={selectedQuickSection === "documents" ? "page" : undefined} onClick={() => { selectQuickSection("documents"); toggleQuickSection("documents"); }}>
                     <span>我的文档</span>{expandedQuickSections.has("documents") ? <ChevronDown /> : <ChevronRight />}
                   </button>
                   <span className="sidebar-section-actions">
@@ -1453,6 +1468,8 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
                 ))}
                 <strong className="breadcrumb-current" aria-current="page">{selectedFolder.title || "无标题"}</strong>
               </>
+            ) : selectedQuickSection ? (
+              <strong className="breadcrumb-current" aria-current="page">{selectedQuickSectionTitle}</strong>
             ) : (
               <>
                 {documentBreadcrumbs.map((folder) => (
@@ -1538,6 +1555,22 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
               onSelectFile={selectFile}
               onCreateFile={() => createNode("file", selectedFolder.id)}
               onCreateFolder={() => createNode("folder", selectedFolder.id)}
+              onMoveNode={moveNodeByDrop}
+              onOpenNodeMenu={openNodeMenu}
+              openMenuNodeId={menuNodeId}
+              renderNodeMenu={renderNodeMenu}
+            />
+          ) : selectedQuickSection ? (
+            <FolderView
+              folder={null}
+              collection={selectedQuickSection}
+              collectionFiles={selectedQuickSection === "recent" ? recentFiles : selectedQuickSection === "favorites" ? favoriteFiles : undefined}
+              nodes={nodes}
+              stores={documentStores.current}
+              onSelectFolder={selectFolder}
+              onSelectFile={selectFile}
+              onCreateFile={() => createNode("file")}
+              onCreateFolder={() => createNode("folder")}
               onMoveNode={moveNodeByDrop}
               onOpenNodeMenu={openNodeMenu}
               openMenuNodeId={menuNodeId}
@@ -1722,7 +1755,17 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
             <header><h2 id="share-title">分享文档</h2><button type="button" className="icon-button" onClick={() => setShareOpen(false)} aria-label="关闭分享"><X /></button></header>
             <label className="share-toggle-row">
               <span><strong>文档开启分享</strong><small>使用链接或扫描二维码即可访问</small></span>
-              <input type="checkbox" checked={shareState.enabled} disabled={shareLoading} onChange={(event) => void toggleShare(event.target.checked)} />
+              <button
+                type="button"
+                role="switch"
+                aria-label="文档开启分享"
+                aria-checked={shareState.enabled}
+                className={`toolbar-menu-switch share-toggle-switch${shareState.enabled ? " is-active" : ""}`}
+                disabled={shareLoading}
+                onClick={() => void toggleShare(!shareState.enabled)}
+              >
+                <span />
+              </button>
             </label>
             {shareError ? <p className="share-error" role="alert">{shareError}</p> : null}
             {shareUrl ? <>
@@ -2142,7 +2185,7 @@ function QuickFileSection({ title, source, expanded, files, selectedMenuKey, sto
 }) {
   return (
     <section className="quick-file-section">
-      <button type="button" className="sidebar-section-toggle" aria-expanded={expanded} onClick={onToggle}>
+      <button type="button" className={`sidebar-section-toggle${selectedMenuKey === `section:${source}` ? " is-active" : ""}`} aria-expanded={expanded} aria-current={selectedMenuKey === `section:${source}` ? "page" : undefined} onClick={onToggle}>
         <span>{title}</span>{expanded ? <ChevronDown /> : <ChevronRight />}
       </button>
       {expanded ? <div className="quick-file-list">{files.map((file) => <SimpleFileRow key={file.id} file={file} stores={stores} active={selectedMenuKey === `${source}:${file.id}`} onSelect={(selected) => onSelect(selected, source)} />)}{!files.length ? <div className="empty-section">暂无文件</div> : null}</div> : null}

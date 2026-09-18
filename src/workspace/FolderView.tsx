@@ -20,6 +20,7 @@ export interface FolderSortPreference {
 }
 
 export const FOLDER_VIEW_SORT_STORAGE_KEY = "zhijian.workspace.folder-view-sort.v1";
+export type FolderViewCollection = "documents" | "recent" | "favorites";
 
 const DEFAULT_SORT_PREFERENCE: FolderSortPreference = { key: "custom", direction: "asc" };
 const SORT_OPTIONS: Array<{ key: FolderFileSortKey; label: string }> = [
@@ -30,7 +31,9 @@ const SORT_OPTIONS: Array<{ key: FolderFileSortKey; label: string }> = [
 ];
 
 interface FolderViewProps {
-  folder: WorkspaceFolder;
+  folder: WorkspaceFolder | null;
+  collection?: FolderViewCollection;
+  collectionFiles?: WorkspaceFile[];
   nodes: WorkspaceNode[];
   stores: Map<string, TreeStore>;
   onSelectFolder: (folder: WorkspaceFolder) => void;
@@ -45,6 +48,8 @@ interface FolderViewProps {
 
 export function FolderView({
   folder,
+  collection,
+  collectionFiles = [],
   nodes,
   stores,
   onSelectFolder,
@@ -56,18 +61,21 @@ export function FolderView({
   openMenuNodeId,
   renderNodeMenu,
 }: FolderViewProps) {
-  const children = childNodes(nodes, folder.id);
+  const children = folder
+    ? childNodes(nodes, folder.id)
+    : collection === "documents" ? childNodes(nodes, null) : collectionFiles;
   const folders = children.filter((node): node is WorkspaceFolder => node.type === "folder");
   const files = children.filter(isWorkspaceFile);
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ nodeId: string; mode: DropMode } | null>(null);
-  const [sortPreference, setSortPreference] = useState<FolderSortPreference>(() => loadFolderSortPreference(folder.id));
+  const sortStorageId = folder?.id ?? `collection:${collection ?? "documents"}`;
+  const [sortPreference, setSortPreference] = useState<FolderSortPreference>(() => loadFolderSortPreference(sortStorageId));
   const fileIds = files.map((file) => file.id).join("\u0000");
   const [, refreshDocumentMetadata] = useState(0);
 
   useEffect(() => {
-    setSortPreference(loadFolderSortPreference(folder.id));
-  }, [folder.id]);
+    setSortPreference(loadFolderSortPreference(sortStorageId));
+  }, [sortStorageId]);
 
   // Folder View 只订阅当前文件夹的文档 store，编辑文档后时间排序和行尾日期会及时更新。
   useEffect(() => {
@@ -89,12 +97,15 @@ export function FolderView({
     () => sortFolderFileItems(fileItems, sortPreference.key, sortPreference.direction),
     [fileItems, sortPreference],
   );
-  const canReorderFiles = sortPreference.key === "custom" && sortPreference.direction === "asc";
+  const canReorderFiles = collection !== "recent" && collection !== "favorites"
+    && sortPreference.key === "custom" && sortPreference.direction === "asc";
 
   const updateSortPreference = (next: FolderSortPreference) => {
     setSortPreference(next);
-    saveFolderSortPreference(folder.id, next);
+    saveFolderSortPreference(sortStorageId, next);
   };
+
+  const headingTitle = folder?.title || (collection === "recent" ? "最近打开" : collection === "favorites" ? "星标文件" : "我的文档");
 
   const clearDrag = () => {
     setDraggedNodeId(null);
@@ -152,7 +163,7 @@ export function FolderView({
       <div className="folder-view-content">
         <header className="folder-view-heading">
           <FolderOpen className="folder-view-heading-icon" aria-hidden="true" />
-          <h1>{folder.title || "无标题"}</h1>
+          <h1>{headingTitle}</h1>
           <p>{folders.length} 个文件夹 · {files.length} 篇文档</p>
         </header>
 

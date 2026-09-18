@@ -288,9 +288,9 @@ test.describe("文档内容在刷新后仍然存在", () => {
 
     await page.getByRole("button", { name: "分享", exact: true }).click();
     const shareDialog = page.getByRole("dialog", { name: "分享文档" });
-    const shareToggle = shareDialog.getByRole("checkbox");
+    const shareToggle = shareDialog.getByRole("switch", { name: "文档开启分享" });
     await shareToggle.click();
-    await expect(shareToggle).toBeChecked();
+    await expect(shareToggle).toHaveAttribute("aria-checked", "true");
     const copyButton = shareDialog.getByRole("button", { name: "复制链接" });
     await expect(copyButton).toBeVisible();
     await copyButton.click();

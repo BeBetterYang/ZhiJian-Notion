@@ -738,6 +738,8 @@ describe("文档服务器记录的生命周期", () => {
     fireEvent.click(menu!);
     expect(menu).toHaveAttribute("aria-expanded", "true");
     expect(within(section).getByText("产品规划")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "我的文档", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开文档 产品规划" })).toBeInTheDocument();
   });
 
   it("最近、星标和文档共用滚动区，账号固定在底部", async () => {
@@ -758,6 +760,10 @@ describe("文档服务器记录的生命周期", () => {
     expect(sidebar.querySelector(".sidebar-section-heading")).not.toBeNull();
     const documentsAddButton = sections[2]?.querySelector<HTMLButtonElement>('[aria-label="在我的文档中新增"]');
     expect(documentsAddButton).not.toBeNull();
+
+    fireEvent.click(sections[0]!.querySelector<HTMLButtonElement>(".sidebar-section-toggle")!);
+    expect(await screen.findByRole("heading", { name: "最近打开", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "打开文档 产品规划" })).toBeInTheDocument();
 
     fireEvent.click(documentsAddButton!);
     expect(screen.getByRole("button", { name: "新增文档" })).toBeInTheDocument();
@@ -1361,6 +1367,8 @@ describe("标题栏菜单接到工作区", () => {
     fireEvent.click(screen.getByRole("button", { name: /星标文件/ }));
     const favorites = document.querySelectorAll<HTMLElement>(".quick-file-section")[1]!;
     expect(within(favorites).getByText("产品规划")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "星标文件", level: 1 })).toBeInTheDocument();
+    fireEvent.click(within(favorites).getByText("产品规划"));
 
     fireEvent.click(screen.getByRole("button", { name: "标题栏取消星标" }));
     expect(await screen.findByRole("button", { name: "标题栏添加星标" })).toBeInTheDocument();

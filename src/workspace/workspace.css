@@ -567,7 +567,8 @@ button { color: inherit; }
 .share-toggle-row > span { display: flex; flex-direction: column; gap: 3px; }
 .share-toggle-row strong { font-size: 14px; font-weight: 600; }
 .share-toggle-row small { color: #8b8a85; font-size: 12px; }
-.share-toggle-row input { width: 32px; height: 18px; accent-color: #2383e2; }
+.share-toggle-switch { margin-left: auto; border: 0; cursor: pointer; }
+.share-toggle-switch:disabled { cursor: default; opacity: 0.6; }
 .share-error { margin: 12px 0 0; color: #eb5757; font-size: 13px; }
 .share-link-row { display: flex; gap: 8px; margin-top: 16px; }
 .share-link-row input { min-width: 0; height: 34px; flex: 1; padding: 0 9px; border: 1px solid rgba(55, 53, 47, 0.14); border-radius: 5px; outline: 0; color: #55534e; font: inherit; font-size: 13px; }
