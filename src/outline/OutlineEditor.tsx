@@ -61,6 +61,7 @@ import { outlineEmojiPickerPosition } from "./outlineEmojiPickerPosition";
 import { LinkDialog } from "../shared/LinkDialog";
 import { EmojiPickerPopover } from "../shared/emoji/EmojiPickerPopover";
 import { DocumentIconControl } from "../shared/documentIcon/DocumentIcon";
+import { shouldRenderOutlinePageIcon } from "./outlineDocumentIcon";
 import {
   applyBlockShortcut,
   applyLink,
@@ -149,7 +150,7 @@ export function OutlineEditor({
   const zoomCss = useMemo(() => zoomedOutlineCss(tree, zoomedNodeId), [tree, zoomedNodeId]);
   const rowMenuHighlightCss = useMemo(() => outlineRowMenuHighlightCss(rowMenu?.nodeId ?? null), [rowMenu?.nodeId]);
   const updateDocumentIconVisibility = useCallback((target: EventTarget | null) => {
-    if (readOnly || tree.document?.icon) return;
+    if (readOnly || zoomedNodeId !== null || tree.document?.icon) return;
     const element = target instanceof Element ? target : null;
     const block = element?.closest<HTMLElement>(".bn-block-outer[data-id]");
     const inRootTitle = block?.dataset.id === tree.rootId;
@@ -167,11 +168,20 @@ export function OutlineEditor({
       documentIconHideTimer.current = null;
       setShowDocumentIcon(false);
     }, 120);
-  }, [readOnly, tree.document?.icon, tree.rootId]);
+  }, [readOnly, tree.document?.icon, tree.rootId, zoomedNodeId]);
 
   useEffect(() => () => {
     if (documentIconHideTimer.current !== null) window.clearTimeout(documentIconHideTimer.current);
   }, []);
+
+  useEffect(() => {
+    if (zoomedNodeId === null) return;
+    if (documentIconHideTimer.current !== null) {
+      window.clearTimeout(documentIconHideTimer.current);
+      documentIconHideTimer.current = null;
+    }
+    setShowDocumentIcon(false);
+  }, [zoomedNodeId]);
   const outlineContextValue = useMemo(
     () => ({ store, rowMenu, setRowMenu, onFocusNode, zoomedNodeId }),
     [onFocusNode, rowMenu, store, zoomedNodeId],
@@ -505,9 +515,16 @@ export function OutlineEditor({
       <style>{activeSearchCss}</style>
       <style>{zoomCss}</style>
       <style>{rowMenuHighlightCss}</style>
-      {tree.document?.icon || showDocumentIcon ? (
+      {shouldRenderOutlinePageIcon({
+        hasDocumentIcon: Boolean(tree.document?.icon),
+        showDocumentIcon,
+        readOnly,
+        zoomedNodeId,
+      }) ? (
         <div className={`outline-document-icon${tree.document?.icon ? "" : " is-empty"}`}>
-          <DocumentIconControl store={store} readOnly={readOnly} size="page" showEmpty={showDocumentIcon} />
+          <div className="outline-document-icon-frame">
+            <DocumentIconControl store={store} readOnly={readOnly} size="page" showEmpty={showDocumentIcon} />
+          </div>
         </div>
       ) : null}
       <OutlineStoreContext.Provider value={outlineContextValue}>{editorView}</OutlineStoreContext.Provider>

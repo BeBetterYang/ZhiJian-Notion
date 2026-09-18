@@ -915,11 +915,15 @@ textarea {
   padding: 14px 10px 48px;
   position: relative;
   container-type: inline-size;
+  --outline-editor-inline-gutter: 54px;
+  --outline-content-frame-width: calc(
+    var(--outline-text-width) + var(--outline-editor-inline-gutter) * 2
+  );
 }
 
 .outline-panel .bn-container {
   min-height: 100%;
-  max-width: calc(var(--outline-text-width) + 108px);
+  max-width: var(--outline-content-frame-width);
   margin-inline: auto;
   /* Set on the container rather than `.bn-root`, which is where BlockNote declares
      its own values — same element, one class more specific, so these win without
@@ -1774,18 +1778,35 @@ textarea {
 .outline-document-icon {
   position: relative;
   z-index: 2;
-  width: min(720px, calc(100% - 48px));
+  width: 100%;
+  max-width: var(--outline-content-frame-width);
+  box-sizing: border-box;
+  padding-inline: var(--outline-editor-inline-gutter);
   margin: 28px auto 2px;
 }
 
 .outline-document-icon.is-empty {
   position: absolute;
+  inset-inline: 0;
   top: 4px;
-  left: 50%;
+  width: auto;
+  max-width: none;
   height: 28px;
   margin: 0;
+  padding: 0;
   pointer-events: none;
-  transform: translateX(-50%);
+}
+
+.outline-document-icon-frame {
+  width: fit-content;
+}
+
+.outline-document-icon.is-empty .outline-document-icon-frame {
+  width: 100%;
+  max-width: var(--outline-content-frame-width);
+  box-sizing: border-box;
+  margin-inline: auto;
+  padding-inline: var(--outline-editor-inline-gutter);
 }
 
 .outline-document-icon.is-empty .document-icon-control {
@@ -4050,6 +4071,10 @@ textarea {
 }
 
 @container (max-width: 828px) {
+  .outline-panel {
+    --outline-editor-inline-gutter: 48px;
+  }
+
   .outline-panel .bn-editor {
     padding-left: 48px;
     padding-right: 24px;
