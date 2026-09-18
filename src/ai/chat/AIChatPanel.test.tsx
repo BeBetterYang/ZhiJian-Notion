@@ -41,6 +41,11 @@ describe("AIChatPanel", () => {
     expect(screen.getByRole("button", { name: "关闭 AI 聊天" })).toBeInTheDocument();
   });
 
+  it("does not render a layout menu title", () => {
+    render(<AIChatPanel documentTitle="当前文档" chat={chat()} onClose={vi.fn()} />);
+    expect(screen.queryByText("AI 聊天布局")).not.toBeInTheDocument();
+  });
+
   it("uses enter to send and shift-enter to keep composing", () => {
     const onSend = vi.fn();
     render(<AIChatPanel documentTitle="当前文档" chat={chat({ sendMessage: onSend })} onClose={vi.fn()} />);

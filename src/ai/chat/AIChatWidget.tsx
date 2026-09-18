@@ -20,6 +20,7 @@ const AI_CHAT_PANEL_WIDTH_KEY = "zhijian.ai-chat-panel-width.v1:";
 const DEFAULT_AI_CHAT_PANEL_WIDTH = 392;
 const MIN_AI_CHAT_PANEL_WIDTH = 300;
 const MAX_AI_CHAT_PANEL_WIDTH = 640;
+const AI_CHAT_LAYOUT_MENU_WIDTH = 156;
 
 export function AIChatWidget({ documentId, documentTitle, store, session, onSessionRefresh, provider, visible = true }: {
   documentId: string;
@@ -34,19 +35,24 @@ export function AIChatWidget({ documentId, documentTitle, store, session, onSess
   const [layout, setLayout] = useState<AIChatLayout>(() => loadChatLayout(session.userId));
   const [panelWidth, setPanelWidth] = useState(() => loadChatPanelWidth(session.userId));
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);
+  const [layoutMenuPosition, setLayoutMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const panelRef = useRef<HTMLElement>(null);
   const chat = useAIChat({ documentId, store, session, onSessionRefresh, provider });
   useEffect(() => {
     if (!visible) {
       setOpen(false);
       setLayoutMenuOpen(false);
+      setLayoutMenuPosition(null);
     }
   }, [visible]);
   useEffect(() => {
     if (!layoutMenuOpen) return;
     const closeOnOutsidePointer = (event: PointerEvent) => {
       const target = event.target;
-      if (target instanceof Element && !target.closest(".ai-chat-layout-menu, .ai-chat-launcher, .ai-chat-header")) setLayoutMenuOpen(false);
+      if (target instanceof Element && !target.closest(".ai-chat-layout-menu, .ai-chat-launcher, .ai-chat-header")) {
+        setLayoutMenuOpen(false);
+        setLayoutMenuPosition(null);
+      }
     };
     document.addEventListener("pointerdown", closeOnOutsidePointer);
     return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
@@ -65,12 +71,26 @@ export function AIChatWidget({ documentId, documentTitle, store, session, onSess
   }, [layout, open, panelWidth, visible]);
   const openLayoutMenu = (event: React.MouseEvent) => {
     event.preventDefault();
+    setLayoutMenuPosition(null);
+    setLayoutMenuOpen(true);
+  };
+  const toggleLayoutMenuFromHeader = (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (layoutMenuOpen) {
+      setLayoutMenuOpen(false);
+      setLayoutMenuPosition(null);
+      return;
+    }
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const left = Math.min(Math.max(8, bounds.right - AI_CHAT_LAYOUT_MENU_WIDTH), window.innerWidth - AI_CHAT_LAYOUT_MENU_WIDTH - 8);
+    const top = Math.min(bounds.bottom + 6, window.innerHeight - 92);
+    setLayoutMenuPosition({ top: Math.max(8, top), left });
     setLayoutMenuOpen(true);
   };
   const chooseLayout = (nextLayout: AIChatLayout) => {
     setLayout(nextLayout);
     saveChatLayout(session.userId, nextLayout);
     setLayoutMenuOpen(false);
+    setLayoutMenuPosition(null);
   };
   const resizePanel = (event: React.PointerEvent<HTMLDivElement>) => {
     if (layout !== "sidebar") return;
@@ -96,22 +116,21 @@ export function AIChatWidget({ documentId, documentTitle, store, session, onSess
     return (
       <>
         <button type="button" className="ai-chat-launcher" aria-label="和 AI 聊聊" title="和 AI 聊聊" onClick={() => { setLayoutMenuOpen(false); setOpen(true); }} onContextMenu={openLayoutMenu}><img src={catFaceUrl} alt="" /></button>
-        {layoutMenuOpen ? <AIChatLayoutMenu layout={layout} onChoose={chooseLayout} /> : null}
+        {layoutMenuOpen ? <AIChatLayoutMenu layout={layout} position={layoutMenuPosition} onChoose={chooseLayout} /> : null}
       </>
     );
   }
   return (
     <>
-      <AIChatPanel documentTitle={documentTitle} chat={chat} layout={layout} panelRef={panelRef} onResize={resizePanel} onClose={() => setOpen(false)} onOpenLayoutMenu={() => setLayoutMenuOpen((value) => !value)} onContextMenu={openLayoutMenu} />
-      {layoutMenuOpen ? <AIChatLayoutMenu layout={layout} onChoose={chooseLayout} /> : null}
+      <AIChatPanel documentTitle={documentTitle} chat={chat} layout={layout} panelRef={panelRef} onResize={resizePanel} onClose={() => setOpen(false)} onOpenLayoutMenu={toggleLayoutMenuFromHeader} onContextMenu={openLayoutMenu} />
+      {layoutMenuOpen ? <AIChatLayoutMenu layout={layout} position={layoutMenuPosition} onChoose={chooseLayout} /> : null}
     </>
   );
 }
 
-function AIChatLayoutMenu({ layout, onChoose }: { layout: AIChatLayout; onChoose: (layout: AIChatLayout) => void }) {
+function AIChatLayoutMenu({ layout, position, onChoose }: { layout: AIChatLayout; position: { top: number; left: number } | null; onChoose: (layout: AIChatLayout) => void }) {
   return (
-    <div className="ai-chat-layout-menu" role="menu" aria-label="AI 聊天布局">
-      <div className="ai-chat-layout-menu-title">AI 聊天布局</div>
+    <div className={`ai-chat-layout-menu${position ? " is-anchored" : ""}`} style={position ?? undefined} role="menu" aria-label="AI 聊天布局">
       <button type="button" role="menuitemradio" aria-checked={layout === "floating"} className={layout === "floating" ? "is-active" : ""} onClick={() => onChoose("floating")}>悬浮模式</button>
       <button type="button" role="menuitemradio" aria-checked={layout === "sidebar"} className={layout === "sidebar" ? "is-active" : ""} onClick={() => onChoose("sidebar")}>侧边栏模式</button>
     </div>
@@ -125,7 +144,7 @@ export function AIChatPanel({ documentTitle, chat, layout, panelRef, onResize, o
   panelRef?: React.RefObject<HTMLElement | null>;
   onResize?: (event: React.PointerEvent<HTMLDivElement>) => void;
   onClose: () => void;
-  onOpenLayoutMenu?: () => void;
+  onOpenLayoutMenu?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   onContextMenu?: (event: React.MouseEvent) => void;
 }) {
   const [input, setInput] = useState("");

@@ -377,7 +377,7 @@ button { color: inherit; }
 .ai-chat-launcher img { position: absolute; top: 50%; left: 50%; display: block; width: 73px; height: 73px; object-fit: contain; transform: translate(-50%, -50%); }
 .ai-chat-launcher.is-open { display: none; }
 .ai-chat-layout-menu { position: fixed; right: 24px; bottom: 72px; z-index: 82; width: 156px; padding: 5px; border: 1px solid rgba(55, 53, 47, 0.12); border-radius: 9px; background: #fff; box-shadow: 0 9px 28px rgba(15, 15, 15, 0.16), 0 2px 7px rgba(15, 15, 15, 0.08); }
-.ai-chat-layout-menu-title { padding: 5px 8px 4px; color: #9b9a97; font-size: 11px; line-height: 16px; }
+.ai-chat-layout-menu.is-anchored { right: auto; bottom: auto; }
 .ai-chat-layout-menu button { width: 100%; min-height: 30px; padding: 4px 8px; border: 0; border-radius: 5px; background: transparent; color: #5f5e5a; font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
 .ai-chat-layout-menu button:hover, .ai-chat-layout-menu button.is-active { background: rgba(55, 53, 47, 0.07); color: #37352f; }
 .ai-chat-panel { position: fixed; inset: 0 0 0 auto; z-index: 79; width: var(--ai-chat-panel-width); display: flex; flex-direction: column; overflow: hidden; border-left: 1px solid rgba(55, 53, 47, 0.12); background: #fff; box-shadow: none; animation: ai-chat-panel-in 220ms cubic-bezier(0.32, 0.72, 0, 1) both; }
@@ -388,7 +388,7 @@ button { color: inherit; }
 .ai-chat-resizer::after { position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: rgba(35, 131, 226, 0.36); content: ""; opacity: 0; transition: opacity 120ms ease; }
 .ai-chat-panel:hover .ai-chat-resizer::after, .ai-chat-resizer:hover::after { opacity: 1; }
 .ai-chat-header { min-height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 10px 6px 16px; border-bottom: 1px solid rgba(55, 53, 47, 0.08); }
-.ai-chat-header-actions { display: flex; align-items: center; gap: 2px; flex: none; }
+.ai-chat-header-actions { display: flex; align-items: center; gap: 2px; flex: none; margin-left: auto; }
 .ai-chat-header-actions .icon-button { color: #9b9a97; }
 .ai-chat-header-actions .icon-button:hover { color: #37352f; }
 .ai-chat-close { color: #9b9a97; }
