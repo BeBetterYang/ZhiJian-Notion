@@ -378,9 +378,20 @@ button { color: inherit; }
 .folder-view-heading h1 { margin: 12px 0 4px; color: #37352f; font-size: 30px; line-height: 1.2; font-weight: 700; }
 .folder-view-heading p { margin: 0; color: #8b8a85; font-size: 13px; line-height: 20px; }
 .folder-view-section + .folder-view-section { margin-top: 28px; }
+.folder-view-section-heading { min-width: 0; height: 28px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .folder-view-section-title { height: 28px; display: flex; align-items: center; margin: 0; color: #8b8a85; font-size: 12px; line-height: 16px; font-weight: 600; }
+.folder-sort-control { position: relative; flex: none; }
+.folder-sort-trigger { min-height: 28px; display: inline-flex; align-items: center; gap: 3px; padding: 0 5px 0 7px; border: 0; border-radius: var(--menu-item-radius); background: transparent; color: #8b8a85; font-size: 12px; line-height: 16px; cursor: pointer; }
+.folder-sort-trigger:hover, .folder-sort-trigger[aria-expanded="true"] { background: var(--menu-hover); color: #6f6e69; }
+.folder-sort-trigger svg { width: 13px; height: 13px; }
+.folder-sort-menu { position: absolute; z-index: 40; top: 31px; right: 0; width: 168px; padding: 6px; border: 1px solid var(--menu-border); border-radius: var(--menu-radius); background: var(--menu-surface); color: var(--menu-text); box-shadow: var(--menu-shadow); }
+.folder-sort-menu-label { padding: 4px 8px 3px; color: #9b9a97; font-size: 11px; line-height: 16px; }
+.folder-sort-menu > button { width: 100%; min-height: 30px; display: flex; align-items: center; gap: 7px; padding: 0 8px; border: 0; border-radius: var(--menu-item-radius); background: transparent; color: inherit; font-size: 13px; line-height: 20px; text-align: left; cursor: pointer; }
+.folder-sort-menu > button:hover, .folder-sort-menu > button.is-selected { background: var(--menu-hover); }
+.folder-sort-menu > button > svg { width: 15px; height: 15px; flex: none; color: var(--menu-icon); }
+.folder-sort-menu > button > span { min-width: 0; flex: 1; }
 .folder-view-list { min-width: 0; }
-.folder-view-row { min-height: 40px; display: flex; align-items: center; border-radius: 5px; }
+.folder-view-row { min-height: 36px; display: flex; align-items: center; border-radius: 5px; }
 .folder-view-row:hover, .folder-view-row:focus-within { background: var(--menu-hover); }
 .folder-view-row.is-dragging { opacity: 0.45; }
 .folder-view-row.drop-before::before, .folder-view-row.drop-after::after { position: absolute; right: 4px; left: 4px; height: 2px; border-radius: 2px; background: var(--color-accent); content: ""; }
@@ -389,12 +400,13 @@ button { color: inherit; }
 .folder-view-row.drop-after { position: relative; }
 .folder-view-row.drop-after::after { bottom: -1px; }
 .folder-view-row.drop-inside { background: rgba(35, 131, 226, 0.12); box-shadow: inset 0 0 0 1px rgba(35, 131, 226, 0.55); }
-.folder-view-row-main { min-width: 0; min-height: 40px; display: flex; flex: 1; align-items: center; gap: 10px; overflow: hidden; padding: 0 8px; border: 0; border-radius: 5px; background: transparent; color: var(--color-text-primary); font-size: 14px; line-height: 20px; text-align: left; cursor: pointer; }
+.folder-view-row-main { min-width: 0; min-height: 36px; display: flex; flex: 1; align-items: center; gap: 10px; overflow: hidden; padding: 0 8px; border: 0; border-radius: 5px; background: transparent; color: var(--color-text-primary); font-size: 14px; line-height: 20px; text-align: left; cursor: pointer; }
 .folder-view-row-main > svg { width: 18px; height: 18px; flex: none; color: #787774; }
 .folder-view-row-main .document-icon { width: 18px; height: 18px; flex: none; }
-.folder-view-row-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
-.folder-view-row-copy > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.folder-view-row-meta { display: flex; flex-wrap: wrap; gap: 0 14px; color: #9b9a97; font-size: 11px; font-weight: 400; line-height: 16px; white-space: normal; }
+.folder-view-row-copy { min-width: 0; display: flex; align-items: center; gap: 12px; overflow: hidden; }
+.folder-view-row-copy > span:first-child { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-view-row-meta { flex: none; color: #9b9a97; font-size: 12px; font-weight: 400; line-height: 20px; white-space: nowrap; }
+.folder-view-a11y-meta { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 .folder-view-row-main small { margin-left: auto; color: #9b9a97; font-size: 12px; white-space: nowrap; }
 .folder-view-row-more { width: 28px; height: 28px; margin-right: 4px; flex: none; color: #8b8a85; opacity: 0; }
 .folder-view-row:hover .folder-view-row-more, .folder-view-row:focus-within .folder-view-row-more { opacity: 1; }
@@ -579,6 +591,7 @@ button { color: inherit; }
   .folder-view-heading { margin-bottom: 28px; }
   .folder-view-heading h1 { font-size: 26px; }
   .folder-view-row-main { min-height: 44px; }
+  .folder-view-row-meta { display: none; }
   .folder-view-row-more { opacity: 1; }
   .document-placeholder h1 { font-size: 28px; }
   .settings-layer { padding: 12px; }
