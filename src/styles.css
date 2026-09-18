@@ -936,6 +936,14 @@ textarea {
   max-width: none;
 }
 
+.outline-panel.is-full-width .outline-document-icon {
+  max-width: none;
+}
+
+.outline-panel.is-full-width .outline-document-icon.is-empty .outline-document-icon-frame {
+  max-width: none;
+}
+
 /* BlockNote 0.54 declares `Inter` on `.bn-default-styles`; state the same
    family on the outline's display and editing surfaces so neither layer falls
    back to BlockNote's default. */

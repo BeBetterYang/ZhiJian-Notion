@@ -59,6 +59,8 @@ describe("shouldRenderOutlinePageIcon", () => {
     expect(styles).toContain("--outline-content-frame-width: calc(");
     expect(styles).toContain("max-width: var(--outline-content-frame-width);");
     expect(styles).toContain("padding-inline: var(--outline-editor-inline-gutter);");
+    expect(styles).toContain(".outline-panel.is-full-width .outline-document-icon {");
+    expect(styles).toContain(".outline-panel.is-full-width .outline-document-icon.is-empty .outline-document-icon-frame {");
     expect(styles).not.toContain("width: min(720px, calc(100% - 48px));");
     const emptyIconRule = styles.slice(styles.indexOf(".outline-document-icon.is-empty {"), styles.indexOf(".document-icon-control {"));
     expect(emptyIconRule).not.toContain("transform: translateX(-50%);");
