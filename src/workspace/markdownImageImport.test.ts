@@ -58,6 +58,28 @@ describe("Markdown remote image localization", () => {
     expect(result.failedMessages).toEqual([]);
     expect(importer).not.toHaveBeenCalled();
   });
+
+  it("limits concurrent remote image imports", async () => {
+    const tree = markdownToTree([
+      "# T",
+      ...Array.from({ length: 7 }, (_, index) => `![image-${index}](https://example.com/${index}.png)`),
+    ].join("\n"));
+    let active = 0;
+    let peak = 0;
+    const importer = vi.fn(async () => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return { assetId: "asset", storagePath: "user/asset.png", url: "/signed" };
+    });
+
+    const result = await localizeRemoteImages(tree, importer);
+
+    expect(result.failedCount).toBe(0);
+    expect(importer).toHaveBeenCalledTimes(7);
+    expect(peak).toBeLessThanOrEqual(3);
+  });
 });
 
 function markdownFile(name: string, content: string) {

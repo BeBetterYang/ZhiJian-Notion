@@ -38,6 +38,12 @@ export default async function handler(request, response) {
     const storagePath = `${user.id}/${assetId}${extension}`;
     return sendJson(response, 201, await registerAsset({ assetId, userId: user.id, storagePath, fileName, mimeType, byteSize: bytes.length, bytes }));
   } catch (error) {
+    if (error?.statusCode === 502) {
+      console.warn("[workspace/assets] remote image download failed", {
+        message: error instanceof Error ? error.message : "unknown error",
+        cause: error?.cause instanceof Error ? error.cause.message : undefined,
+      });
+    }
     return sendJson(response, error.statusCode ?? 500, { error: error instanceof Error ? error.message : "图片上传失败。" });
   }
 }

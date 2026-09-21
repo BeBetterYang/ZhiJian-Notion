@@ -62,6 +62,49 @@ describe("remote image import security", () => {
       .rejects.toMatchObject({ statusCode: 415 });
   });
 
+  it("retries transient remote fetch failures before succeeding", async () => {
+    const fetchImpl = vi.fn()
+      .mockRejectedValueOnce(new TypeError("fetch failed"))
+      .mockResolvedValueOnce(new Response("image", { status: 200, headers: { "Content-Type": "image/png" } }));
+
+    const result = await downloadRemoteImage("https://example.com/retry.png", "retry", { fetchImpl, lookupImpl: publicLookup });
+
+    expect(result.mimeType).toBe("image/png");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries transient upstream responses before returning the final status", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response("image", { status: 200, headers: { "Content-Type": "image/jpeg" } }));
+
+    const result = await downloadRemoteImage("https://example.com/retry.jpg", "retry", { fetchImpl, lookupImpl: publicLookup });
+
+    expect(result.mimeType).toBe("image/jpeg");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries when the remote image stream fails during body reading", async () => {
+    const brokenResponse = {
+      status: 200,
+      ok: true,
+      headers: new Headers({ "Content-Type": "image/png" }),
+      body: {
+        getReader() {
+          return { read: vi.fn().mockRejectedValue(new TypeError("connection reset")) };
+        },
+      },
+    };
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(brokenResponse)
+      .mockResolvedValueOnce(new Response("image", { status: 200, headers: { "Content-Type": "image/png" } }));
+
+    const result = await downloadRemoteImage("https://example.com/stream.png", "stream", { fetchImpl, lookupImpl: publicLookup });
+
+    expect(result.mimeType).toBe("image/png");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   it("requires an authenticated user before downloading", async () => {
     const response = createResponse();
 

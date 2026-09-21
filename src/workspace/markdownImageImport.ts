@@ -14,12 +14,15 @@ export interface RemoteImageLocalizationResult {
 
 export type RemoteImageImporter = (url: string, name?: string) => Promise<ImportedImageAsset>;
 
+const MAX_CONCURRENT_IMAGE_IMPORTS = 3;
+
 export async function localizeRemoteImages(
   tree: ZhiJianTree,
   importImage: RemoteImageImporter,
 ): Promise<RemoteImageLocalizationResult> {
   const imports = new Map<string, Promise<ImportedImageAsset | null>>();
   const failedMessages = new Set<string>();
+  const scheduleImport = createConcurrencyLimiter(MAX_CONCURRENT_IMAGE_IMPORTS);
   let failedCount = 0;
   const nodes = Object.fromEntries(await Promise.all(Object.entries(tree.nodes).map(async ([nodeId, node]) => {
     if (!node.blocks?.some((block) => block.type === "image" && isRemoteImageUrl(block.image.url))) {
@@ -30,7 +33,7 @@ export async function localizeRemoteImages(
       const remoteUrl = block.image.url;
       let imported = imports.get(remoteUrl);
       if (!imported) {
-        imported = importImage(remoteUrl, block.image.name).catch((error) => {
+        imported = scheduleImport(() => importImage(remoteUrl, block.image.name)).catch((error) => {
           failedMessages.add(error instanceof Error && error.message.trim() ? error.message : "外部图片导入失败。");
           return null;
         });
@@ -53,6 +56,32 @@ export async function localizeRemoteImages(
     return [nodeId, { ...node, blocks }] as const;
   })));
   return { tree: { ...tree, nodes }, failedCount, failedMessages: [...failedMessages] };
+}
+
+function createConcurrencyLimiter(limit: number) {
+  const queue: Array<{
+    task: () => Promise<ImportedImageAsset>;
+    resolve: (value: ImportedImageAsset) => void;
+    reject: (error: unknown) => void;
+  }> = [];
+  let active = 0;
+
+  const drain = () => {
+    while (active < limit && queue.length) {
+      const item = queue.shift();
+      if (!item) return;
+      active += 1;
+      void item.task().then(item.resolve, item.reject).finally(() => {
+        active -= 1;
+        drain();
+      });
+    }
+  };
+
+  return (task: () => Promise<ImportedImageAsset>) => new Promise<ImportedImageAsset>((resolve, reject) => {
+    queue.push({ task, resolve, reject });
+    drain();
+  });
 }
 
 export async function importMarkdownFiles(files: File[], importImage: RemoteImageImporter) {

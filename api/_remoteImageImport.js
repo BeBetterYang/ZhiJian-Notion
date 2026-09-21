@@ -6,6 +6,8 @@ import { isIP } from "node:net";
 export const MAX_REMOTE_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
 const DOWNLOAD_TIMEOUT_MS = 15_000;
+const MAX_FETCH_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 250;
 const IMAGE_EXTENSIONS = new Map([
   ["image/jpeg", ".jpg"],
   ["image/png", ".png"],
@@ -22,39 +24,72 @@ export async function downloadRemoteImage(rawUrl, preferredName, options = {}) {
 
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
     await assertPublicRemoteUrl(currentUrl, lookupImpl);
+    try {
+      const result = await downloadResponseWithRetry(fetchImpl, currentUrl);
+      if (result.redirectUrl) {
+        if (redirectCount === MAX_REDIRECTS) throw statusError("外部图片重定向次数过多。", 400);
+        currentUrl = result.redirectUrl;
+        continue;
+      }
+      return {
+        bytes: result.bytes,
+        mimeType: result.mimeType,
+        extension: result.extension,
+        fileName: remoteImageFileName(currentUrl, preferredName, result.extension),
+      };
+    } catch (error) {
+      if (error?.statusCode) throw error;
+      throw statusError("无法下载外部图片。", 502, error);
+    }
+  }
+  throw statusError("外部图片重定向次数过多。", 400);
+}
+
+async function downloadResponseWithRetry(fetchImpl, url) {
+  let lastError;
+  for (let attempt = 1; attempt <= MAX_FETCH_ATTEMPTS; attempt += 1) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
     try {
-      const response = await fetchImpl(currentUrl, { redirect: "manual", signal: controller.signal });
+      const response = await fetchImpl(url, { redirect: "manual", signal: controller.signal });
       if (REDIRECT_STATUSES.has(response.status)) {
-        if (redirectCount === MAX_REDIRECTS) throw statusError("外部图片重定向次数过多。", 400);
         const location = response.headers.get("location");
         if (!location) throw statusError("外部图片重定向地址无效。", 400);
         await response.body?.cancel();
-        currentUrl = parseRemoteUrl(new URL(location, currentUrl).toString());
-        continue;
+        return { redirectUrl: parseRemoteUrl(new URL(location, url).toString()) };
       }
-      if (!response.ok) throw statusError(`外部图片下载失败（${response.status}）。`, 502);
-
+      if (!response.ok) {
+        if (isRetryableResponse(response) && attempt < MAX_FETCH_ATTEMPTS) {
+          await response.body?.cancel();
+          await waitForRetry(attempt);
+          continue;
+        }
+        throw statusError(`外部图片下载失败（${response.status}）。`, 502);
+      }
       const mimeType = String(response.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
       const extension = IMAGE_EXTENSIONS.get(mimeType);
       if (!extension) throw statusError("外部地址返回的不是支持的图片格式。", 415);
       const bytes = await readLimitedBody(response, MAX_REMOTE_IMAGE_BYTES);
       if (!bytes.length) throw statusError("外部图片内容为空。", 400);
-      return {
-        bytes,
-        mimeType,
-        extension,
-        fileName: remoteImageFileName(currentUrl, preferredName, extension),
-      };
+      return { bytes, mimeType, extension };
     } catch (error) {
       if (error?.statusCode) throw error;
-      throw statusError("无法下载外部图片。", 502);
+      lastError = error;
+      if (attempt === MAX_FETCH_ATTEMPTS) throw error;
+      await waitForRetry(attempt);
     } finally {
       clearTimeout(timeout);
     }
   }
-  throw statusError("外部图片重定向次数过多。", 400);
+  throw lastError;
+}
+
+function isRetryableResponse(response) {
+  return response.status === 429 || response.status >= 500;
+}
+
+function waitForRetry(attempt) {
+  return new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS * attempt));
 }
 
 export async function assertPublicRemoteUrl(value, lookupImpl = lookup) {
@@ -155,8 +190,9 @@ function stripIpv6Brackets(value) {
   return value.startsWith("[") && value.endsWith("]") ? value.slice(1, -1) : value;
 }
 
-function statusError(message, statusCode) {
+function statusError(message, statusCode, cause) {
   const error = new Error(message);
   error.statusCode = statusCode;
+  if (cause) error.cause = cause;
   return error;
 }
