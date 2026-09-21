@@ -1,3 +1,5 @@
+/* global URL, console */
+
 import { randomUUID } from "node:crypto";
 import { readJsonBody, readRawBody, registerAsset, sendJson } from "../_workspaceStorage.js";
 import { downloadRemoteImage } from "../_remoteImageImport.js";

@@ -1,4 +1,4 @@
-/* global Response */
+/* global Headers, Response */
 
 import { describe, expect, it, vi } from "vitest";
 import { assertPublicRemoteUrl, downloadRemoteImage, MAX_REMOTE_IMAGE_BYTES } from "../../api/_remoteImageImport.js";

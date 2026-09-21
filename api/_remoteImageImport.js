@@ -118,8 +118,15 @@ function requestWithIpv4(rawUrl, options = {}) {
     const request = client.request(url, {
       method: options.method ?? "GET",
       headers: options.headers,
-      lookup(hostname, _options, callback) {
-        dnsLookup(hostname, { family: 4 }, callback);
+        lookup(hostname, lookupOptions, callback) {
+        dnsLookup(hostname, { family: 4, all: Boolean(lookupOptions.all) }, (error, address, family) => {
+          if (error) return callback(error);
+          if (lookupOptions.all) {
+            const selected = Array.isArray(address) ? address[0] : { address, family };
+            return callback(null, [selected]);
+          }
+          return callback(null, address, family);
+        });
       },
     }, (response) => {
       const headers = new Headers();
