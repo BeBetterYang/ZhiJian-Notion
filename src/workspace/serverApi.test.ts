@@ -156,25 +156,31 @@ describe("workspace server API session refresh", () => {
     expect(fetch).toHaveBeenCalledWith("/api/workspace/cleanup-assets", expect.objectContaining({ method: "POST" }));
   });
 
-  it("sends remote Markdown images to the authenticated import endpoint", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({
-      assetId: "asset-1",
-      storagePath: "user/asset-1.png",
-      url: "/signed",
-      name: "image.png",
-    }), { status: 201 }));
+  it("downloads remote Markdown images in the browser before uploading them", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("image", { status: 200, headers: { "Content-Type": "image/png" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        assetId: "asset-1",
+        storagePath: "user/asset-1.png",
+        url: "/signed",
+      }), { status: 201 }));
 
-    await importWorkspaceImageUrl({
+    const result = await importWorkspaceImageUrl({
       ...expiringSession,
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
     }, "https://example.com/image.png", "image");
 
-    expect(fetch).toHaveBeenCalledWith("/api/workspace/assets", expect.objectContaining({
+    expect(result).toMatchObject({ assetId: "asset-1", name: "image.png" });
+    expect(fetch).toHaveBeenNthCalledWith(1, "https://example.com/image.png", {
+      mode: "cors",
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+    });
+    expect(fetch).toHaveBeenNthCalledWith(2, "/api/workspace/assets", expect.objectContaining({
       method: "POST",
-      body: JSON.stringify({ url: "https://example.com/image.png", name: "image" }),
       headers: expect.objectContaining({
         Authorization: "Bearer old-token",
-        "Content-Type": "application/json",
+        "Content-Type": "image/png",
       }),
     }));
   });

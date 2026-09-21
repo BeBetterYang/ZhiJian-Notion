@@ -108,12 +108,35 @@ export async function uploadWorkspaceImage(session: WorkspaceSession, file: File
 }
 
 export async function importWorkspaceImageUrl(session: WorkspaceSession, url: string, name?: string, options?: WorkspaceApiOptions): Promise<ImageAssetReference & { name?: string }> {
-  const response = await workspaceFetch("/api/workspace/assets", {
-    method: "POST",
-    body: JSON.stringify({ url, name }),
-  }, session, options);
-  if (!response.ok) throw new WorkspaceApiError(await readApiError(response, "外部图片导入失败。"), response.status);
-  return readJsonResponse(response, "服务器返回的图片信息格式不正确。") as Promise<ImageAssetReference & { name?: string }>;
+  let file: File;
+  try {
+    const response = await fetch(url, {
+      mode: "cors",
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+    });
+    if (!response.ok) throw new Error(`外部图片下载失败（${response.status}）。`);
+    const blob = await response.blob();
+    const mimeType = blob.type.split(";")[0].trim().toLowerCase();
+    if (!mimeType.startsWith("image/")) throw new Error("外部地址返回的不是图片。");
+    file = new File([blob], remoteImageFileName(name, mimeType), { type: mimeType });
+  } catch {
+    const response = await workspaceFetch("/api/workspace/assets", {
+      method: "POST",
+      body: JSON.stringify({ url, name }),
+    }, session, options);
+    if (!response.ok) throw new WorkspaceApiError(await readApiError(response, "外部图片导入失败。"), response.status);
+    return readJsonResponse(response, "服务器返回的图片信息格式不正确。") as Promise<ImageAssetReference & { name?: string }>;
+  }
+  const asset = await uploadWorkspaceImage(session, file, options);
+  return { ...asset, name: file.name };
+}
+
+function remoteImageFileName(preferredName: string | undefined, mimeType: string) {
+  const baseName = preferredName?.trim() || "image";
+  if (/\.[a-z0-9]{1,8}$/i.test(baseName)) return baseName;
+  const extension = mimeType === "image/jpeg" ? "jpg" : mimeType.split("/")[1] || "img";
+  return `${baseName}.${extension}`;
 }
 
 /**
