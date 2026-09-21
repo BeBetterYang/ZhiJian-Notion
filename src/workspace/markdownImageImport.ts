@@ -9,6 +9,7 @@ export interface ImportedImageAsset extends ImageAssetReference {
 export interface RemoteImageLocalizationResult {
   tree: ZhiJianTree;
   failedCount: number;
+  failedMessages: string[];
 }
 
 export type RemoteImageImporter = (url: string, name?: string) => Promise<ImportedImageAsset>;
@@ -18,6 +19,7 @@ export async function localizeRemoteImages(
   importImage: RemoteImageImporter,
 ): Promise<RemoteImageLocalizationResult> {
   const imports = new Map<string, Promise<ImportedImageAsset | null>>();
+  const failedMessages = new Set<string>();
   let failedCount = 0;
   const nodes = Object.fromEntries(await Promise.all(Object.entries(tree.nodes).map(async ([nodeId, node]) => {
     if (!node.blocks?.some((block) => block.type === "image" && isRemoteImageUrl(block.image.url))) {
@@ -28,7 +30,10 @@ export async function localizeRemoteImages(
       const remoteUrl = block.image.url;
       let imported = imports.get(remoteUrl);
       if (!imported) {
-        imported = importImage(remoteUrl, block.image.name).catch(() => null);
+        imported = importImage(remoteUrl, block.image.name).catch((error) => {
+          failedMessages.add(error instanceof Error && error.message.trim() ? error.message : "外部图片导入失败。");
+          return null;
+        });
         imports.set(remoteUrl, imported);
       }
       const asset = await imported;
@@ -47,13 +52,14 @@ export async function localizeRemoteImages(
     }));
     return [nodeId, { ...node, blocks }] as const;
   })));
-  return { tree: { ...tree, nodes }, failedCount };
+  return { tree: { ...tree, nodes }, failedCount, failedMessages: [...failedMessages] };
 }
 
 export async function importMarkdownFiles(files: File[], importImage: RemoteImageImporter) {
   const documents: Array<{ title: string; tree: ZhiJianTree }> = [];
   const failedFiles: string[] = [];
   let failedImageCount = 0;
+  const failedImageMessages = new Set<string>();
   for (const file of files) {
     try {
       const fallbackTitle = markdownImportTitle(file.name);
@@ -63,11 +69,12 @@ export async function importMarkdownFiles(files: File[], importImage: RemoteImag
       const title = root ? richTextToPlainText(root.content).trim() : "";
       documents.push({ title: title || fallbackTitle || "无标题", tree: localized.tree });
       failedImageCount += localized.failedCount;
+      localized.failedMessages.forEach((message) => failedImageMessages.add(message));
     } catch {
       failedFiles.push(file.name);
     }
   }
-  return { documents, failedFiles, failedImageCount };
+  return { documents, failedFiles, failedImageCount, failedImageMessages: [...failedImageMessages] };
 }
 
 function isRemoteImageUrl(value: string | undefined): value is string {

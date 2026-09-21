@@ -147,6 +147,7 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const [settingsEditValue, setSettingsEditValue] = useState("");
   const [defaultViewMenuOpen, setDefaultViewMenuOpen] = useState(false);
   const [assetCleanup, setAssetCleanup] = useState<{ busy: boolean; message: string; failed: boolean }>({ busy: false, message: "", failed: false });
+  const [importingDocuments, setImportingDocuments] = useState(false);
   const [headerToolbarTarget, setHeaderToolbarTarget] = useState<HTMLDivElement | null>(null);
   const [focusBreadcrumbState, setFocusBreadcrumbState] = useState<FocusBreadcrumbState | null>(null);
   const [nodes, setNodes] = useState<WorkspaceNode[]>([]);
@@ -355,9 +356,17 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   }, [handleSessionRefresh]);
 
   const localizeImportedTree = useCallback(async (tree: ZhiJianTree) => {
-    const result = await localizeRemoteImages(tree, importMarkdownImage);
-    if (result.failedCount) toast.warning(`文档已导入，${result.failedCount} 张外部图片未能保存到枝间。`);
-    return result.tree;
+    setImportingDocuments(true);
+    try {
+      const result = await localizeRemoteImages(tree, importMarkdownImage);
+      if (result.failedCount) {
+        const reason = result.failedMessages[0] ? `原因：${result.failedMessages[0]}` : "";
+        toast.warning(`文档已导入，${result.failedCount} 张外部图片未能保存到枝间。${reason}`);
+      }
+      return result.tree;
+    } finally {
+      setImportingDocuments(false);
+    }
   }, [importMarkdownImage]);
 
   const files = useMemo(() => nodes.filter(isWorkspaceFile), [nodes]);
@@ -979,35 +988,43 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
   const importDocuments = async (files: File[]) => {
     setCreateMenuOpen(false);
     setDocumentsCreateMenuOpen(false);
-    const { documents: parsed, failedFiles, failedImageCount } = await importMarkdownFiles(files, importMarkdownImage);
-    const notices = [
-      failedFiles.length ? `${failedFiles.length} 个文件导入失败：${failedFiles.join("、")}` : "",
-      failedImageCount ? `文档已导入，${failedImageCount} 张外部图片未能保存到枝间。` : "",
-    ].filter(Boolean);
-    if (notices.length) toast.warning(notices.join("；"));
-    if (!parsed.length) return;
+    setImportingDocuments(true);
+    try {
+      const { documents: parsed, failedFiles, failedImageCount, failedImageMessages } = await importMarkdownFiles(files, importMarkdownImage);
+      const imageNotice = failedImageCount
+        ? `文档已导入，${failedImageCount} 张外部图片未能保存到枝间。${failedImageMessages[0] ? `原因：${failedImageMessages[0]}` : ""}`
+        : "";
+      const notices = [
+        failedFiles.length ? `${failedFiles.length} 个文件导入失败：${failedFiles.join("、")}` : "",
+        imageNotice,
+      ].filter(Boolean);
+      if (notices.length) toast.warning(notices.join("；"));
+      if (!parsed.length) return;
 
-    const targetParent = activeFile?.parentId ?? null;
-    let nextNodes = nodes;
-    const created: Array<{ fileId: string; tree: ZhiJianTree }> = [];
-    for (const document of [...parsed].reverse()) {
-      const result = createWorkspaceNode(nextNodes, "file", targetParent);
-      if (!result.node) continue;
-      const fileId = result.node.id;
-      nextNodes = result.nodes.map((node) => node.id === fileId ? { ...node, title: document.title } : node);
-      created.unshift({ fileId, tree: applyMindMapDefaults(document.tree, workspacePreferences.mindMapDefaults) });
+      const targetParent = activeFile?.parentId ?? null;
+      let nextNodes = nodes;
+      const created: Array<{ fileId: string; tree: ZhiJianTree }> = [];
+      for (const document of [...parsed].reverse()) {
+        const result = createWorkspaceNode(nextNodes, "file", targetParent);
+        if (!result.node) continue;
+        const fileId = result.node.id;
+        nextNodes = result.nodes.map((node) => node.id === fileId ? { ...node, title: document.title } : node);
+        created.unshift({ fileId, tree: applyMindMapDefaults(document.tree, workspacePreferences.mindMapDefaults) });
+      }
+      if (!created.length) return;
+
+      created.forEach(({ fileId, tree }) => {
+        documentStores.current.set(fileId, new TreeStore(tree));
+        if (serverAvailable) void persistDocument(fileId, tree);
+      });
+      setNodes(nextNodes);
+      if (targetParent) applyExpandedFolders(new Set(expandedFolders).add(targetParent));
+      setActiveFileId(created[0].fileId);
+      setSelectedMenuKey(`tree:${created[0].fileId}`);
+      setSelectedFolderId(null);
+    } finally {
+      setImportingDocuments(false);
     }
-    if (!created.length) return;
-
-    created.forEach(({ fileId, tree }) => {
-      documentStores.current.set(fileId, new TreeStore(tree));
-      if (serverAvailable) void persistDocument(fileId, tree);
-    });
-    setNodes(nextNodes);
-    if (targetParent) applyExpandedFolders(new Set(expandedFolders).add(targetParent));
-    setActiveFileId(created[0].fileId);
-    setSelectedMenuKey(`tree:${created[0].fileId}`);
-    setSelectedFolderId(null);
   };
 
   const toggleQuickSection = (section: QuickSection) => {
@@ -1617,6 +1634,12 @@ export function WorkspaceShell({ session, onSessionRefresh, onLogout }: Workspac
           )}
         </div>
       </section>
+      {importingDocuments ? (
+        <div className="workspace-import-status" role="status" aria-live="polite">
+          <span className="workspace-loading-spinner" aria-hidden="true" />
+          <span>正在导入文档并保存图片…</span>
+        </div>
+      ) : null}
       {settingsOpen ? (
         <div className="settings-layer" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSettingsOpen(false)}>
           <section className="settings-dialog" role="dialog" aria-modal="true" aria-label="设置">

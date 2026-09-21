@@ -8,6 +8,7 @@ import type { WorkspaceSession } from "./auth";
 
 const serverMocks = vi.hoisted(() => ({
   deleteWorkspaceDocument: vi.fn(),
+  importWorkspaceImageUrl: vi.fn(),
   loadDocumentShare: vi.fn(),
   loadWorkspaceDocument: vi.fn(),
   loadWorkspaceState: vi.fn(),
@@ -383,6 +384,17 @@ describe("批量导入文档", () => {
     await importFiles([markdownFile("会议记录.md", "只有正文\n"), markdownFile("乙.md", "# 文档乙\n")]);
 
     await waitFor(() => expect(within(fileTree()).getByText("会议记录")).toBeInTheDocument());
+  });
+
+  it("保存外部图片期间显示导入状态", async () => {
+    let resolveImport!: (asset: { assetId: string; storagePath: string; url: string }) => void;
+    serverMocks.importWorkspaceImageUrl.mockReturnValue(new Promise((resolve) => { resolveImport = resolve; }));
+
+    await importFiles([markdownFile("图片文档.md", "# 图片文档\n\n![图片](https://example.com/image.png)\n")]);
+
+    expect(screen.getByRole("status")).toHaveTextContent("正在导入文档并保存图片");
+    resolveImport({ assetId: "asset-1", storagePath: "user/asset-1.png", url: "/signed" });
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
   });
 });
 

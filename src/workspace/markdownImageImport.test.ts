@@ -21,6 +21,7 @@ describe("Markdown remote image localization", () => {
 
     expect(node.content.text).toBe("正文");
     expect(result.failedCount).toBe(1);
+    expect(result.failedMessages).toEqual(["403"]);
     expect(node.blocks?.[0]).toMatchObject({ type: "image", image: { assetId: "asset-ok", storagePath: "user/asset-ok.png", name: "ok" } });
     expect(node.blocks?.[1]).toMatchObject({ type: "image", image: { url: "https://example.com/bad.png", name: "bad" } });
   });
@@ -39,6 +40,7 @@ describe("Markdown remote image localization", () => {
 
     expect(result.failedFiles).toEqual([]);
     expect(result.failedImageCount).toBe(1);
+    expect(result.failedImageMessages).toEqual(["404"]);
     expect(result.documents.map(({ title }) => title)).toEqual(["一", "二"]);
     const firstNode = result.documents[0].tree.nodes[result.documents[0].tree.nodes[result.documents[0].tree.rootId].children[0]];
     const secondNode = result.documents[1].tree.nodes[result.documents[1].tree.nodes[result.documents[1].tree.rootId].children[0]];
@@ -53,6 +55,7 @@ describe("Markdown remote image localization", () => {
     const result = await localizeRemoteImages(tree, importer);
 
     expect(result.failedCount).toBe(0);
+    expect(result.failedMessages).toEqual([]);
     expect(importer).not.toHaveBeenCalled();
   });
 });
