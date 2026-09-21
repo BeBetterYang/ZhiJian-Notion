@@ -9,12 +9,14 @@ const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/we
 export const config = { api: { bodyParser: false } };
 
 export default async function handler(request, response) {
+  let remoteUrl = "";
   try {
     if (request.method !== "POST") return sendJson(response, 405, { error: "不支持的请求方法。" });
     const user = await requireAuthenticatedUser(request);
     const mimeType = String(request.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase();
     if (mimeType === "application/json") {
       const body = await readJsonBody(request);
+      remoteUrl = typeof body.url === "string" ? body.url : "";
       const remoteImage = await downloadRemoteImage(body.url, body.name);
       const assetId = randomUUID();
       const storagePath = `${user.id}/${assetId}${remoteImage.extension}`;
@@ -41,11 +43,30 @@ export default async function handler(request, response) {
     if (error?.statusCode === 502) {
       console.warn("[workspace/assets] remote image download failed", {
         message: error instanceof Error ? error.message : "unknown error",
-        cause: error?.cause instanceof Error ? error.cause.message : undefined,
+        host: getRemoteHost(remoteUrl),
+        cause: describeError(error?.cause),
       });
     }
     return sendJson(response, error.statusCode ?? 500, { error: error instanceof Error ? error.message : "图片上传失败。" });
   }
+}
+
+function getRemoteHost(value) {
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return undefined;
+  }
+}
+
+function describeError(error) {
+  if (!(error instanceof Error)) return undefined;
+  return {
+    name: error.name,
+    message: error.message,
+    code: error.code,
+    cause: error.cause instanceof Error ? { name: error.cause.name, message: error.cause.message, code: error.cause.code } : undefined,
+  };
 }
 
 function extensionForMimeType(type) {

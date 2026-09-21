@@ -1,7 +1,11 @@
-/* global AbortController, Buffer, URL, fetch, setTimeout, clearTimeout */
+/* global AbortController, Buffer, Headers, Response, URL, fetch, setTimeout, clearTimeout */
 
+import http from "node:http";
+import { lookup as dnsLookup } from "node:dns";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import { Readable } from "node:stream";
+import https from "node:https";
 
 export const MAX_REMOTE_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_REDIRECTS = 3;
@@ -18,7 +22,7 @@ const IMAGE_EXTENSIONS = new Map([
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 export async function downloadRemoteImage(rawUrl, preferredName, options = {}) {
-  const fetchImpl = options.fetchImpl ?? fetch;
+  const fetchImpl = options.fetchImpl ?? fetchWithIpv4Fallback;
   const lookupImpl = options.lookupImpl ?? lookup;
   let currentUrl = parseRemoteUrl(rawUrl);
 
@@ -51,7 +55,14 @@ async function downloadResponseWithRetry(fetchImpl, url) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
     try {
-      const response = await fetchImpl(url, { redirect: "manual", signal: controller.signal });
+      const response = await fetchImpl(url, {
+        redirect: "manual",
+        signal: controller.signal,
+        headers: {
+          Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+          "User-Agent": "Mozilla/5.0 (compatible; ZhiJian/1.0)",
+        },
+      });
       if (REDIRECT_STATUSES.has(response.status)) {
         const location = response.headers.get("location");
         if (!location) throw statusError("外部图片重定向地址无效。", 400);
@@ -82,6 +93,61 @@ async function downloadResponseWithRetry(fetchImpl, url) {
     }
   }
   throw lastError;
+}
+
+async function fetchWithIpv4Fallback(url, options) {
+  try {
+    return await fetch(url, options);
+  } catch (error) {
+    try {
+      return await requestWithIpv4(url, options);
+    } catch (fallbackError) {
+      if (fallbackError && typeof fallbackError === "object" && !fallbackError.cause) {
+        fallbackError.cause = error;
+      }
+      throw fallbackError;
+    }
+  }
+}
+
+function requestWithIpv4(rawUrl, options = {}) {
+  const url = new URL(rawUrl);
+  const client = url.protocol === "http:" ? http : https;
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const request = client.request(url, {
+      method: options.method ?? "GET",
+      headers: options.headers,
+      lookup(hostname, _options, callback) {
+        dnsLookup(hostname, { family: 4 }, callback);
+      },
+    }, (response) => {
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(response.headers)) {
+        if (value !== undefined) headers.set(name, Array.isArray(value) ? value.join(", ") : value);
+      }
+      settled = true;
+      resolve(new Response(Readable.toWeb(response), {
+        status: response.statusCode ?? 500,
+        statusText: response.statusMessage ?? "",
+        headers,
+      }));
+    });
+    const rejectRequest = (error) => {
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+    };
+    request.once("error", rejectRequest);
+    request.setTimeout(DOWNLOAD_TIMEOUT_MS, () => request.destroy(new Error("request timeout")));
+    if (options.signal) {
+      const abortRequest = () => request.destroy(new Error("request aborted"));
+      if (options.signal.aborted) abortRequest();
+      else options.signal.addEventListener("abort", abortRequest, { once: true });
+    }
+    request.end();
+  });
 }
 
 function isRetryableResponse(response) {
